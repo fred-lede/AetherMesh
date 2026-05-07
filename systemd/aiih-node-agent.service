@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Inference Hub Node Agent
+After=network-online.target aiih-worker-agent.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/fred/ai/ai_inference_hub
+EnvironmentFile=/home/fred/ai/ai_inference_hub/.env
+ExecStart=/home/fred/ai/ai_inference_hub/.venv/bin/python -m uvicorn node.node_agent:app --host 0.0.0.0 --port 9400
+Restart=always
+RestartSec=5
+User=fred
+Group=fred
+
+[Install]
+WantedBy=multi-user.target

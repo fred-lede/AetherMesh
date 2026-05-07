@@ -1,0 +1,10 @@
+@echo off
+setlocal
+cd /d "%~dp0.."
+copy "scripts\start_all.bat" "scripts\start_all.bat.bak" >nul 2>&1
+move /Y "scripts\start_all.fixed.bat" "scripts\start_all.bat" >nul 2>&1
+echo Replaced start_all.bat with fixed copy (backup at scripts\start_all.bat.bak)
+
+REM Now execute the fixed script in-place
+call scripts\start_all.bat
+endlocal

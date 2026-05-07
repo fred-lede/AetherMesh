@@ -1,0 +1,63 @@
+# Let Git detect text files by default
+* text=auto
+
+# Force LF for source code / config / scripts used on Unix-like systems
+*.sh      text eol=lf
+*.bash    text eol=lf
+*.zsh     text eol=lf
+*.py      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.json    text eol=lf
+*.jsonl   text eol=lf
+*.toml    text eol=lf
+*.ini     text eol=lf
+*.cfg     text eol=lf
+*.conf    text eol=lf
+*.env.example text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+*.csv     text eol=lf
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.jsx     text eol=lf
+*.mjs     text eol=lf
+*.cjs     text eol=lf
+*.css     text eol=lf
+*.scss    text eol=lf
+*.html    text eol=lf
+*.xml     text eol=lf
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+
+# Windows-native scripts
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# Binary files - never modify line endings
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pdf     binary
+*.zip     binary
+*.7z      binary
+*.tar     binary
+*.gz      binary
+*.bz2     binary
+*.xz      binary
+*.whl     binary
+*.so      binary
+*.dylib   binary
+*.dll     binary
+*.exe     binary
+*.bin     binary
+*.pt      binary
+*.pth     binary
+*.onnx    binary
+*.gguf    binary
+*.safetensors binary

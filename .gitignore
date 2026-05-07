@@ -1,0 +1,124 @@
+# ==================================================
+# AI Inference Hub .gitignore
+# Python + FastAPI + Redis + Ollama + Windows
+# ==================================================
+
+############################
+# Python bytecode / caches
+############################
+__pycache__/
+*.py[cod]
+*$py.class
+
+############################
+# Build / packaging
+############################
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+############################
+# Virtual environments
+############################
+.venv/
+venv/
+env/
+ENV/
+.conda/
+conda-env/
+env.bak/
+venv.bak/
+
+############################
+# Conda
+############################
+.condarc
+.python-version
+conda-meta/
+*.conda
+
+############################
+# Python tooling
+############################
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+############################
+# Local databases / state
+############################
+*.db
+*.sqlite
+*.sqlite3
+dump.rdb
+appendonly.aof
+config/routing_audit.jsonl
+config/routing_state.yaml
+
+############################
+# Environment / secrets
+############################
+.env
+.env.*
+!.env.example
+
+############################
+# Logs / runtime files
+############################
+logs/
+*.log
+*.out
+*.err
+*.pid
+*.pid.lock
+
+############################
+# Temporary files
+############################
+tmp/
+temp/
+*.tmp
+
+############################
+# Local model / artifact storage
+############################
+.ollama/
+models/
+checkpoints/
+embeddings/
+
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+
+############################
+# IDE / editor
+############################
+.vscode/
+.idea/
+*.iml
+
+############################
+# OS files
+############################
+.DS_Store
+Thumbs.db
+desktop.ini
+
+############################
+# Project-local generated assets
+############################
+dashboard_export/
+metrics_export/

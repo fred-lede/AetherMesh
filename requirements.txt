@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+redis
+pyyaml
+prometheus_client
+jinja2
+psutil

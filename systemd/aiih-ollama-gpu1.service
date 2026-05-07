@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Inference Hub Ollama Worker GPU1
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/lib/ollama
+EnvironmentFile=/etc/default/aiih-ollama-gpu1
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=3
+User=ollama
+Group=ollama
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import os
+import time
+import uuid
+from typing import Any, Iterable
+
+import requests
+
+from config.settings import settings
+
+from .base import ProviderAdapter, ProviderError
+from .http_client import get_session
+
+
+class GeminiAdapter(ProviderAdapter):
+    provider_name = "gemini"
+
+    def __init__(self) -> None:
+        self.api_key = os.getenv("GEMINI_API_KEY", "")
+        self.base_url = os.getenv(
+            "GEMINI_API_BASE",
+            "https://generativelanguage.googleapis.com/v1beta",
+        ).rstrip("/")
+        if not self.api_key:
+            raise ProviderError("GEMINI_API_KEY is not configured.")
+
+    def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        model = payload["model"]
+        body = {
+            "contents": self._messages_to_contents(payload.get("messages", [])),
+            "tools": self._tools_to_gemini(payload.get("tools", [])),
+        }
+        response = get_session().post(
+            f"{self.base_url}/models/{model}:generateContent",
+            params={"key": self.api_key},
+            json=body,
+            timeout=settings.request_timeout_s,
+        )
+        response.encoding = "utf-8"
+        if not response.ok:
+            raise ProviderError(response.text)
+        data = response.json()
+        text = self._extract_text(data)
+        return {
+            "id": f"chatcmpl-{uuid.uuid4().hex}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {},
+        }
+
+    def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+        completion = self.chat(payload)
+        message = completion["choices"][0]["message"]
+        return {
+            "id": f"resp_{uuid.uuid4().hex}",
+            "object": "response",
+            "created": int(time.time()),
+            "model": completion["model"],
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": message.get("content", "")}],
+                }
+            ],
+            "usage": completion.get("usage", {}),
+        }
+
+    def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
+        completion = self.chat(payload)
+        message = completion["choices"][0]["message"]
+        yield {
+            "id": completion["id"],
+            "object": "chat.completion.chunk",
+            "created": completion["created"],
+            "model": completion["model"],
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": message.get("content", "")},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        yield {
+            "id": completion["id"],
+            "object": "chat.completion.chunk",
+            "created": completion["created"],
+            "model": completion["model"],
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        }
+        yield "[DONE]"
+
+    def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        model = payload["model"]
+        inputs = payload.get("input", [])
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        rows = []
+        for index, value in enumerate(inputs):
+            response = get_session().post(
+                f"{self.base_url}/models/{model}:embedContent",
+                params={"key": self.api_key},
+                json={"content": {"parts": [{"text": value}]}},
+                timeout=settings.request_timeout_s,
+            )
+            response.encoding = "utf-8"
+            if not response.ok:
+                raise ProviderError(response.text)
+            data = response.json()
+            rows.append(
+                {
+                    "object": "embedding",
+                    "index": index,
+                    "embedding": data.get("embedding", {}).get("values", []),
+                }
+            )
+        return {"object": "list", "data": rows, "model": model, "usage": {}}
+    def rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raise ProviderError("Rerank is not implemented for Gemini adapter in AIIH yet.")
+
+    def health_check(self) -> dict[str, Any]:
+        response = get_session().get(
+            f"{self.base_url}/models",
+            params={"key": self.api_key},
+            timeout=5,
+        )
+        response.encoding = "utf-8"
+        return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
+
+    def _messages_to_contents(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        contents = []
+        for message in messages:
+            role = "model" if message.get("role") == "assistant" else "user"
+            parts = []
+            content = message.get("content", "")
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        parts.append({"text": item.get("text", "")})
+            else:
+                parts.append({"text": str(content)})
+            contents.append({"role": role, "parts": parts or [{"text": ""}]})
+        return contents
+
+    def _tools_to_gemini(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        declarations = []
+        for tool in tools:
+            function = tool.get("function", {})
+            if not function:
+                continue
+            declarations.append(
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": function.get("name", "tool"),
+                            "description": function.get("description", ""),
+                            "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+                        }
+                    ]
+                }
+            )
+        return declarations
+
+    def _extract_text(self, data: dict[str, Any]) -> str:
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return ""
+        parts = candidates[0].get("content", {}).get("parts", [])
+        return "".join(part.get("text", "") for part in parts)
+

@@ -1,0 +1,21 @@
+local_node_id: node-01
+node_hosts:
+  node-01: 127.0.0.1
+control_plane_url: http://127.0.0.1:9200
+router_url: http://127.0.0.1:8001
+metrics_url: http://127.0.0.1:9100
+node_agent_url: http://127.0.0.1:9400
+worker_rpc_url: http://127.0.0.1:9300
+local_workers:
+  - port: 11434
+    gpu_id: 0
+    role: coding
+  - port: 11435
+    gpu_id: 1
+    role: embeddings
+  - port: 11436
+    gpu_id: 0
+    role: reasoning
+  - port: 11437
+    gpu_id: 1
+    role: agents

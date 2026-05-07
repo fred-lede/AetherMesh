@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+# =========================
+# Detect if script is sourced
+# =========================
+is_sourced=0
+
+# Bash detection
+if [ -n "$BASH_VERSION" ]; then
+    [[ $0 != "$BASH_SOURCE" ]] && is_sourced=1
+fi
+
+# Zsh detection
+if [ -n "$ZSH_VERSION" ]; then
+    case $ZSH_EVAL_CONTEXT in *:file) is_sourced=1;; esac
+fi
+
+# POSIX fallback
+if [ $is_sourced -eq 0 ]; then
+    parent=$(ps -o comm= $PPID)
+    case "$parent" in
+        zsh|bash|sh) is_sourced=1;;
+    esac
+fi
+
+if [ $is_sourced -eq 0 ]; then
+    echo "[dev] ERROR: Please run using:"
+    echo ""
+    echo "    source dev"
+    echo ""
+    echo "Running './dev' will NOT activate the environment in your current shell."
+    exit 1
+fi
+
+echo "[dev] Starting..."
+
+# =========================
+# 🔥 Clean environment (防污染)
+# =========================
+unset CONDA_PREFIX
+unset CONDA_DEFAULT_ENV
+unset PYTHONHOME
+unset PYTHONPATH
+
+# =========================
+# Setup .venv
+# =========================
+if [ -d ".venv" ]; then
+    echo "[dev] .venv detected"
+else
+    echo "[dev] No .venv found, creating..."
+
+    if command -v python3 >/dev/null 2>&1; then
+        SYS_PY=python3
+    elif command -v python >/dev/null 2>&1; then
+        SYS_PY=python
+    else
+        echo "[dev] ❌ No Python found"
+        return 1
+    fi
+
+    echo "[dev] Using system Python: $($SYS_PY -V)"
+    $SYS_PY -m venv .venv || return 1
+fi
+
+# =========================
+# Activate venv
+# =========================
+source .venv/bin/activate || return 1
+
+# 🔥 CRITICAL FIX: 強制 venv 優先（解你目前問題）
+export PATH="$(pwd)/.venv/bin:$PATH"
+
+# 🔥 清除 shell cache（避免舊 python）
+hash -r 2>/dev/null
+rehash 2>/dev/null  # for zsh
+
+# =========================
+# Verify Python
+# =========================
+PY_PATH=$(which python)
+PY_VER=$(python -V 2>&1)
+
+echo "[dev] Python path: $PY_PATH"
+echo "[dev] Python version: $PY_VER"
+
+# 🔥 Safety check（非常重要）
+case "$PY_PATH" in
+    *".venv"*) ;;
+    *)
+        echo "[dev] ❌ ERROR: Python is NOT from .venv"
+        echo "[dev] Current PATH: $PATH"
+        return 1
+        ;;
+esac
+
+# =========================
+# Package manager
+# =========================
+if command -v uv >/dev/null 2>&1; then
+    echo "[dev] uv detected"
+    PKG="uv pip"
+else
+    echo "[dev] uv not found → fallback to pip"
+    PKG="python -m pip"
+fi
+
+# =========================
+# Aliases（防止誤用系統 python）
+# =========================
+alias python="$(pwd)/.venv/bin/python"
+alias pip="$(pwd)/.venv/bin/pip"
+
+# =========================
+# Done
+# =========================
+echo "[dev] Environment ready"
+echo "[dev] Use: $PKG install <package>"

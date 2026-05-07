@@ -1,0 +1,46 @@
+# AI Inference Hub - Model Routing Rules
+# Controls how requests are routed to different providers.
+
+model_overrides: {}
+
+model_aliases:
+  # Claude Desktop gateway-safe aliases for local Ollama models.
+  # External clients can use anthropic/AIIH/<alias>; AIIH resolves the
+  # alias to the actual model name before routing.
+  alias_prefix: AIIH
+  entries:
+    glm-4.7-flash-q4: glm-4.7-flash:q4_K_M
+    gemma4-e4b: gemma4:e4b
+
+fallback:
+  # Explicit local Ollama model used when cloud providers are rate-limited,
+  # overloaded, or time out before a response starts.
+  ollama_default_model: gemma4:31b
+  # Optional explicit Ollama base URL for cloud fallback. When omitted,
+  # fallback uses the model's first worker binding from config/models.yaml.
+  ollama_base_url: http://127.0.0.1:11434
+
+rules:
+  - name: "Prefer local for simple chat"
+    model: "*"
+    provider: ollama
+    priority_boost: 1.1
+    enabled: true
+
+  - name: "Use OpenAI for reasoning models"
+    model: "o1-*"
+    provider: openai
+    priority_boost: 2.0
+    enabled: true
+
+  - name: "Use OpenAI for reasoning models"
+    model: "o3-*"
+    provider: openai
+    priority_boost: 2.0
+    enabled: true
+
+  - name: "Use Gemini for vision-heavy tasks"
+    model: "*"
+    provider: gemini
+    priority_boost: 1.0
+    enabled: true
