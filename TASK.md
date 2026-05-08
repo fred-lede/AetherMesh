@@ -120,6 +120,14 @@
 - [x] Condensed deployment, config, routing, monitoring sections
 - [x] Removed v4-era maintenance log, baseline benchmarks, systemd/launchd edge cases
 
+## Phase 17 — Dashboard Template Modernization ✅ (2026-05-08)
+- [x] Consolidated all `/api/*` routes into `APIRouter(prefix="/api")` in `dashboard/dashboard_server.py`
+- [x] Extracted inline JavaScript from `templates/index.html` to `static/dashboard.js`
+- [x] Inlined CSS from `static/style.css` directly into `templates/index.html`
+- [x] Reduced `index.html` from ~1356 lines of JS/CSS/HTML to 820 lines (pure template)
+- [x] Added `dashboard.js` as a static file served via `app.get("/static/{file_path:path}")`
+- [x] No functional changes — all 18 `/api/*` endpoints maintain identical paths
+
 ---
 
 ## 執行記錄
@@ -132,3 +140,4 @@
 | 2026-05-08 | Phase 7-8 | Kernel stabilization 完成 (context/events/state/replay/abi/kernel.py) |
 | 2026-05-08 | Phase 8b | Full OpenAI Responses API 支援完成 (runtime/responses/ + router/responses_router.py + 5 provider adapters) |
 | 2026-05-08 | Phase 16 | README.md 完整重寫為 v5 kernel-focused 版本 (983→382 lines) |
+| 2026-05-08 | Phase 17 | Dashboard template modernization: JS extracted, CSS inlined, API routes consolidated |

@@ -335,6 +335,10 @@ Dashboard at `http://localhost:9001`:
 - **Cloud Providers**: connection status, model count, latency for NVIDIA NIM, Ollama Cloud, OpenAI, Gemini
 - **Charts**: latency trends, request rates, GPU utilization, model usage, worker load, tokens/sec, TTFT, GPU memory
 
+All dashboard API endpoints (`/api/*`) are consolidated under a single `APIRouter(prefix="/api")`
+in `dashboard/dashboard_server.py`, with the dashboard static JS extracted to
+`dashboard/static/dashboard.js` and CSS inlined into the HTML template.
+
 Prometheus exporter at `http://localhost:9100/metrics`.
 
 ### Metrics

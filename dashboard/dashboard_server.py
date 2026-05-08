@@ -1,6 +1,11 @@
 from __future__ import annotations
+import asyncio
+import hashlib
+import json
+import logging
 import os
 import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -8,7 +13,8 @@ from urllib.parse import parse_qs
 from dotenv import load_dotenv
 import requests
 from fastapi import FastAPI, HTTPException, Request, Body
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi import APIRouter
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from jinja2 import Environment, FileSystemLoader, Template
@@ -21,6 +27,8 @@ from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
 from runtime.security import rate_limiter, api_key_auth, input_validator
 from runtime.observability import metrics_collector, graph_event_bus
+
+LOGGER = logging.getLogger("aiih.dashboard")
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -57,11 +65,19 @@ templates = _Templates()
 STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")
+LOGGER.info("Dashboard starting — auth=%s, refresh=%ss", settings.dashboard_auth_enabled, settings.dashboard_refresh_s)
+api = APIRouter(prefix="/api")
 
 AUTH_EXEMPT_PATHS = {"/health", "/api/health", "/favicon.ico", "/login"}
 AUTH_EXEMPT_PREFIXES = ("/static/",)
 DASHBOARD_SESSION_COOKIE = "aiih_dashboard_session"
-DASHBOARD_SESSION_TOKEN = secrets.token_urlsafe(32)
+_dashboard_session_token: str = secrets.token_urlsafe(32)
+
+
+def _rotate_session_token() -> str:
+    global _dashboard_session_token
+    _dashboard_session_token = secrets.token_urlsafe(32)
+    return _dashboard_session_token
 
 
 def _unauthorized_response() -> Response:
@@ -105,7 +121,7 @@ def _basic_auth_username(request: Request) -> str | None:
 
 def _session_auth_valid(request: Request) -> bool:
     session = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
-    return bool(session) and secrets.compare_digest(session, DASHBOARD_SESSION_TOKEN)
+    return bool(session) and secrets.compare_digest(session, _dashboard_session_token)
 
 
 def _wants_html(request: Request) -> bool:
@@ -162,6 +178,7 @@ def _web_search_providers() -> list[dict[str, Any]]:
             for p in web_search_manager.providers
         ]
     except Exception:
+        LOGGER.warning("web_search_providers: failed to list providers", exc_info=True)
         return []
 
 
@@ -177,7 +194,7 @@ def _check_cloud_provider(name: str, base_url_env: str, api_key_env: str, defaul
     
     for endpoint in endpoints_to_try:
         try:
-            response = get_session().get(f"{base_url}{endpoint}", headers=headers, timeout=2)
+            response = requests.get(f"{base_url}{endpoint}", headers=headers, timeout=2)
             if response.ok:
                 data = response.json()
                 model_count = 0
@@ -209,52 +226,31 @@ def _check_cloud_provider(name: str, base_url_env: str, api_key_env: str, defaul
 
 
 def _check_cloud_providers() -> list[dict[str, Any]]:
-    """Check health of all configured cloud providers."""
-    providers = []
+    """Check health of all configured cloud providers in parallel."""
+    configs: list[tuple[str, str, str, str]] = []
 
-    # NVIDIA NIM
     if os.getenv("NVIDIA_NIM_API_KEY"):
-        providers.append(
-            _check_cloud_provider(
-                "nvidia_nim",
-                "NVIDIA_NIM_API_BASE",
-                "NVIDIA_NIM_API_KEY",
-                "https://integrate.api.nvidia.com/v1",
-            )
-        )
-
-    # Ollama Cloud
+        configs.append(("nvidia_nim", "NVIDIA_NIM_API_BASE", "NVIDIA_NIM_API_KEY", "https://integrate.api.nvidia.com/v1"))
     if os.getenv("OLLAMA_CLOUD_API_KEY"):
-        providers.append(
-            _check_cloud_provider(
-                "ollama_cloud",
-                "OLLAMA_CLOUD_API_BASE",
-                "OLLAMA_CLOUD_API_KEY",
-                "https://ollama.com",
-            )
-        )
-
-    # OpenAI
+        configs.append(("ollama_cloud", "OLLAMA_CLOUD_API_BASE", "OLLAMA_CLOUD_API_KEY", "https://ollama.com"))
     if os.getenv("OPENAI_API_KEY"):
-        providers.append(
-            _check_cloud_provider(
-                "openai",
-                "OPENAI_API_BASE",
-                "OPENAI_API_KEY",
-                "https://api.openai.com/v1",
-            )
-        )
-
-    # Gemini
+        configs.append(("openai", "OPENAI_API_BASE", "OPENAI_API_KEY", "https://api.openai.com/v1"))
     if os.getenv("GEMINI_API_KEY"):
-        providers.append(
-            _check_cloud_provider(
-                "gemini",
-                "GEMINI_API_BASE",
-                "GEMINI_API_KEY",
-                "https://generativelanguage.googleapis.com/v1beta",
-            )
-        )
+        configs.append(("gemini", "GEMINI_API_BASE", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta"))
+
+    if not configs:
+        return []
+
+    providers: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=len(configs)) as executor:
+        futures = {executor.submit(_check_cloud_provider, *cfg): cfg[0] for cfg in configs}
+        for future in as_completed(futures):
+            try:
+                providers.append(future.result())
+            except Exception:
+                name = futures[future]
+                LOGGER.warning("cloud_probe failed for %s", name, exc_info=True)
+                providers.append({"name": name, "ok": False, "status": "error", "message": "Probe failed"})
 
     return providers
 
@@ -343,11 +339,11 @@ def _fetch_router_metrics(endpoint: str) -> dict[str, Any]:
         if response.ok:
             return response.json()
     except requests.RequestException:
-        pass
+        LOGGER.debug("router_metrics unavailable: %s", endpoint, exc_info=True)
     return {}
 
 
-@app.post("/api/tasks/{task_id}/cancel")
+@api.post("/tasks/{task_id}/cancel")
 async def cancel_task(task_id: str):
     try:
         response = requests.post(f"{settings.control_plane_url}/cluster/tasks/{task_id}/cancel", timeout=5)
@@ -355,7 +351,7 @@ async def cancel_task(task_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/workers/{worker_id}/restart")
+@api.post("/workers/{worker_id}/restart")
 async def restart_worker(worker_id: str):
     try:
         response = requests.post(f"{settings.control_plane_url}/cluster/workers/{worker_id}/restart", timeout=5)
@@ -501,7 +497,7 @@ def health() -> dict[str, Any]:
     return {"status": "ok", "service": "dashboard"}
 
 
-@app.get("/api/health")
+@api.get("/health")
 def api_health() -> dict[str, Any]:
     """
     Detailed health check for monitoring systems.
@@ -516,6 +512,7 @@ def api_health() -> dict[str, Any]:
         checks["control_plane"] = {"ok": True, "workers": len(cp.get("workers", []))}
     except Exception as e:
         status = "degraded"
+        LOGGER.warning("health check: control_plane unavailable: %s", e)
         checks["control_plane"] = {"ok": False, "error": str(e)}
 
     # Check nodes and workers
@@ -531,6 +528,7 @@ def api_health() -> dict[str, Any]:
         }
     except Exception as e:
         status = "degraded"
+        LOGGER.warning("health check: cluster unavailable: %s", e)
         checks["cluster"] = {"ok": False, "error": str(e)}
 
     # Check queue
@@ -544,6 +542,7 @@ def api_health() -> dict[str, Any]:
             "pending": len(queued),
         }
     except Exception as e:
+        LOGGER.warning("health check: queue unavailable: %s", e)
         checks["queue"] = {"ok": False, "error": str(e)}
 
     return {
@@ -599,9 +598,10 @@ async def login(request: Request):
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
 
     response = RedirectResponse(url="/", status_code=303)
+    token = _rotate_session_token()
     response.set_cookie(
         DASHBOARD_SESSION_COOKIE,
-        DASHBOARD_SESSION_TOKEN,
+        token,
         httponly=True,
         samesite="lax",
         secure=request.url.scheme == "https",
@@ -629,8 +629,7 @@ def index(request: Request):
     )
 
 
-@app.get("/api/overview")
-def overview() -> dict[str, Any]:
+def _build_overview() -> dict[str, Any]:
     overview_errors: list[dict[str, str]] = []
     nodes = _fetch_overview_json("/cluster/nodes", {"nodes": []}, overview_errors)
     workers = _fetch_overview_json("/cluster/workers", {"workers": []}, overview_errors)
@@ -657,7 +656,6 @@ def overview() -> dict[str, Any]:
         )
     cloud_providers = _check_cloud_providers()
 
-    # Enrich GPUs and Workers with Tiers
     gpus_enriched = [
         {**g, "tier": _get_gpu_tier(g.get("name", ""))} 
         for g in gpus.get("gpus", [])
@@ -703,13 +701,54 @@ def overview() -> dict[str, Any]:
     }
 
 
-@app.get("/api/providers/health")
+@api.get("/overview")
+def overview(request: Request) -> Response:
+    data = _build_overview()
+    etag = hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+    return JSONResponse(content=data, headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+
+@api.get("/events")
+async def events(request: Request):
+    loop = asyncio.get_event_loop()
+    last_etag: str | None = None
+
+    async def event_generator():
+        nonlocal last_etag
+        while True:
+            try:
+                if await request.is_disconnected():
+                    break
+                data = await loop.run_in_executor(None, _build_overview)
+                body = json.dumps(data)
+                etag = hashlib.md5(body.encode()).hexdigest()
+                if etag != last_etag:
+                    yield f"data: {body}\n\n"
+                    last_etag = etag
+            except asyncio.CancelledError:
+                break
+            await asyncio.sleep(settings.dashboard_refresh_s)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@api.get("/providers/health")
 def providers_health() -> dict[str, Any]:
     """Check health of all cloud providers."""
     return {"providers": _check_cloud_providers()}
 
 
-@app.get("/api/web-search/status")
+@api.get("/web-search/status")
 def web_search_status() -> dict[str, Any]:
     from runtime.tools.web_search import web_search_manager
     providers_info = []
@@ -721,7 +760,7 @@ def web_search_status() -> dict[str, Any]:
     return {"providers": providers_info}
 
 
-@app.post("/api/providers/{provider}/probe")
+@api.post("/providers/{provider}/probe")
 def provider_probe(provider: str) -> dict[str, Any]:
     """Probe one provider and feed the result back into routing health."""
     result = _probe_provider(provider)
@@ -744,38 +783,38 @@ def task_detail_page(request: Request, task_id: str):
     )
 
 
-@app.get("/api/task/{task_id}")
+@api.get("/task/{task_id}")
 def task_detail(task_id: str) -> dict[str, Any]:
     return _fetch_json(f"/cluster/tasks/{task_id}")
 
 
-@app.get("/api/requests/recent")
+@api.get("/requests/recent")
 def requests_recent() -> dict[str, Any]:
     metrics = _fetch_json("/cluster/metrics")
     return {"events": metrics.get("recent_events", [])}
 
 
-@app.get("/api/metrics/requests")
+@api.get("/metrics/requests")
 def metrics_requests() -> dict[str, Any]:
     return request_metrics.get_summary()
 
 
-@app.get("/api/metrics/requests/recent")
+@api.get("/metrics/requests/recent")
 def metrics_requests_recent(limit: int = 50) -> dict[str, Any]:
     return {"requests": request_metrics.get_recent_requests(limit)}
 
 
-@app.get("/api/metrics/providers")
+@api.get("/metrics/providers")
 def metrics_providers() -> dict[str, Any]:
     return {"providers": request_metrics.get_provider_metrics()}
 
 
-@app.get("/api/routing/status")
+@api.get("/routing/status")
 def routing_status() -> dict[str, Any]:
     return routing_engine.get_routing_status()
 
 
-@app.post("/api/routing/overrides")
+@api.post("/routing/overrides")
 def routing_override_set(request: Request, payload: dict[str, str] = Body(...)) -> dict[str, Any]:
     model = payload.get("model", "")
     provider = payload.get("provider", "")
@@ -785,34 +824,36 @@ def routing_override_set(request: Request, payload: dict[str, str] = Body(...)) 
     return {"ok": True, "model": model, "provider": provider}
 
 
-@app.delete("/api/routing/overrides/{model}")
+@api.delete("/routing/overrides/{model}")
 def routing_override_remove(request: Request, model: str) -> dict[str, Any]:
     routing_engine.clear_model_override(model, actor=_dashboard_actor(request))
     return {"ok": True, "model": model}
 
 
-@app.post("/api/providers/{provider}/enable")
+@api.post("/providers/{provider}/enable")
 def provider_enable(request: Request, provider: str) -> dict[str, Any]:
     routing_engine.set_provider_enabled(provider, True, actor=_dashboard_actor(request))
     return {"ok": True, "provider": provider, "enabled": True}
 
 
-@app.post("/api/providers/{provider}/disable")
+@api.post("/providers/{provider}/disable")
 def provider_disable(request: Request, provider: str) -> dict[str, Any]:
     routing_engine.set_provider_enabled(provider, False, actor=_dashboard_actor(request))
     return {"ok": True, "provider": provider, "enabled": False}
 
 
-@app.post("/api/routing/local-only/enable")
+@api.post("/routing/local-only/enable")
 def routing_local_only_enable(request: Request) -> dict[str, Any]:
     routing_engine.set_local_only_mode(True, actor=_dashboard_actor(request))
     return {"ok": True, "local_only": True}
 
 
-@app.post("/api/routing/local-only/disable")
+@api.post("/routing/local-only/disable")
 def routing_local_only_disable(request: Request) -> dict[str, Any]:
     routing_engine.set_local_only_mode(False, actor=_dashboard_actor(request))
     return {"ok": True, "local_only": False}
+
+app.include_router(api)
 
 if __name__ == "__main__":
     import uvicorn
