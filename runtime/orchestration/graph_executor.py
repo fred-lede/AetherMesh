@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Any, Callable
 
+from runtime.observability.event_bus import graph_event_bus
 from runtime.orchestration.graph import ExecutionGraph, ExecutionNode, NodeStatus
 from runtime.orchestration.retry_policy import RetryPolicy
 
@@ -50,6 +51,7 @@ class GraphExecutor:
         self,
         graph: ExecutionGraph,
         context: dict[str, Any] | None = None,
+        trace_id: str = "",
     ) -> GraphExecutionResult:
         result = GraphExecutionResult()
         result.start_time = time.time()
@@ -60,6 +62,8 @@ class GraphExecutor:
             result.end_time = time.time()
             result.node_errors["_graph"] = "; ".join(errors)
             return result
+
+        graph_event_bus.emit(graph_event_bus.graph_started(trace_id=trace_id))
 
         groups = graph.parallel_groups()
         node_states: dict[str, ExecutionNode] = {
@@ -78,13 +82,16 @@ class GraphExecutor:
                 if not node or node.status != NodeStatus.PENDING:
                     continue
                 tasks.append(asyncio.create_task(
-                    self._execute_node(node, context, result)
+                    self._execute_node(node, context, result, trace_id=trace_id)
                 ))
 
             if tasks:
                 await asyncio.gather(*tasks)
 
         result.end_time = time.time()
+        graph_event_bus.emit(graph_event_bus.graph_completed(
+            success=result.success, elapsed_ms=result.elapsed_ms, trace_id=trace_id,
+        ))
         return result
 
     async def _execute_node(
@@ -92,9 +99,13 @@ class GraphExecutor:
         node: ExecutionNode,
         context: dict[str, Any] | None,
         result: GraphExecutionResult,
+        trace_id: str = "",
     ) -> None:
         node.status = NodeStatus.RUNNING
         start = time.time()
+        graph_event_bus.emit(graph_event_bus.node_started(
+            node_id=node.id, node_type=node.node_type.value, trace_id=trace_id,
+        ))
         try:
             handler = self._handlers.get(node.node_type.value)
             if handler:
@@ -116,3 +127,13 @@ class GraphExecutor:
                 "Node %s (%s) %s in %.0fms",
                 node.id, node.node_type.value, node.status.value, duration,
             )
+            if node.status == NodeStatus.COMPLETED:
+                graph_event_bus.emit(graph_event_bus.node_completed(
+                    node_id=node.id, node_type=node.node_type.value,
+                    duration_ms=duration, trace_id=trace_id, content=node.result,
+                ))
+            else:
+                graph_event_bus.emit(graph_event_bus.node_failed(
+                    node_id=node.id, node_type=node.node_type.value,
+                    error=node.error or "", duration_ms=duration, trace_id=trace_id,
+                ))

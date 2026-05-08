@@ -11,6 +11,7 @@ logger = logging.getLogger("orchestration.graph")
 class NodeType(Enum):
     LLM_CALL = "llm_call"
     TOOL_CALL = "tool_call"
+    AGENT_CALL = "agent_call"
     CONDITIONAL = "conditional"
     PARALLEL = "parallel"
     FAN_OUT = "fan_out"

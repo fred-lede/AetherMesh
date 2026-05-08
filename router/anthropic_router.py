@@ -24,6 +24,9 @@ from runtime.orchestration.capabilities import required_anthropic_capabilities
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
 from runtime.security.tool_policy import evaluate_server_tool_policy
+from runtime.security.middleware import add_security_middleware
+from runtime.gpu_os.routes import gpu_router
+from runtime.multi_agent.routes import agent_router
 from runtime.tools.builtin.web_search import stream_web_server_tool_response
 from router.anthropic.messages_adapter import create_messages_routes
 
@@ -54,6 +57,11 @@ ANTHROPIC_RATE_LIMIT_HEADERS = [
 
 
 app = FastAPI(title="AetherMesh - Anthropic Compatible", version="4.0.0")
+
+add_security_middleware(app)
+
+app.include_router(gpu_router)
+app.include_router(agent_router)
 
 
 @app.get("/api/metrics/requests")

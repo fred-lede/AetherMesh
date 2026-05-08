@@ -9,6 +9,9 @@ from fastapi.responses import JSONResponse
 
 from config.settings import settings
 from runtime.orchestration.openai_handler import RouterService
+from runtime.security.middleware import add_security_middleware
+from runtime.gpu_os.routes import gpu_router
+from runtime.multi_agent.routes import agent_router
 from router.openai.chat_adapter import create_chat_completions_route
 from router.openai.responses_adapter import create_responses_router
 from router.openai.models_adapter import create_models_route
@@ -19,10 +22,10 @@ from router.openai.rerank_adapter import create_rerank_route
 service = RouterService()
 app = FastAPI(title="AetherMesh Router", version="4.0.0")
 
-if settings.rate_limit_enabled:
-    from router.rate_limiter import rate_limit_middleware
-    app.middleware("http")(rate_limit_middleware)
+add_security_middleware(app, enable_rate_limit=settings.rate_limit_enabled)
 
+app.include_router(gpu_router)
+app.include_router(agent_router)
 app.include_router(create_responses_router(service))
 
 

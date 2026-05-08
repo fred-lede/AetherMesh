@@ -509,6 +509,49 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    .runtime-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .runtime-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .runtime-card h4 {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .runtime-card .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 0.85rem;
+    }
+    .runtime-card .stat-row .label {
+      color: var(--muted);
+    }
+    .runtime-card .stat-row .value {
+      font-weight: 500;
+    }
+    .vram-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      margin: 8px 0;
+      overflow: hidden;
+    }
+    .vram-bar .fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
   </style>
 </head>
 <body>
@@ -741,6 +784,35 @@
       </div>
       <div class="table-wrap"><table><thead><tr><th>Endpoint</th><th>Requests</th><th>Avg (ms)</th><th>P95 (ms)</th><th>P99 (ms)</th></tr></thead><tbody id="endpoint-latency-table"></tbody></table></div>
     </section>
+
+    <section class="section card">
+      <div class="section-head">
+        <h2>GPU OS</h2>
+        <span class="mono" style="color: var(--muted);">Device pool &amp; model scheduler</span>
+      </div>
+      <div id="gpu-os-panel"></div>
+    </section>
+
+    <section class="section card">
+      <div class="section-head">
+        <h2>Runtime Systems</h2>
+        <span class="mono" style="color: var(--muted);">Multi-agent, security, observability</span>
+      </div>
+      <div class="runtime-grid">
+        <div class="runtime-card">
+          <h4>Multi-Agent</h4>
+          <div id="multi-agent-stats"></div>
+        </div>
+        <div class="runtime-card">
+          <h4>Security</h4>
+          <div id="security-stats"></div>
+        </div>
+        <div class="runtime-card">
+          <h4>Observability</h4>
+          <div id="observability-stats"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -755,6 +827,10 @@
     const tasksTable = document.getElementById('tasks-table');
     const errorCodesTable = document.getElementById('error-codes-table');
     const endpointLatencyTable = document.getElementById('endpoint-latency-table');
+    const gpuOsPanel = document.getElementById('gpu-os-panel');
+    const multiAgentStats = document.getElementById('multi-agent-stats');
+    const securityStats = document.getElementById('security-stats');
+    const observabilityStats = document.getElementById('observability-stats');
     const updated = document.getElementById('updated');
     const requestMetricsCards = document.getElementById('request-metrics-cards');
     const providerMetricsTable = document.getElementById('provider-metrics-table');
@@ -1495,6 +1571,57 @@
       `).join('') || '<tr><td colspan="5">No endpoint latency metrics yet.</td></tr>';
 
       updated.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+
+      // Render GPU OS
+      const gpuOs = data.gpu_os || {};
+      const devices = gpuOs.devices || [];
+      const scheduler = gpuOs.scheduler || {};
+      gpuOsPanel.innerHTML = devices.length === 0
+        ? '<span class="pill">No GPU devices registered</span>'
+        : `<div class="runtime-grid">${devices.map(d => {
+            const vramPct = d.vram_used_pct || 0;
+            const barColor = vramPct > 80 ? 'var(--bad)' : vramPct > 50 ? 'var(--warn)' : 'var(--good)';
+            return `<div class="runtime-card">
+              <h4>${escapeHtml(d.name)} (${d.device_id})</h4>
+              <div class="stat-row"><span class="label">VRAM</span><span class="value">${d.used_vram_gb} / ${d.total_vram_gb} GB</span></div>
+              <div class="vram-bar"><div class="fill" style="width:${vramPct}%;background:${barColor}"></div></div>
+              <div class="stat-row"><span class="label">Utilization</span><span class="value">${d.utilization}%</span></div>
+              <div class="stat-row"><span class="label">Temp</span><span class="value">${d.temperature}°C</span></div>
+              <div class="stat-row"><span class="label">Models</span><span class="value">${(d.models_loaded || []).join(', ') || 'none'}</span></div>
+              <div class="stat-row"><span class="label">Health</span><span class="value ${d.healthy ? 'ok' : 'bad'}">${d.healthy ? 'healthy' : 'unhealthy'}</span></div>
+            </div>`;
+          }).join('')}
+          <div class="runtime-card">
+            <h4>Scheduler</h4>
+            <div class="stat-row"><span class="label">Max VRAM</span><span class="value">${scheduler.max_vram_gb || 0} GB</span></div>
+            <div class="stat-row"><span class="label">Loaded Models</span><span class="value">${scheduler.loaded_count || 0}</span></div>
+            ${(scheduler.models || []).map(m => `<div class="stat-row"><span class="label">${escapeHtml(m.name)}</span><span class="value">${m.vram_gb} GB, ${m.use_count} uses</span></div>`).join('')}
+          </div>
+        </div>`;
+
+      // Render Multi-Agent
+      const ma = data.multi_agent || {};
+      multiAgentStats.innerHTML = `<div class="stat-row"><span class="label">Registered Agents</span><span class="value">${(ma.agents || []).length}</span></div>
+        ${(ma.agents || []).map(a => `<div class="stat-row"><span class="label">${escapeHtml(a)}</span></div>`).join('')}
+        ${(ma.agents || []).length === 0 ? '<span class="pill">No agents registered</span>' : ''}`;
+
+      // Render Security
+      const sec = data.security || {};
+      const auth = sec.api_key_auth || {};
+      securityStats.innerHTML = `<div class="stat-row"><span class="label">API Key Auth</span><span class="value ${auth.enabled ? 'ok' : 'warn'}">${auth.enabled ? 'enabled' : 'disabled'}</span></div>
+        <div class="stat-row"><span class="label">Keys Configured</span><span class="value">${auth.key_count || 0}</span></div>
+        <div class="stat-row"><span class="label">Rate Limit Buckets</span><span class="value">${sec.rate_limiter_buckets || 0}</span></div>
+        <div class="stat-row"><span class="label">Max Text Length</span><span class="value">${(sec.max_text_length || 0).toLocaleString()} chars</span></div>
+        <div class="stat-row"><span class="label">Max Messages</span><span class="value">${sec.max_messages || 0}</span></div>`;
+
+      // Render Observability
+      const obs = data.observability || {};
+      const obsMetrics = obs.metrics || {};
+      const counterKeys = Object.keys(obsMetrics).filter(k => k.startsWith('counter:'));
+      const histogramKeys = Object.keys(obsMetrics).filter(k => k.startsWith('histogram:'));
+      observabilityStats.innerHTML = `<div class="stat-row"><span class="label">Counters</span><span class="value">${counterKeys.length}</span></div>
+        <div class="stat-row"><span class="label">Histograms</span><span class="value">${histogramKeys.length}</span></div>
+        ${counterKeys.slice(0, 5).map(k => `<div class="stat-row"><span class="label">${escapeHtml(k.slice(8))}</span><span class="value">${obsMetrics[k]}</span></div>`).join('')}`;
 
       // Update chart history
       const now = new Date();

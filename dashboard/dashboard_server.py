@@ -16,7 +16,10 @@ from jinja2 import Environment, FileSystemLoader, Template
 from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
-from runtime.orchestration.routing_engine import routing_engine
+from runtime.multi_agent import coordinator
+from runtime.gpu_os import gpu_manager, model_scheduler
+from runtime.security import rate_limiter, api_key_auth, input_validator
+from runtime.observability import metrics_collector, graph_event_bus
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -680,6 +683,22 @@ def overview() -> dict[str, Any]:
         "overview_status": "degraded" if overview_errors else "ok",
         "overview_errors": overview_errors,
         "web_search_providers": _web_search_providers(),
+        "gpu_os": {
+            "devices": gpu_manager.snapshot(),
+            "scheduler": model_scheduler.snapshot(),
+        },
+        "multi_agent": {
+            "agents": coordinator.list_agents(),
+        },
+        "security": {
+            "api_key_auth": api_key_auth.snapshot(),
+            "rate_limiter_buckets": len(rate_limiter._buckets) if hasattr(rate_limiter, '_buckets') else 0,
+            "max_text_length": input_validator.MAX_TEXT_LENGTH,
+            "max_messages": input_validator.MAX_MESSAGES,
+        },
+        "observability": {
+            "metrics": metrics_collector.snapshot(),
+        },
     }
 
 
