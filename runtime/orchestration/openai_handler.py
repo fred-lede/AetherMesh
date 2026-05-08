@@ -249,17 +249,99 @@ class RouterService:
         return wrapped()
 
     def handle_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from runtime.responses.response_models import ResponseObject, ResponseStatus
+        from runtime.responses.input_converter import responses_input_to_messages
+        from runtime.responses.output_converter import chat_completion_to_response, error_response
+        from runtime.responses.response_runtime import response_runtime
+
         prepared_payload = self._apply_generation_defaults(payload)
         if self._is_async_requested(prepared_payload):
             return self._enqueue_async_task("/v1/responses", prepared_payload)
-        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
-        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
-        adapter = self._adapter(provider, worker)
+
+        response_id = f"resp_{uuid.uuid4().hex[:24]}"
+        model = str(payload.get("model", ""))
+        instructions = str(payload.get("instructions", ""))
+        previous_response_id = str(payload.get("previous_response_id", ""))
+        metadata = payload.get("metadata", {})
+        store = bool(payload.get("store", True))
+        input_value = payload.get("input", "")
+        stream = payload.get("stream", False)
+
+        messages = responses_input_to_messages(input_value, instructions=instructions)
+
+        chat_payload = dict(payload)
+        chat_payload["messages"] = messages
+        chat_payload.pop("input", None)
+        chat_payload.pop("instructions", None)
+        chat_payload.pop("previous_response_id", None)
+        chat_payload.pop("store", None)
+        chat_payload.pop("stream", None)
+
+        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
+
+        original_payload = dict(payload)
+        original_payload.pop("stream", None)
+        effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+        adapter_instance = self._adapter(provider, worker)
         started = time.perf_counter()
         error = False
         error_code = ""
         try:
-            return adapter.responses(effective_payload)
+            if provider == "openai":
+                result = adapter_instance.responses(original_payload)
+                if store:
+                    from runtime.responses.response_models import ResponseObject
+                    from runtime.responses.response_models import ResponseUsage
+                    resp = ResponseObject(
+                        id=result.get("id", response_id),
+                        model=result.get("model", model),
+                        status=ResponseStatus(result.get("status", "completed")),
+                        instructions=instructions,
+                        previous_response_id=previous_response_id,
+                        metadata=metadata,
+                    )
+                    usage_data = result.get("usage", {})
+                    resp.usage = ResponseUsage(
+                        input_tokens=usage_data.get("input_tokens", 0),
+                        output_tokens=usage_data.get("output_tokens", 0),
+                        total_tokens=usage_data.get("total_tokens", 0),
+                    )
+                    output_items = result.get("output", [])
+                    from runtime.responses.response_models import OutputItem
+                    for oi in output_items:
+                        item = OutputItem(
+                            id=oi.get("id", f"item_{uuid.uuid4().hex[:16]}"),
+                            role=oi.get("role", "assistant"),
+                        )
+                        item.type = oi.get("type", "message")
+                        content_parts = oi.get("content", [])
+                        from runtime.responses.response_models import ContentPart, ContentPartType
+                        for cp in content_parts:
+                            part = ContentPart(
+                                type=ContentPartType.OUTPUT_TEXT,
+                                text=cp.get("text", cp.get("refusal", "")),
+                            )
+                            item.content.append(part)
+                        if oi.get("type") == "tool_call":
+                            item.tool_call_id = oi.get("tool_call_id", "")
+                            item.tool_name = oi.get("tool_name", "")
+                            item.arguments = oi.get("arguments", "")
+                        resp.output.append(item)
+                    response_runtime.register(resp)
+                return result
+            else:
+                completion = adapter_instance.chat(effective_payload)
+                response = chat_completion_to_response(
+                    completion=completion,
+                    model=model,
+                    response_id=response_id,
+                    instructions=instructions,
+                    previous_response_id=previous_response_id,
+                    metadata=metadata,
+                )
+                if store:
+                    response_runtime.register(response)
+                return response.to_dict()
         except ProviderError as exc:
             error = True
             error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
@@ -282,11 +364,25 @@ class RouterService:
                 error = False
                 error_code = ""
                 try:
-                    return adapter_instance.responses(effective_payload)
+                    completion = adapter_instance.chat(effective_payload)
+                    response = chat_completion_to_response(
+                        completion=completion,
+                        model=model,
+                        response_id=response_id,
+                    )
+                    if store:
+                        response_runtime.register(response)
+                    return response.to_dict()
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+                    err_resp = error_response(model, str(fallback_exc), error_code, response_id)
+                    if store:
+                        response_runtime.register(err_resp)
+                    return err_resp.to_dict()
+            err_resp = error_response(model, str(exc), error_code, response_id)
+            if store:
+                response_runtime.register(err_resp)
             raise self._provider_http_error(exc, code=error_code) from exc
         except requests.Timeout as exc:
             error = True
@@ -310,11 +406,18 @@ class RouterService:
                 error = False
                 error_code = ""
                 try:
-                    return adapter_instance.responses(effective_payload)
+                    completion = adapter_instance.chat(effective_payload)
+                    response = chat_completion_to_response(completion=completion, model=model, response_id=response_id)
+                    if store:
+                        response_runtime.register(response)
+                    return response.to_dict()
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+                    err_resp = error_response(model, str(fallback_exc), error_code, response_id)
+                    if store:
+                        response_runtime.register(err_resp)
+                    return err_resp.to_dict()
             raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
         except requests.RequestException as exc:
             error = True
@@ -330,6 +433,78 @@ class RouterService:
                 error=error,
                 error_code=error_code,
             )
+
+    def handle_streaming_responses(self, payload: dict[str, Any]) -> Iterable[str]:
+        from runtime.responses.input_converter import responses_input_to_messages
+        from runtime.responses.response_stream import wrap_streaming_chunks, response_stream_encoder
+        from runtime.responses.response_runtime import response_runtime
+
+        response_id = f"resp_{uuid.uuid4().hex[:24]}"
+        model = str(payload.get("model", ""))
+        instructions = str(payload.get("instructions", ""))
+        input_value = payload.get("input", "")
+        messages = responses_input_to_messages(input_value, instructions=instructions)
+
+        chat_payload = dict(payload)
+        chat_payload["messages"] = messages
+        chat_payload.pop("input", None)
+        chat_payload.pop("instructions", None)
+        chat_payload.pop("stream", None)
+
+        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
+        effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+
+        if provider == "openai":
+            openai_payload = dict(payload)
+            openai_payload["stream"] = True
+            adapter_instance = self._adapter(provider, worker)
+            raw_chunks = adapter_instance.stream(openai_payload)
+            yield from wrap_streaming_chunks(raw_chunks, response_id, model)
+            return
+
+        adapter_instance = self._adapter(provider, worker)
+        try:
+            raw_chunks = adapter_instance.stream(effective_payload)
+            yield from wrap_streaming_chunks(raw_chunks, response_id, model)
+        except Exception as exc:
+            yield response_stream_encoder.encode({
+                "type": "response.failed",
+                "data": {
+                    "type": "response.failed",
+                    "response": {
+                        "id": response_id,
+                        "object": "response",
+                        "model": model,
+                        "status": "failed",
+                        "error": {"message": str(exc), "type": "server_error", "code": "server_error"},
+                    },
+                },
+            })
+            yield response_stream_encoder.encode_done()
+
+    def get_response(self, response_id: str) -> dict[str, Any]:
+        from runtime.responses.response_runtime import response_runtime
+        resp = response_runtime.get(response_id)
+        if not resp:
+            raise self._as_http_error(status_code=404, code="not_found", message=f"Response {response_id} not found")
+        return resp.to_dict()
+
+    def delete_response(self, response_id: str) -> dict[str, Any]:
+        from runtime.responses.response_runtime import response_runtime
+        if response_runtime.delete(response_id):
+            return {"id": response_id, "object": "response", "deleted": True}
+        raise self._as_http_error(status_code=404, code="not_found", message=f"Response {response_id} not found")
+
+    def update_response(self, response_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from runtime.responses.response_runtime import response_runtime
+        resp = response_runtime.get(response_id)
+        if not resp:
+            raise self._as_http_error(status_code=404, code="not_found", message=f"Response {response_id} not found")
+        if "metadata" in payload:
+            resp.metadata.update(payload["metadata"])
+        if "instructions" in payload:
+            resp.instructions = str(payload["instructions"])
+        return resp.to_dict()
 
     def handle_embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self._is_async_requested(payload):

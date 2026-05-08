@@ -1,16 +1,19 @@
-# AetherMesh Runtime Platform
+# AetherMesh AI Runtime Kernel
 
-Local-first AI Runtime Mesh for Multi-Provider, Multi-GPU, and Agent-Oriented AI Systems.
+Local-first AI Runtime Operating System Kernel for Multi-Provider, Multi-GPU, and Agent-Oriented AI Systems.
 It provides:
 
-- OpenAI-compatible API routing (`/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings`, `/v1/rerank`)
+- OpenAI-compatible API routing (`/v1/chat/completions`, `/v1/responses` w/ full Responses API format, `/v1/models`, `/v1/embeddings`, `/v1/rerank`)
+- Full OpenAI Responses API — native passthrough for OpenAI, auto-conversion for all other providers
 - Multi-GPU and multi-node worker registration
 - GPU-aware scheduling and async task queue
+- Unified execution context, typed event bus, deterministic state machines
+- Execution recording and replay
 - Monitoring endpoints and a web dashboard
 
-## Runtime Modules (Phases 1–6)
+## Runtime Modules (Phases 1–8)
 
-AetherMesh has evolved from an inference router into an intelligent runtime operating layer with six new module groups:
+AetherMesh has evolved from an inference router into a coherent AI Runtime Kernel with eight module groups:
 
 | Module | Phase | Description |
 |--------|-------|-------------|
@@ -20,6 +23,8 @@ AetherMesh has evolved from an inference router into an intelligent runtime oper
 | `runtime/multi_agent/` | 4 | Agent orchestration: `Coordinator` (delegate/fan-out/orchestrate), `PlannerAgent` (task decomposition), `WorkerAgent` (subtask execution), `SharedMemory` (cross-agent state). |
 | `runtime/observability/` | 5 | Real-time event bus (`GraphEvent` lifecycle), `Tracer` (trace/span correlation), `MetricsCollector` (counters/histograms/gauges). Wired into `GraphExecutor`. |
 | `runtime/gpu_os/` + `runtime/security/` | 6 | GPU device tracking (VRAM pool, utilization, temperature), model scheduler (LRU eviction). Rate limiter (token bucket), input validator, API key auth middleware. |
+| `runtime/context/`, `runtime/events/`, `runtime/state/` | 7 | Kernel stabilization: unified `ExecutionContext` with 12 sub-context states, typed event bus (26 event types), deterministic state machines with validated transitions across 5 domains. |
+| `runtime/replay/`, `runtime/abi/`, `runtime/kernel.py` | 8 | Execution recording/replay, 7 stable plugin interfaces, `RuntimeLifecycleManager` with `initialize/start/pause/resume/cancel/shutdown` for all components, `AetherKernel` bootstrapper. |
 
 ## Architecture Diagram
 
@@ -194,13 +199,23 @@ AetherMesh/
     memory/            Phase 2 — Short-term, semantic, episodic memory
     orchestration/     Phase 3 — DAG graphs, executor, planner, retry policy
     multi_agent/       Phase 4 — Coordinator, planner agent, worker agent
-    observability/     Phase 5 — Event bus, tracing, metrics collector
+    observability/     Phase 5 — Event bus, tracing, metrics collector +
+                       runtime metrics, execution trace, event/state/replay metrics
     gpu_os/            Phase 6 — GPU device manager, model scheduler
     security/          Phase 6 — Rate limiter, input validator, API key auth
-    agents/
-    mcp/
-    sessions/
-    tools/
+    agents/            Agent loop + lifecycle adapter
+    mcp/               MCP gateway
+    sessions/          Session management + lifecycle adapter
+    tools/             Tool runtime + lifecycle adapter
+    responses/         Responses API runtime (full OpenAI Responses format)
+    gpu/               GPU scheduling + lifecycle adapter
+    context/           Phase 7 — Unified ExecutionContext (12 sub-context states)
+    events/            Phase 7 — Typed event bus (26 event types)
+    state/             Phase 7 — Deterministic state machines
+    replay/            Phase 8 — Execution recording + replay engine
+    abi/               Phase 8 — Stable plugin interfaces + lifecycle manager
+    kernel.py          Phase 8 — AetherKernel bootstrapper
+    event_bridge.py    Event bus bridge (graph_event_bus ↔ runtime_event_bus)
   profiles/
   launchd/
   scripts/
@@ -215,7 +230,10 @@ AetherMesh/
 ### Router (`8001`)
 - `GET /health`
 - `POST /v1/chat/completions` (supports `stream=true`)
-- `POST /v1/responses`
+- `POST /v1/responses` (full OpenAI Responses API format; native passthrough for OpenAI, auto-conversion for others)
+- `GET /v1/responses/{response_id}` (fetch stored response)
+- `DELETE /v1/responses/{response_id}` (delete stored response)
+- `PATCH /v1/responses/{response_id}` (update response metadata)
 - `GET /v1/models`
 - `POST /v1/embeddings`
 - `POST /v1/rerank`

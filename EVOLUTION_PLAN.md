@@ -15,11 +15,12 @@
 | Agents + Multi-Agent | Mature | 153+355 |
 | MCP | Good bones | 558 |
 | Sessions | Light (in-memory) | 137 |
-| Responses Runtime | Light | 50 |
+| **Responses Runtime** | **Full Responses API** | 117+300+  (models, converters, streaming) |
 | **Intelligence (Phase 1)** | **Complete** | 154+168 |
 | **Memory (Phase 2)** | **Complete** | 356 |
 | **Execution Graph (Phase 3)** | **Complete** | 359 |
 | **Observability (Phase 5)** | **Complete** | 135 |
+| **Kernel Stabilization (Phases 7-8)** | **Complete** | 47 new files across 5 packages |
 | **Tests** | **118 passing** | 7 test files |
 
 ---
@@ -435,11 +436,14 @@ Extend `runtime/security/`:
 | 4 — Multi-Agent | 5 | 1 | 6 |
 | 5 — Streaming + Observability | 5 | 2 | 7 |
 | 6 — GPU OS + Security | 10 | 2 | 12 |
-| **Total** | **33** | **13** | **46** |
+| 7 — Unified Context + Events + State | 23 | 3 | 26 |
+| 8 — Kernel Hardening (Replay, ABI, Lifecycle, Observability) | 24 | 12 | 36 |
+| **Responses API update** | **5** | **6** | **11** |
+| **Total** | **85** | **34** | **119** |
 
-## Status — All 6 Phases Complete
+## Status — All 8 Phases Complete (v5.0.0)
 
-All phases have been implemented, tested (118 tests), wired into both routers, and integrated into the dashboard. See `README.md` for the current state.
+All 8 kernel stabilization phases have been implemented, tested (118 tests), and integrated. The platform has evolved from `AetherMesh Runtime Platform` (v4.0.0) to `AetherMesh AI Runtime Kernel` (v5.0.0). See `README.md` for the current state.
 
 ## Architectural Rules (from the original prompt, AIIH-adapted)
 

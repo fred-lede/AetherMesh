@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from runtime.context.execution_context import ExecutionContext as KernelExecutionContext
+from runtime.state.execution_state import RuntimeStatus
+
 
 class ExecutionPhase(Enum):
     RECEIVE = "receive"
@@ -64,6 +67,18 @@ class ExecutionContext:
             return 0.0
         end = self.completed_at or datetime.now(timezone.utc)
         return (end - self.started_at).total_seconds() * 1000
+
+    def to_kernel_context(self) -> KernelExecutionContext:
+        ctx = KernelExecutionContext(
+            execution_id=self.id,
+            correlation_id=self.correlation_id,
+            runtime_status=RuntimeStatus.CREATED,
+        )
+        ctx.provider_state.selected_provider = self.provider
+        ctx.provider_state.selected_model = self.model
+        if self.error:
+            ctx.error = self.error
+        return ctx
 
 
 class ExecutionLifecycle:

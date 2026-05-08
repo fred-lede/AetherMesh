@@ -32,7 +32,42 @@ class NvidiaNIMAdapter(ProviderAdapter):
         return self._post_json("/chat/completions", self._strip_prefix(payload))
 
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._post_json("/responses", self._strip_prefix(payload))
+        stripped = self._strip_prefix(payload)
+        if "messages" in stripped:
+            completion = self.chat(payload)
+            message = completion["choices"][0]["message"]
+            content = str(message.get("content") or "")
+            tool_calls = message.get("tool_calls") or []
+            output: list[dict[str, Any]] = []
+            if content:
+                output.append({
+                    "type": "message",
+                    "id": f"msg_{uuid.uuid4().hex[:16]}",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": content, "annotations": []}],
+                })
+            for tc in tool_calls if isinstance(tool_calls, list) else []:
+                fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                if fn:
+                    output.append({
+                        "type": "tool_call",
+                        "id": f"call_{uuid.uuid4().hex[:16]}",
+                        "tool_call_id": str(tc.get("id", "")),
+                        "tool_name": str(fn.get("name", "")),
+                        "arguments": json.dumps(fn.get("arguments", {}), ensure_ascii=False, separators=(",", ":")),
+                        "status": "completed",
+                    })
+            return {
+                "id": f"resp_{uuid.uuid4().hex[:24]}",
+                "object": "response",
+                "created": int(time.time()),
+                "model": completion["model"],
+                "status": "completed",
+                "output": output,
+                "usage": completion.get("usage", {}),
+            }
+        return self._post_json("/responses", stripped)
 
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
         body = self._strip_prefix(payload)

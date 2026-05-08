@@ -45,23 +45,37 @@ class OllamaAdapter(ProviderAdapter):
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
         completion = self.chat(payload)
         message = completion["choices"][0]["message"]
+        content = str(message.get("content") or "")
+        tool_calls = message.get("tool_calls") or []
+
+        output: list[dict[str, Any]] = []
+        if content:
+            output.append({
+                "type": "message",
+                "id": f"msg_{uuid.uuid4().hex[:16]}",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            })
+        for tc in tool_calls:
+            if isinstance(tc, dict):
+                fn = tc.get("function", {})
+                output.append({
+                    "type": "tool_call",
+                    "id": f"call_{uuid.uuid4().hex[:16]}",
+                    "tool_call_id": str(tc.get("id", "")),
+                    "tool_name": str(fn.get("name", "")),
+                    "arguments": _safe_json_str(fn.get("arguments", "{}")),
+                    "status": "completed",
+                })
+
         return {
-            "id": f"resp_{uuid.uuid4().hex}",
+            "id": f"resp_{uuid.uuid4().hex[:24]}",
             "object": "response",
             "created": int(time.time()),
             "model": completion["model"],
-            "output": [
-                {
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": message.get("content", ""),
-                        }
-                    ],
-                }
-            ],
+            "status": "completed",
+            "output": output,
             "usage": completion.get("usage", {}),
         }
 
@@ -828,3 +842,10 @@ def _safe_float(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _safe_json_str(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    import json
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
