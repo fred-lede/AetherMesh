@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from typing import Any, Iterable
@@ -8,7 +9,11 @@ from typing import Any, Iterable
 import requests
 from fastapi import HTTPException
 
+from datetime import UTC, datetime
+
 from config.settings import settings
+
+logger = logging.getLogger("openai_handler")
 from metrics.request_metrics import request_metrics
 from providers.base import ProviderError
 from providers.http_client import get_session
@@ -21,6 +26,11 @@ from runtime.orchestration.provider_router import (
     provider_for_model,
 )
 from runtime.orchestration.routing_engine import routing_engine
+from runtime.tools.builtin.web_search import (
+    extract_search_query,
+    latest_user_text,
+    run_web_search,
+)
 from runtime.tools.content_blocks import content_part_to_text_and_images, normalize_image_ref
 
 
@@ -61,7 +71,49 @@ class RouterService:
             )
         return {"object": "list", "data": models}
 
+    def _inject_web_search(self, payload: dict[str, Any]) -> None:
+        if not settings.web_tools_auto_search:
+            return
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            return
+        tools = payload.get("tools")
+        if isinstance(tools, list):
+            for t in tools:
+                fn = t.get("function", {}) if isinstance(t, dict) else {}
+                if fn.get("name") in ("web_search", "web_fetch"):
+                    return
+        query = extract_search_query(latest_user_text(payload))
+        if not query:
+            return
+        try:
+            results = run_web_search(query, settings.web_search_max_results, settings.web_tool_timeout_s)
+            if not results:
+                return
+            now = datetime.now(UTC).strftime("%Y-%m-%d")
+            lines = [
+                f"Today's date: {now}",
+                f"Web search results for: {query}",
+                "",
+            ]
+            for i, r in enumerate(results, 1):
+                lines.append(f"{i}. {r['title']}\n   URL: {r['url']}")
+            lines.extend([
+                "",
+                "Answer the user's question based on the web search results above.",
+                "Include the source URL when you reference information from a result.",
+            ])
+            context = "\n".join(lines)
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "system":
+                    msg["content"] = context + "\n\n" + str(msg.get("content", ""))
+                    return
+            messages.insert(0, {"role": "system", "content": context})
+        except Exception as exc:
+            logger.warning("Auto web search failed: %s", exc)
+
     def handle_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         if self._is_async_requested(prepared_payload):
             return self._enqueue_async_task("/v1/chat/completions", prepared_payload)
@@ -145,6 +197,7 @@ class RouterService:
             )
 
     def handle_streaming_chat(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
+        self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
