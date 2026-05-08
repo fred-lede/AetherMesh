@@ -16,6 +16,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
+from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
 from runtime.security import rate_limiter, api_key_auth, input_validator
