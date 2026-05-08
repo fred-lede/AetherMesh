@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""OpenAI-compatible API router. Re-exports from router/openai/ adapters."""
+
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -7,8 +9,11 @@ from fastapi.responses import JSONResponse
 
 from config.settings import settings
 from runtime.orchestration.openai_handler import RouterService
-from router.responses_router import create_responses_router
-from router.streaming_router import stream_response
+from router.openai.chat_adapter import create_chat_completions_route
+from router.openai.responses_adapter import create_responses_router
+from router.openai.models_adapter import create_models_route
+from router.openai.embeddings_adapter import create_embeddings_route
+from router.openai.rerank_adapter import create_rerank_route
 
 
 service = RouterService()
@@ -72,11 +77,14 @@ def health() -> dict[str, Any]:
 
 @app.post("/v1/chat/completions")
 def chat_completions(payload: dict[str, Any] = Body(...)):
-    if payload.get("stream"):
-        return stream_response(service.handle_streaming_chat(payload))
-    return service.handle_chat(payload)
+    return create_chat_completions_route(service)(payload)
 
 
 @app.post("/v1/rerank")
 def rerank(payload: dict[str, Any] = Body(...)):
-    return service.handle_rerank(payload)
+    return create_rerank_route(service)(payload)
+
+
+@app.get("/v1/models")
+def models() -> dict[str, Any]:
+    return create_models_route(service)()

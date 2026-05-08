@@ -61,33 +61,34 @@
 - [x] GPU metrics (VRAM fragmentation, load/unload rate, KV cache hit)
 - [x] Session metrics (duration, message count)
 
-## Phase 13 — Router Simplification ❌
-- [ ] router/openai/ (chat_adapter, responses_adapter, models_adapter, embeddings_adapter, rerank_adapter)
-- [ ] router/anthropic/ (messages_adapter)
-- [ ] router/mcp/ (mcp_adapter)
+## Phase 13 — Router Simplification ✅
+- [x] router/openai/ (chat_adapter, responses_adapter, models_adapter, embeddings_adapter, rerank_adapter)
+- [x] router/anthropic/ (messages_adapter)
+- [x] router/mcp/ (mcp_adapter)
+- [x] Original flat files re-export from new locations (backward compat)
 
-## Phase 14 — Clean Architecture ❌
-- [ ] cli/ (aethermesh_cli.py)
-- [ ] clients/ (openai_sdk, anthropic_sdk, mcp_sdk)
-- [ ] protocols/ 補完 (openai/, mcp/)
+## Phase 14 — Clean Architecture ✅
+- [x] cli/ (aethermesh_cli.py)
+- [x] clients/ (openai_sdk, anthropic_sdk, mcp_sdk)
+- [x] protocols/ 補完 (openai/chat.py, mcp/protocol.py)
 
-## Phase 15 — Documentation 🟡
+## Phase 15 — Documentation ✅
 - [x] docs/architecture/overview.md
 - [x] docs/architecture/runtime-lifecycle.md
 - [x] docs/runtime/tool-lifecycle.md
+- [x] docs/runtime/agent-lifecycle.md
+- [x] docs/runtime/session-lifecycle.md
 - [x] docs/mcp/gateway-architecture.md
+- [x] docs/mcp/bridge-pattern.md
+- [x] docs/tools/builtin-tools.md
+- [x] docs/tools/tool-policy.md
+- [x] docs/tools/web-search.md
 - [x] docs/providers/capability-registry.md
+- [x] docs/providers/adding-new-provider.md
 - [x] docs/gpu/scheduling.md
+- [x] docs/gpu/topology.md
+- [x] docs/security/sandbox.md
 - [x] docs/security/policies.md
-- [ ] docs/runtime/agent-lifecycle.md
-- [ ] docs/runtime/session-lifecycle.md
-- [ ] docs/mcp/bridge-pattern.md
-- [ ] docs/tools/builtin-tools.md
-- [ ] docs/tools/tool-policy.md
-- [ ] docs/tools/web-search.md
-- [ ] docs/providers/adding-new-provider.md
-- [ ] docs/gpu/topology.md
-- [ ] docs/security/sandbox.md
 
 ---
 

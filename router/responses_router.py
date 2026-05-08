@@ -1,23 +1,10 @@
 from __future__ import annotations
 
+"""Re-exports from router/openai/responses_adapter for backward compatibility."""
+
 from typing import Any
 
 from fastapi import APIRouter, Body
+from router.openai.responses_adapter import create_responses_router
 
-
-def create_responses_router(service: Any) -> APIRouter:
-    router = APIRouter()
-
-    @router.post("/v1/responses")
-    def responses(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-        return service.handle_responses(payload)
-
-    @router.get("/v1/models")
-    def models() -> dict[str, Any]:
-        return service.list_models()
-
-    @router.post("/v1/embeddings")
-    def embeddings(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-        return service.handle_embeddings(payload)
-
-    return router
+__all__ = ["create_responses_router"]
