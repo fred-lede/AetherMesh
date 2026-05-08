@@ -65,6 +65,7 @@ class ModelRoutingEngine:
         self._provider_enabled: dict[str, bool] = {
             provider: True for provider in ROUTING_PROVIDERS
         }
+        self._provider_credentials: dict[str, bool] = self._check_provider_credentials()
         self._model_overrides: dict[str, str] = {}
         self._routing_rules: list[dict[str, Any]] = []
         self._state_path: Path = settings.config_path("routing_state.yaml")
@@ -119,6 +120,15 @@ class ModelRoutingEngine:
         }
         with self._audit_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, sort_keys=True, ensure_ascii=True) + "\n")
+
+    @staticmethod
+    def _check_provider_credentials() -> dict[str, bool]:
+        result: dict[str, bool] = {}
+        for provider, (_, api_key_env, _) in CLOUD_PROVIDER_ENDPOINTS.items():
+            result[provider] = bool(os.getenv(api_key_env, "").strip())
+        for provider in ROUTING_PROVIDERS:
+            result.setdefault(provider, True)
+        return result
 
     def set_provider_health(self, provider: str, healthy: bool) -> None:
         with self._lock:
@@ -318,6 +328,9 @@ class ModelRoutingEngine:
                 cap_scores = CAPABILITY_PROVIDER_SCORES.get(cap, {})
                 for provider, base_score in cap_scores.items():
                     if not self._provider_available_locked(provider, rules_applied):
+                        continue
+                    if provider in CLOUD_PROVIDERS and not self._provider_credentials.get(provider, True):
+                        rules_applied.append(f"credential_missing {provider}")
                         continue
                     if not self._provider_health.get(provider, True):
                         base_score *= 0.3
