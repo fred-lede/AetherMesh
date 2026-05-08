@@ -14,6 +14,7 @@ from metrics.request_metrics import RequestRecord, request_metrics
 from providers.base import ProviderError
 from runtime.orchestration.anthropic_converter import AnthropicRouter
 from runtime.orchestration.capabilities import required_anthropic_capabilities
+from runtime.intelligence import execution_selector
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
 from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
@@ -67,6 +68,12 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             required_capabilities=required_caps,
             registry_models=anthropic_service.registry.get("models", []),
             request_payload=payload,
+        )
+        routing_decision = execution_selector.rerank(
+            routing_decision,
+            model=model,
+            required_capabilities=required_caps,
+            has_tools=bool(allowed_tool_names),
         )
         if any(rule.startswith("capability_missing_no_fallback") for rule in routing_decision.rules_applied):
             raise HTTPException(

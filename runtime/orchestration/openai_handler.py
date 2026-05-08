@@ -474,6 +474,27 @@ class RouterService:
             return self._ollama_model_tuple(model)
         return None
 
+    def _prioritize_warm_models(self, models: list[str]) -> list[str]:
+        warm = []
+        cold = []
+        for m in models:
+            if self._is_warm(m):
+                warm.append(m)
+            else:
+                cold.append(m)
+        return warm + cold
+
+    @staticmethod
+    def _is_warm(model: str) -> bool:
+        try:
+            from runtime.gpu.warm_pool import warm_pool
+            for entry in warm_pool.warm_models():
+                if entry.model_name == model:
+                    return True
+        except ImportError:
+            pass
+        return False
+
     def _ollama_model_tuple(self, model: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         binding = model.get("worker_bindings", [])[0]
         base_url = settings.worker_base_url(binding)
@@ -524,6 +545,7 @@ class RouterService:
         try_models = [original_model]
         fallbacks = self.C_FALLBACK_MAP.get(original_model, [])
         try_models.extend(fallbacks)
+        try_models = self._prioritize_warm_models(try_models)
 
         last_error_resp = None
 
