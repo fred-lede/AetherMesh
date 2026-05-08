@@ -54,8 +54,13 @@ def content_text(content: Any) -> str:
     return str(content or "")
 
 
+def _strip_system_tags(text: str) -> str:
+    return re.sub(r"<system-reminder>.*?</system-reminder>", " ", text, flags=re.DOTALL).strip()
+
+
 def extract_search_query(text: str) -> str:
     clean = " ".join(str(text or "").split())
+    clean = _strip_system_tags(clean)
     for marker in ("query:", "search:", "搜尋:", "查詢:"):
         index = clean.lower().find(marker.lower())
         if index != -1:
