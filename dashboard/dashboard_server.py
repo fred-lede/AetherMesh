@@ -20,15 +20,18 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 class _Jinja2SafeEnvironment(Environment):
-    """Workaround for Jinja2 3.1.5 bug where _load_template() uses
-    globals (a dict) in the cache key, causing TypeError: unhashable type: 'dict'.
-    Uses (id(loader), name) as cache key — loader is long-lived so id() is stable."""
+    """Workaround for Jinja2 3.1.5 bugs:
+    1. _load_template() uses globals dict in cache_key (unhashable)
+    2. get_template() may pass globals as first positional arg (args swapped)
+    Cache disabled + defensive arg swap covers both."""
 
     def _load_template(self, name, globals=None):
         if self.loader is None:
             raise TypeError("no loader for this environment specified")
-        cache_key = (id(self.loader), name)
+        if isinstance(name, dict):
+            name, globals = globals, name
         if self.cache is not None:
+            cache_key = (id(self.loader), name)
             template = self.cache.get(cache_key)
             if template is not None and (
                 not getattr(self, "auto_reload", True) or template.is_up_to_date
@@ -36,10 +39,11 @@ class _Jinja2SafeEnvironment(Environment):
                 if globals:
                     template.globals.update(globals)
                 return template
-        template = self.loader.load(self, name, self.make_globals(globals))
-        if self.cache is not None:
-            self.cache[cache_key] = template
-        return template
+            self.cache[cache_key] = self.loader.load(
+                self, name, self.make_globals(globals)
+            )
+            return self.cache[cache_key]
+        return self.loader.load(self, name, self.make_globals(globals))
 
 
 _safe_env = _Jinja2SafeEnvironment(
