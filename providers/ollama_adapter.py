@@ -179,13 +179,13 @@ class OllamaAdapter(ProviderAdapter):
                 }
 
     def _post_chat_with_retry(self, body: dict[str, Any], *, stream: bool) -> requests.Response:
-        # Check circuit breaker first
         if not self._circuit.is_available():
             raise ProviderError(f"Circuit breaker OPEN for {self.base_url}, skipping request")
 
-        attempts = 5  # Increase max attempts for robustness
-        base_delay = 1.0  # Initial delay in seconds
+        attempts = 5
+        base_delay = 1.0
         last_response: requests.Response | None = None
+        last_error: str | None = None
 
         for attempt in range(1, attempts + 1):
             try:
@@ -195,80 +195,57 @@ class OllamaAdapter(ProviderAdapter):
                     timeout=settings.request_timeout_s,
                     stream=stream,
                 )
-                last_response = response
-
-                # Check for successful status code range (200-299)
-                if 200 <= response.status_code < 300:
-                    self._circuit.record_success()
-                    return response
-
-                # Check for transient/recoverable errors
-                if response.status_code in [429, 500, 502, 503, 504]:
-                    self._circuit.record_failure()
-                    if attempt < attempts:
-                        wait_time = base_delay * (2 ** (attempt - 1)) + (attempt * 0.1) # Exponential backoff + small jitter
-                        wait_time = min(wait_time, 30) # Cap wait time at 30 seconds
-                        LOGGER.warning(
-                            "Ollama chat transient failure (%s, status code %s) on attempt %s/%s. Retrying in %.2f seconds...",
-                            self.base_url,
-                            response.status_code,
-                            attempt,
-                            attempts,
-                            wait_time
-                        )
-                        time.sleep(wait_time)
-                        continue  # Retry the loop
-                    else:
-                        # Last attempt failed, proceed to final raise
-                        break
-                else:
-                    # Other errors are recorded as failures
-                    self._circuit.record_failure() 
-            
             except requests.exceptions.Timeout:
                 if attempt < attempts:
-                    wait_time = base_delay * (2 ** (attempt - 1)) + (attempt * 0.1)
-                    wait_time = min(wait_time, 30)
-                    LOGGER.warning(
-                        "Ollama chat REQUEST TIMEOUT on attempt %s/%s. Retrying in %.2f seconds...",
-                        attempt,
-                        attempts,
-                        wait_time
-                    )
+                    wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
+                    LOGGER.warning("Ollama timeout attempt %s/%s, retry in %.2fs", attempt, attempts, wait_time)
                     time.sleep(wait_time)
-                    continue  # Retry the loop
-                else:
-                    raise requests.exceptions.Timeout(f"Failed to connect (Timeout) after {attempts} attempts.") from None
+                    continue
+                raise ProviderError(f"Ollama timeout after {attempts} attempts", status_code=504, code="provider_timeout")
 
             except requests.exceptions.ConnectionError as e:
+                last_error = f"connection_error: {e}"
                 if attempt < attempts:
-                    wait_time = base_delay * (2 ** (attempt - 1)) + (attempt * 0.1)
-                    wait_time = min(wait_time, 30)
-                    LOGGER.warning(
-                        "Ollama chat CONNECTION ERROR on attempt %s/%s. Retrying in %.2f seconds... Error: %s",
-                        attempt,
-                        attempts,
-                        wait_time,
-                        e
-                    )
+                    wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
+                    LOGGER.warning("Ollama connection error attempt %s/%s, retry in %.2fs: %s", attempt, attempts, wait_time, e)
                     time.sleep(wait_time)
-                    continue # Retry the loop
-                else:
-                    raise requests.exceptions.ConnectionError(f"Failed to connect to Ollama after {attempts} attempts.") from e
+                    continue
+                raise ProviderError(f"Ollama unreachable after {attempts} attempts: {e}", status_code=502, code="provider_unreachable")
 
-        # If we exited the loop because of failed status/non-retryable error
-        if last_response and not last_response.ok and response.status_code not in [429, 500, 502, 503, 504]:
-            raise ProviderError(f"Final API failure: {last_response.text}")
-        
-        # If the loop finished due to exhaustion of attempts
-        if last_response and last_response.status_code not in [200, 201, 202]:
-            raise ProviderError(f"Final API failure after {attempts} attempts: {last_response.text}")
-        
-        # Should not reach here if logic is correct, but for safety:
-        raise ProviderError("Unknown connection error occurred during API call.")
+            except requests.exceptions.RequestException as e:
+                last_error = f"request_error: {e}"
+                if attempt < attempts:
+                    wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
+                    LOGGER.warning("Ollama request error attempt %s/%s, retry in %.2fs: %s", attempt, attempts, wait_time, e)
+                    time.sleep(wait_time)
+                    continue
+                raise ProviderError(f"Ollama request failed after {attempts} attempts: {e}", status_code=502, code="provider_error")
 
-        assert last_response is not None
-        return last_response
+            last_response = response
+
+            if 200 <= response.status_code < 300:
+                self._circuit.record_success()
+                return response
+
+            self._circuit.record_failure()
+
+            if response.status_code in {429, 500, 502, 503, 504}:
+                if attempt < attempts:
+                    wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
+                    LOGGER.warning("Ollama transient %s attempt %s/%s, retry in %.2fs", response.status_code, attempt, attempts, wait_time)
+                    time.sleep(wait_time)
+                    continue
+                raise ProviderError(f"Ollama transient failure after {attempts} attempts: {response.text}", status_code=response.status_code, code="provider_overloaded")
+
+            if attempt < attempts:
+                LOGGER.warning("Ollama non-retryable %s attempt %s/%s, retry", response.status_code, attempt, attempts)
+                continue
+            raise ProviderError(f"Ollama non-retryable failure after {attempts} attempts: {response.text}", status_code=response.status_code, code="provider_error")
+
+        raise ProviderError(
+            last_error or f"Ollama request failed after {attempts} attempts",
+            status_code=502, code="provider_error",
+        )
 
     def _is_transient_runner_stop(self, text: str) -> bool:
         lowered = (text or "").lower()
