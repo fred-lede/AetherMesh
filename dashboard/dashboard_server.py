@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import secrets
+import weakref
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -20,16 +21,26 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 class _Jinja2SafeEnvironment(Environment):
-    """Workaround for Jinja2 3.1.5+ bug where get_template() passes
-    self.globals (a dict) to _load_template(), creating an unhashable
-    cache_key (name, dict) that causes TypeError: unhashable type: 'dict'."""
+    """Workaround for Jinja2 3.1.5 bug where _load_template() uses
+    globals (a dict) in the cache key, causing TypeError: unhashable type: 'dict'.
+    Uses (weakref.ref(loader), name) as cache key — same as Jinja2 3.1.6+."""
 
-    def get_template(self, name, parent=None, globals=None):
-        if isinstance(name, Template):
-            return name
-        if parent is not None:
-            name = self.join_path(name, parent)
-        return self._load_template(name, globals)
+    def _load_template(self, name, globals=None):
+        if self.loader is None:
+            raise TypeError("no loader for this environment specified")
+        cache_key = (weakref.ref(self.loader), name)
+        if self.cache is not None:
+            template = self.cache.get(cache_key)
+            if template is not None and (
+                not getattr(self, "auto_reload", True) or template.is_up_to_date
+            ):
+                if globals:
+                    template.globals.update(globals)
+                return template
+        template = self.loader.load(self, name, self.make_globals(globals))
+        if self.cache is not None:
+            self.cache[cache_key] = template
+        return template
 
 
 _safe_env = _Jinja2SafeEnvironment(
