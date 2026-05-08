@@ -34,7 +34,8 @@ class TavilySearchProvider(SearchProvider):
         try:
             resp = requests.post(
                 "https://api.tavily.com/search",
-                json={"api_key": self._api_key, "query": query, "max_results": max_results},
+                json={"query": query, "max_results": max_results},
+                headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
                 timeout=15,
             )
             resp.raise_for_status()
