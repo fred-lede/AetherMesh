@@ -8,7 +8,6 @@ from urllib.parse import parse_qs
 import requests
 from fastapi import FastAPI, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, Template
 
 from config.settings import settings
@@ -18,39 +17,36 @@ from runtime.orchestration.routing_engine import routing_engine
 
 BASE_DIR = Path(__file__).resolve().parent
 
+_TEMPLATES_DIR = str(BASE_DIR / "templates")
+_ENV = Environment(loader=FileSystemLoader(_TEMPLATES_DIR))
+_ENV.cache = None
 
-class _Jinja2SafeEnvironment(Environment):
-    """Workaround for Jinja2 3.1.5 bugs:
-    1. _load_template() uses globals dict in cache_key (unhashable)
-    2. get_template() may pass globals as first positional arg (args swapped)
-    Cache disabled + defensive arg swap covers both."""
-
-    def _load_template(self, name, globals=None):
-        if self.loader is None:
-            raise TypeError("no loader for this environment specified")
-        if isinstance(name, dict):
-            name, globals = globals, name
-        if self.cache is not None:
-            cache_key = (id(self.loader), name)
-            template = self.cache.get(cache_key)
-            if template is not None and (
-                not getattr(self, "auto_reload", True) or template.is_up_to_date
-            ):
-                if globals:
-                    template.globals.update(globals)
-                return template
-            self.cache[cache_key] = self.loader.load(
-                self, name, self.make_globals(globals)
-            )
-            return self.cache[cache_key]
-        return self.loader.load(self, name, self.make_globals(globals))
+_compiled_templates: dict[str, Template] = {}
+for _tpl_name in ("index.html", "login.html", "task_detail.html"):
+    _source, _filename, _uptodate = _ENV.loader.get_source(_ENV, _tpl_name)
+    _compiled_templates[_tpl_name] = _ENV.from_string(_source)
 
 
-_safe_env = _Jinja2SafeEnvironment(
-    loader=FileSystemLoader(str(BASE_DIR / "templates")),
-)
-_safe_env.cache = None
-templates = Jinja2Templates(env=_safe_env)
+class _Templates:
+    """Pre-compiled template renderer that bypasses Jinja2 3.1.5 _load_template
+    bug where get_template() passes globals dict as the first positional arg."""
+
+    def TemplateResponse(
+        self,
+        name: str,
+        context: dict[str, Any],
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
+        media_type: str | None = None,
+    ) -> HTMLResponse:
+        template = _compiled_templates.get(name)
+        if template is None:
+            template = _compiled_templates.get("index.html")
+        content = template.render(**context)
+        return HTMLResponse(content, status_code=status_code, headers=headers, media_type=media_type)
+
+
+templates = _Templates()
 STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")
