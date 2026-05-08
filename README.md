@@ -142,6 +142,45 @@ The launcher starts 8 services in a single process group:
 `dashboard` (9001), `metrics` (9100), `node_agent` (9400), `worker_agent` (9300),
 `task_worker`. Press Ctrl+C to gracefully stop all.
 
+### Boot Startup
+
+Set up the launcher to start automatically on boot:
+
+**Ubuntu (systemd)**
+1. Replace `__ROOT_DIR__` in `systemd/aiih-launcher.service` with the absolute path to this project
+2. Install and enable:
+   ```bash
+   sudo cp systemd/aiih-launcher.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable aiih-launcher
+   sudo systemctl start aiih-launcher
+   ```
+3. Check status: `sudo systemctl status aiih-launcher`
+4. View logs: `sudo journalctl -u aiih-launcher -f`
+
+**macOS (launchd)**
+1. Replace `__ROOT_DIR__` in `launchd/com.aiih.launcher.plist.example` with the absolute path
+2. Copy and load:
+   ```bash
+   cp launchd/com.aiih.launcher.plist.example ~/Library/LaunchAgents/com.aiih.launcher.plist
+   launchctl load ~/Library/LaunchAgents/com.aiih.launcher.plist
+   ```
+3. Unload: `launchctl unload ~/Library/LaunchAgents/com.aiih.launcher.plist`
+4. View logs: `tail -f logs/launchd.out.log`
+
+**Windows (Task Scheduler)**
+1. Create `scripts/start_launcher.bat`:
+   ```batch
+   @echo off
+   cd /d "C:\path\to\AetherMesh"
+   .venv\Scripts\python.exe -m runtime.launcher
+   ```
+2. Open **Task Scheduler** → Create Task
+3. **General**: Run whether user is logged on or not, run with highest privileges
+4. **Trigger**: At startup
+5. **Action**: Start a program → `C:\path\to\AetherMesh\.venv\Scripts\python.exe` with args `-m runtime.launcher`, start in `C:\path\to\AetherMesh`
+6. **Settings**: If task fails, restart every 10 minutes
+
 ### Configure Claude Code / Claude Desktop
 
 ```

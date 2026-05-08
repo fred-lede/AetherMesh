@@ -1,5 +1,5 @@
 [Unit]
-Description=AetherMesh Worker Agent
+Description=AetherMesh Service Launcher (all services)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,11 +7,10 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=__ROOT_DIR__
 EnvironmentFile=__ROOT_DIR__/.env
-ExecStart=__ROOT_DIR__/.venv/bin/python -m uvicorn node.worker_agent:app --host 0.0.0.0 --port 9300
-Restart=always
-RestartSec=5
-User=fred
-Group=fred
+ExecStart=__ROOT_DIR__/.venv/bin/python -m runtime.launcher
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
 
 [Install]
 WantedBy=multi-user.target
