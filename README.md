@@ -8,7 +8,18 @@ It provides:
 - GPU-aware scheduling and async task queue
 - Monitoring endpoints and a web dashboard
 
-## Current Runtime Architecture
+## Runtime Modules (Phases 1–6)
+
+AetherMesh has evolved from an inference router into an intelligent runtime operating layer with six new module groups:
+
+| Module | Phase | Description |
+|--------|-------|-------------|
+| `runtime/intelligence/` | 1 | Live per-provider scoring (capability match, context window, cost, reliability). `ExecutionSelector` reranks routing decisions with warm model bonus, session affinity, and context penalty signals. |
+| `runtime/memory/` | 2 | Three-tier memory: `ShortTermMemory` (session-scoped), `SemanticMemory` (TF-IDF keyword vector search), `EpisodicMemory` (execution history). Unified via `MemoryManager`. |
+| `runtime/orchestration/` | 3 | DAG execution engine: `ExecutionGraph` with cycle detection, topological sort, parallel groups. `GraphExecutor` async runner. `Planner` converts tasks to graphs. `RetryPolicy` with exponential backoff. |
+| `runtime/multi_agent/` | 4 | Agent orchestration: `Coordinator` (delegate/fan-out/orchestrate), `PlannerAgent` (task decomposition), `WorkerAgent` (subtask execution), `SharedMemory` (cross-agent state). |
+| `runtime/observability/` | 5 | Real-time event bus (`GraphEvent` lifecycle), `Tracer` (trace/span correlation), `MetricsCollector` (counters/histograms/gauges). Wired into `GraphExecutor`. |
+| `runtime/gpu_os/` + `runtime/security/` | 6 | GPU device tracking (VRAM pool, utilization, temperature), model scheduler (LRU eviction). Rate limiter (token bucket), input validator, API key auth middleware. |
 
 ## Architecture Diagram
 
@@ -165,19 +176,32 @@ When enabled, browser users sign in at `/login`. HTTP Basic Auth is still accept
 ## Verified Directory Layout
 
 ```text
-ai_inference_hub/
+AetherMesh/
   ai_queue/
   cluster/
   config/
   control_plane/
   dashboard/
+  docs/
   metrics/
   node/
   providers/
   router/
+    anthropic/
+    openai/
+  runtime/
+    intelligence/      Phase 1 — Provider capability scoring + execution selector
+    memory/            Phase 2 — Short-term, semantic, episodic memory
+    orchestration/     Phase 3 — DAG graphs, executor, planner, retry policy
+    multi_agent/       Phase 4 — Coordinator, planner agent, worker agent
+    observability/     Phase 5 — Event bus, tracing, metrics collector
+    gpu_os/            Phase 6 — GPU device manager, model scheduler
+    security/          Phase 6 — Rate limiter, input validator, API key auth
+    agents/
+    mcp/
+    sessions/
+    tools/
   profiles/
-    control-plane/
-    worker-node/
   launchd/
   scripts/
   systemd/
@@ -200,6 +224,18 @@ ai_inference_hub/
 - `GET /health`
 - `POST /v1/messages` (supports `stream=true`, Anthropic Messages API format)
 - `GET /v1/models`
+
+### GPU OS (`8001` / `8002`)
+- `GET /v1/gpu/status` — GPU devices, VRAM, utilization, temperature, model scheduler state
+- `POST /v1/gpu/models/load` — Load a model to a device
+- `POST /v1/gpu/models/unload` — Unload a model
+- `POST /v1/gpu/devices/register` — Register a GPU device
+
+### Agent Runtime (`8001` / `8002`)
+- `GET /v1/agent/status` — Registered agents and shared memory keys
+- `POST /v1/agent/plan` — PlannerAgent decomposes a task into subtasks
+- `POST /v1/agent/execute` — Execute a task (single agent or multi-step orchestration)
+- `POST /v1/agent/register` — Register a worker agent
 
 Fully compatible with Claude Code CLI and Claude Desktop. Configure with:
 ```
