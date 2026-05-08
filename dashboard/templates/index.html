@@ -1249,10 +1249,6 @@
         metricCard('Workers', (data.workers || []).length, `${(data.models || []).length} models registered`),
       ].join('');
 
-      providers.innerHTML = Object.entries(data.provider_status || {}).map(([name, healthy]) => (
-        `<span class="pill"><strong>${name}</strong><span class="${statusClass(healthy)}">${healthy ? 'healthy' : 'down'}</span></span>`
-      )).join('') || '<span class="pill">No provider telemetry yet</span>';
-
       const cloudList = data.cloud_providers || [];
       if (cloudList.length === 0) {
         cloudProviders.innerHTML = '<span class="pill">No cloud providers configured</span>';

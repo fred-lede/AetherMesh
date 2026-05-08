@@ -635,7 +635,6 @@ def overview() -> dict[str, Any]:
     node_items = nodes.get("nodes", [])
     worker_items = workers.get("workers", [])
     model_items = models.get("models", [])
-    provider_status = metrics.get("provider_status", {})
     overview_metrics = dict(metrics)
     overview_metrics["max_worker_queue_size"] = settings.max_worker_queue_size
     models_enriched = _enrich_models(model_items, worker_items)
@@ -669,7 +668,6 @@ def overview() -> dict[str, Any]:
         "metrics": overview_metrics,
         "models": model_items,
         "models_enriched": models_enriched,
-        "provider_status": provider_status,
         "alerts": alerts,
         "cloud_providers": cloud_providers,
         "request_metrics": _fetch_router_metrics("/api/metrics/requests") or request_metrics.get_summary(),
