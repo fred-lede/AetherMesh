@@ -239,7 +239,6 @@ Clients request `anthropic/AIIH/glm-4.7-flash-q4`; AIIH resolves to the real mod
 
 | Service | Port |
 |---------|------|
-| AI Factory OS | `8000` |
 | Router API (OpenAI) | `8001` |
 | Router API (Anthropic) | `8002` |
 | Dashboard | `9001` |
@@ -371,11 +370,6 @@ curl http://127.0.0.1:8001/v1/chat/completions \
   -H "Authorization: Bearer local-dev-key" \
   -d '{"model":"qwen3.5:27b","async":true,"messages":[{"role":"user","content":"run async"}]}'
 ```
-
-## AI Factory OS Integration
-
-AI Factory OS runs on port `8000` and can call AetherMesh router endpoints and read
-control-plane/dashboard telemetry for orchestration.
 
 ---
 
