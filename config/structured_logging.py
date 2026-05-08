@@ -1,5 +1,5 @@
 """
-Structured logging configuration for AI Inference Hub.
+Structured logging configuration for AetherMesh.
 
 Provides JSON-formatted logs with correlation IDs for distributed tracing.
 """
@@ -94,7 +94,7 @@ def configure_logging(
     log_file: str | None = None,
 ) -> None:
     """
-    Configure structured logging for AI Inference Hub.
+    Configure structured logging for AetherMesh.
 
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)

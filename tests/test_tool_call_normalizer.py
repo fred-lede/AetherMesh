@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 
-from router.anthropic_router import AnthropicRouter, _stream_anthropic
-from router.tool_call_normalizer import ToolCallNormalizer
+from runtime.orchestration.anthropic_converter import AnthropicRouter
+from runtime.orchestration.streaming import stream_anthropic
+from runtime.tools.tool_normalizer import ToolCallNormalizer
+
+_anthropic_service = AnthropicRouter()
 
 
 def _sse_payloads(events: list[str]) -> list[dict]:
@@ -164,7 +167,8 @@ def test_non_stream_forwards_declared_tool() -> None:
 
 def test_streaming_buffers_and_blocks_raw_tool_text() -> None:
     events = list(
-        _stream_anthropic(
+        stream_anthropic(
+            _anthropic_service,
             iter(
                 [
                     {"choices": [{"delta": {"content": "Claude responded: {'type': 'tool"}}]},
@@ -188,7 +192,8 @@ def test_streaming_buffers_and_blocks_raw_tool_text() -> None:
 
 def test_streaming_forwards_declared_native_tool_fragments() -> None:
     events = list(
-        _stream_anthropic(
+        stream_anthropic(
+            _anthropic_service,
             iter(
                 [
                     {
@@ -236,7 +241,8 @@ def test_streaming_forwards_declared_native_tool_fragments() -> None:
 
 def test_streaming_suppresses_undeclared_native_tool_fragments_without_none_message() -> None:
     events = list(
-        _stream_anthropic(
+        stream_anthropic(
+            _anthropic_service,
             iter(
                 [
                     {

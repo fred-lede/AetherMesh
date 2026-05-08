@@ -1,5 +1,5 @@
 [Unit]
-Description=AI Inference Hub Ollama Worker GPU1
+Description=AetherMesh Ollama Worker GPU1
 After=network-online.target
 Wants=network-online.target
 

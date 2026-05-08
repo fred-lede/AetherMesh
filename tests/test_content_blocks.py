@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 
-from router.content_blocks import (
+from runtime.tools.content_blocks import (
     anthropic_block_to_openai_parts,
     anthropic_content_to_openai_parts,
     content_part_to_text_and_images,

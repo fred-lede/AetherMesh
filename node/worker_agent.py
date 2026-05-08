@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from config.settings import settings
 
 
-app = FastAPI(title="AI Inference Hub Worker Agent", version="4.0.0")
+app = FastAPI(title="AetherMesh Worker Agent", version="4.0.0")
 
 
 def discover_local_workers() -> list[dict[str, Any]]:

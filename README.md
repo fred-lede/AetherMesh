@@ -1,6 +1,6 @@
-# AI Inference Hub v4
+# AetherMesh Runtime Platform
 
-AI Inference Hub is a local AI datacenter control plane that runs with AI Factory OS on the same LAN.
+Local-first AI Runtime Mesh for Multi-Provider, Multi-GPU, and Agent-Oriented AI Systems.
 It provides:
 
 - OpenAI-compatible API routing (`/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings`, `/v1/rerank`)
@@ -801,7 +801,7 @@ OLLAMA_HOST=http://127.0.0.1:11435 ollama list
 ## AI Factory OS Integration
 
 AI Factory OS stays on `8000`.
-AI Inference Hub router is on `8001` with OpenAI-compatible API format.
+AetherMesh router is on `8001` with OpenAI-compatible API format.
 AI Factory OS can call router endpoints and read control-plane/dashboard telemetry for orchestration.
 
 ---

@@ -1,5 +1,5 @@
 """
-Circuit Breaker implementation for AI Inference Hub.
+Circuit Breaker implementation for AetherMesh.
 
 States: CLOSED → OPEN → HALF_OPEN → CLOSED
 

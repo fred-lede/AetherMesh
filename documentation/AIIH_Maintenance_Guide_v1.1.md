@@ -1,11 +1,11 @@
-# ✨ AI Inference Hub 維護與操作指南 v1.1 ✨
+# ✨ AetherMesh 維護與操作指南 v1.1 ✨
 
 **審核人/升級者:** Hermes AI Agent
 **審核日期:** [系統日期]
 
 ## 🎯 系統總覽 (Overview)
 
-AI Inference Hub (AIIH) 是一個用於本地部署的、高度可擴展的 AI 資料中心控制平面。它旨在提供一個統一、穩定的介面 (OpenAI-compatible API 格式) 來管理和調用多個異構的 LLM 後端 (Provider)，包括 Ollama, OpenAI, Gemini 等。
+AetherMesh (AIIH) 是一個用於本地部署的、高度可擴展的 AI 資料中心控制平面。它旨在提供一個統一、穩定的介面 (OpenAI-compatible API 格式) 來管理和調用多個異構的 LLM 後端 (Provider)，包括 Ollama, OpenAI, Gemini 等。
 
 **核心角色:**
 1. **API 閘道 (Gateway):** 統一接收來自外部的 API 請求。

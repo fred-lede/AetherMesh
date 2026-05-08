@@ -114,7 +114,7 @@ class TaskWorker:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="AI Inference Hub Task Worker")
+    parser = argparse.ArgumentParser(description="AetherMesh Task Worker")
     parser.add_argument("--worker-id", "-w", help="Worker ID (default: worker-1)")
     args = parser.parse_args()
 

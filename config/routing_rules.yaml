@@ -1,4 +1,4 @@
-# AI Inference Hub - Model Routing Rules
+# AetherMesh - Model Routing Rules
 # Controls how requests are routed to different providers.
 
 model_overrides: {}

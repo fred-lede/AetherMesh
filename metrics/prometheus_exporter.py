@@ -9,7 +9,7 @@ from config.settings import settings
 from metrics.metrics import render_prometheus_text
 
 
-app = FastAPI(title="AI Inference Hub Prometheus Exporter", version="4.0.0")
+app = FastAPI(title="AetherMesh Prometheus Exporter", version="4.0.0")
 
 
 @app.get("/health")

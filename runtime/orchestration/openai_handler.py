@@ -1,0 +1,822 @@
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from typing import Any, Iterable
+
+import requests
+from fastapi import HTTPException
+
+from config.settings import settings
+from metrics.request_metrics import request_metrics
+from providers.base import ProviderError
+from providers.http_client import get_session
+from runtime.orchestration.capabilities import required_openai_capabilities
+from runtime.orchestration.provider_router import (
+    adapter,
+    capabilities_for_model,
+    find_registry_model,
+    local_ollama_fallback,
+    provider_for_model,
+)
+from runtime.orchestration.routing_engine import routing_engine
+from runtime.tools.content_blocks import content_part_to_text_and_images, normalize_image_ref
+
+
+class RouterService:
+    def __init__(self) -> None:
+        self.registry = settings.model_registry()
+
+    def list_models(self) -> dict[str, Any]:
+        models = []
+        for model in self.registry.get("models", []):
+            models.append(
+                {
+                    "id": model["name"],
+                    "object": "model",
+                    "created": 0,
+                    "owned_by": model.get("provider", "ollama"),
+                    "metadata": {
+                        "worker_ports": model.get("worker_ports", []),
+                        "worker_bindings": model.get("worker_bindings", []),
+                        "capabilities": model.get("capabilities", []),
+                    },
+                }
+            )
+        alias_prefix = settings.model_alias_prefix()
+        for alias, target in settings.model_alias_entries().items():
+            model_id = f"{alias_prefix}/{alias}" if alias_prefix else alias
+            models.append(
+                {
+                    "id": model_id,
+                    "object": "model",
+                    "created": 0,
+                    "owned_by": "alias",
+                    "metadata": {
+                        "target": target,
+                        "capabilities": self._capabilities_for_model(target),
+                    },
+                }
+            )
+        return {"object": "list", "data": models}
+
+    def handle_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        prepared_payload = self._apply_generation_defaults(payload)
+        if self._is_async_requested(prepared_payload):
+            return self._enqueue_async_task("/v1/chat/completions", prepared_payload)
+        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
+        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
+        adapter = self._adapter(provider, worker)
+        started = time.perf_counter()
+        error = False
+        error_code = ""
+        try:
+            return adapter.chat(effective_payload)
+        except ProviderError as exc:
+            error = True
+            error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
+            fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+            if fallback is not None and self._should_fallback_provider_error(exc):
+                self._finalize_request(
+                    endpoint="/v1/chat/completions",
+                    payload=effective_payload,
+                    provider=provider,
+                    worker=worker,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    error=True,
+                    error_code=error_code,
+                )
+                fallback_payload, fallback_worker = fallback
+                provider = "ollama"
+                worker = fallback_worker
+                effective_payload = fallback_payload
+                adapter_instance = self._adapter(provider, worker)
+                error = False
+                error_code = ""
+                try:
+                    return adapter_instance.chat(effective_payload)
+                except ProviderError as fallback_exc:
+                    error = True
+                    error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            raise self._provider_http_error(exc, code=error_code) from exc
+        except requests.Timeout as exc:
+            error = True
+            error_code = "provider_timeout"
+            fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+            if fallback is not None:
+                self._finalize_request(
+                    endpoint="/v1/chat/completions",
+                    payload=effective_payload,
+                    provider=provider,
+                    worker=worker,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    error=True,
+                    error_code=error_code,
+                )
+                fallback_payload, fallback_worker = fallback
+                provider = "ollama"
+                worker = fallback_worker
+                effective_payload = fallback_payload
+                adapter_instance = self._adapter(provider, worker)
+                error = False
+                error_code = ""
+                try:
+                    return adapter_instance.chat(effective_payload)
+                except ProviderError as fallback_exc:
+                    error = True
+                    error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
+        except requests.RequestException as exc:
+            error = True
+            error_code = "provider_unreachable"
+            raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
+        finally:
+            self._finalize_request(
+                endpoint="/v1/chat/completions",
+                payload=effective_payload,
+                provider=provider,
+                worker=worker,
+                latency_ms=(time.perf_counter() - started) * 1000,
+                error=error,
+                error_code=error_code,
+            )
+
+    def handle_streaming_chat(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
+        prepared_payload = self._apply_generation_defaults(payload)
+        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
+        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
+        adapter = self._adapter(provider, worker)
+        started = time.perf_counter()
+        state = {"provider": provider, "worker": worker, "payload": effective_payload}
+
+        def wrapped() -> Iterable[dict[str, Any] | str]:
+            error = False
+            error_code = ""
+            try:
+                for item in adapter.stream(effective_payload):
+                    yield item
+            except ProviderError as exc:
+                error = True
+                error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
+                fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+                if fallback is not None and self._should_fallback_provider_error(exc):
+                    self._finalize_request(
+                        endpoint="/v1/chat/completions",
+                        payload=effective_payload,
+                        provider=provider,
+                        worker=worker,
+                        latency_ms=(time.perf_counter() - started) * 1000,
+                        error=True,
+                        error_code=error_code,
+                    )
+                    fallback_payload, fallback_worker = fallback
+                    state["provider"] = "ollama"
+                    state["worker"] = fallback_worker
+                    state["payload"] = fallback_payload
+                    error = False
+                    error_code = ""
+                    try:
+                        yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
+                    except ProviderError as fallback_exc:
+                        error = True
+                        error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                        yield {
+                            "error": {
+                                "message": str(fallback_exc),
+                                "type": "provider_error",
+                                "code": error_code,
+                            }
+                        }
+                    return
+                error_type = "rate_limit_error" if getattr(exc, "status_code", None) == 429 else "provider_error"
+                payload = {"message": str(exc), "type": error_type, "code": error_code}
+                retry_after = getattr(exc, "retry_after", None)
+                if retry_after:
+                    payload["retry_after"] = retry_after
+                yield {"error": payload}
+            except requests.Timeout as exc:
+                error = True
+                error_code = "provider_timeout"
+                fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+                if fallback is not None:
+                    self._finalize_request(
+                        endpoint="/v1/chat/completions",
+                        payload=effective_payload,
+                        provider=provider,
+                        worker=worker,
+                        latency_ms=(time.perf_counter() - started) * 1000,
+                        error=True,
+                        error_code=error_code,
+                    )
+                    fallback_payload, fallback_worker = fallback
+                    state["provider"] = "ollama"
+                    state["worker"] = fallback_worker
+                    state["payload"] = fallback_payload
+                    error = False
+                    error_code = ""
+                    try:
+                        yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
+                    except ProviderError as fallback_exc:
+                        error = True
+                        error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                        yield {
+                            "error": {
+                                "message": str(fallback_exc),
+                                "type": "provider_error",
+                                "code": error_code,
+                            }
+                        }
+                    return
+                yield {"error": {"message": str(exc), "type": "provider_timeout", "code": error_code}}
+            except requests.RequestException as exc:
+                error = True
+                error_code = "provider_unreachable"
+                yield {"error": {"message": str(exc), "type": "provider_unreachable", "code": error_code}}
+            finally:
+                self._finalize_request(
+                    endpoint="/v1/chat/completions",
+                    payload=state["payload"],
+                    provider=str(state["provider"]),
+                    worker=state["worker"],
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    error=error,
+                    error_code=error_code,
+                )
+
+        return wrapped()
+
+    def handle_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+        prepared_payload = self._apply_generation_defaults(payload)
+        if self._is_async_requested(prepared_payload):
+            return self._enqueue_async_task("/v1/responses", prepared_payload)
+        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
+        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
+        adapter = self._adapter(provider, worker)
+        started = time.perf_counter()
+        error = False
+        error_code = ""
+        try:
+            return adapter.responses(effective_payload)
+        except ProviderError as exc:
+            error = True
+            error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
+            fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+            if fallback is not None and self._should_fallback_provider_error(exc):
+                self._finalize_request(
+                    endpoint="/v1/responses",
+                    payload=effective_payload,
+                    provider=provider,
+                    worker=worker,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    error=True,
+                    error_code=error_code,
+                )
+                fallback_payload, fallback_worker = fallback
+                provider = "ollama"
+                worker = fallback_worker
+                effective_payload = fallback_payload
+                adapter_instance = self._adapter(provider, worker)
+                error = False
+                error_code = ""
+                try:
+                    return adapter_instance.responses(effective_payload)
+                except ProviderError as fallback_exc:
+                    error = True
+                    error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            raise self._provider_http_error(exc, code=error_code) from exc
+        except requests.Timeout as exc:
+            error = True
+            error_code = "provider_timeout"
+            fallback = self._local_ollama_fallback(prepared_payload) if provider != "ollama" else None
+            if fallback is not None:
+                self._finalize_request(
+                    endpoint="/v1/responses",
+                    payload=effective_payload,
+                    provider=provider,
+                    worker=worker,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                    error=True,
+                    error_code=error_code,
+                )
+                fallback_payload, fallback_worker = fallback
+                provider = "ollama"
+                worker = fallback_worker
+                effective_payload = fallback_payload
+                adapter_instance = self._adapter(provider, worker)
+                error = False
+                error_code = ""
+                try:
+                    return adapter_instance.responses(effective_payload)
+                except ProviderError as fallback_exc:
+                    error = True
+                    error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
+        except requests.RequestException as exc:
+            error = True
+            error_code = "provider_unreachable"
+            raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
+        finally:
+            self._finalize_request(
+                endpoint="/v1/responses",
+                payload=effective_payload,
+                provider=provider,
+                worker=worker,
+                latency_ms=(time.perf_counter() - started) * 1000,
+                error=error,
+                error_code=error_code,
+            )
+
+    def handle_embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._is_async_requested(payload):
+            return self._enqueue_async_task("/v1/embeddings", payload)
+        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=False)
+        adapter = self._adapter(provider, worker)
+        started = time.perf_counter()
+        error = False
+        error_code = ""
+        try:
+            return adapter.embeddings(payload)
+        except ProviderError as exc:
+            error = True
+            error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
+            raise self._provider_http_error(exc, code=error_code) from exc
+        except requests.Timeout as exc:
+            error = True
+            error_code = "provider_timeout"
+            raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
+        except requests.RequestException as exc:
+            error = True
+            error_code = "provider_unreachable"
+            raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
+        finally:
+            self._finalize_request(
+                endpoint="/v1/embeddings",
+                payload=payload,
+                provider=provider,
+                worker=worker,
+                latency_ms=(time.perf_counter() - started) * 1000,
+                error=error,
+                error_code=error_code,
+            )
+
+    def handle_rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._is_async_requested(payload):
+            return self._enqueue_async_task("/v1/rerank", payload)
+        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=False)
+        adapter = self._adapter(provider, worker)
+        started = time.perf_counter()
+        error = False
+        error_code = ""
+        try:
+            return adapter.rerank(payload)
+        except ProviderError as exc:
+            error = True
+            error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
+            raise self._provider_http_error(exc, code=error_code) from exc
+        except requests.Timeout as exc:
+            error = True
+            error_code = "provider_timeout"
+            raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
+        except requests.RequestException as exc:
+            error = True
+            error_code = "provider_unreachable"
+            raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
+        finally:
+            self._finalize_request(
+                endpoint="/v1/rerank",
+                payload=payload,
+                provider=provider,
+                worker=worker,
+                latency_ms=(time.perf_counter() - started) * 1000,
+                error=error,
+                error_code=error_code,
+            )
+
+    def _as_http_error(self, *, status_code: int, code: str, message: str) -> HTTPException:
+        return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+    def _provider_http_error(self, exc: ProviderError, *, code: str) -> HTTPException:
+        status_code = int(getattr(exc, "status_code", None) or 502)
+        retry_after = getattr(exc, "retry_after", None)
+        detail: dict[str, Any] = {"code": code, "message": str(exc)}
+        headers = None
+        if retry_after:
+            detail["retry_after"] = retry_after
+            headers = {"Retry-After": str(retry_after)}
+        return HTTPException(status_code=status_code, detail=detail, headers=headers)
+
+    def _should_fallback_provider_error(self, exc: ProviderError) -> bool:
+        status_code = int(getattr(exc, "status_code", None) or 0)
+        code = str(getattr(exc, "code", "") or "")
+        return status_code in {404, 429, 502, 503, 504} or code in {
+            "model_not_found",
+            "provider_rate_limited",
+            "provider_overloaded",
+            "provider_timeout",
+        }
+
+    def _classify_error_text(self, text: str) -> str:
+        lowered = str(text or "").lower()
+        if "404" in lowered or "not found" in lowered:
+            return "model_not_found"
+        if "502" in lowered or "bad gateway" in lowered:
+            return "provider_overloaded"
+        if "timed out" in lowered or "timeout" in lowered or "context deadline exceeded" in lowered:
+            return "provider_timeout"
+        if "model runner has unexpectedly stopped" in lowered:
+            return "runner_stopped"
+        if "connection refused" in lowered or "max retries exceeded" in lowered or "name or service not known" in lowered:
+            return "provider_unreachable"
+        if "no worker available" in lowered or "no worker was assigned" in lowered:
+            return "worker_unavailable"
+        return "provider_error"
+
+    def _local_ollama_fallback(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        required = self._required_capabilities(payload)
+        fallback = self._configured_ollama_fallback(required) or self._first_ollama_fallback(required)
+        if fallback is None:
+            return None
+
+        model_name, worker = fallback
+        fallback_payload = dict(payload)
+        fallback_payload.pop("provider", None)
+        fallback_payload["model"] = model_name
+        return self._normalize_payload_for_provider(fallback_payload, "ollama"), worker
+
+    def _configured_ollama_fallback(self, required: set[str]) -> tuple[str, dict[str, Any]] | None:
+        model_name = settings.ollama_fallback_model()
+        if not model_name:
+            return None
+        return self._ollama_model_for_fallback(model_name, required)
+
+    def _first_ollama_fallback(self, required: set[str]) -> tuple[str, dict[str, Any]] | None:
+        return local_ollama_fallback(required, self.registry)
+
+    def _ollama_model_for_fallback(self, model_name: str, required: set[str]) -> tuple[str, dict[str, Any]] | None:
+        explicit_base_url = settings.ollama_fallback_base_url()
+        for model in self.registry.get("models", []):
+            if str(model.get("provider", "ollama")).lower() != "ollama":
+                continue
+            if model.get("name") != model_name:
+                continue
+            capabilities = set(model.get("capabilities", []))
+            if required and not required.issubset(capabilities):
+                return None
+            if explicit_base_url:
+                return model_name, {"base_url": explicit_base_url}
+            if not model.get("worker_bindings"):
+                return None
+            return self._ollama_model_tuple(model)
+        return None
+
+    def _ollama_model_tuple(self, model: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+        binding = model.get("worker_bindings", [])[0]
+        base_url = settings.worker_base_url(binding)
+        if not base_url:
+            return None
+        return str(model.get("name")), {"base_url": base_url}
+
+    def _required_capabilities(self, payload: dict[str, Any]) -> set[str]:
+        return required_openai_capabilities(payload)
+
+    C_FALLBACK_MAP = {
+        "gemma4:31b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "qwen3.5:27b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "gemma4:26b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "gemma3:27b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "nemotron-cascade-2:30b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "glm-4.7-flash:q4_K_M": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "qwen3-vl:8b": ["gemma3:12b", "translategemma:12b", "qwen3.5:9b"],
+    }
+
+    def _resolve_provider_and_worker(
+        self,
+        payload: dict[str, Any],
+        *,
+        allow_queue: bool,
+    ) -> tuple[str, dict[str, Any] | None]:
+        requested_model = payload.get("model")
+        if not requested_model:
+            raise self._as_http_error(status_code=400, code="bad_request", message="The request must include a model.")
+        original_model = settings.resolve_model_alias(str(requested_model))
+        if original_model != requested_model:
+            payload["model"] = original_model
+        required = self._required_capabilities(payload)
+        registry_model = self._find_registry_model(original_model)
+        if registry_model is not None and not self._model_supports_required(registry_model, required):
+            fallback = self._configured_ollama_fallback(required) or self._first_ollama_fallback(required)
+            if fallback is None:
+                missing = ", ".join(sorted(required))
+                raise self._as_http_error(
+                    status_code=400,
+                    code="unsupported_capabilities",
+                    message=f"Model {original_model} does not support required capabilities: {missing}",
+                )
+            original_model, fallback_worker = fallback
+            payload["model"] = original_model
+            return "ollama", fallback_worker
+
+        try_models = [original_model]
+        fallbacks = self.C_FALLBACK_MAP.get(original_model, [])
+        try_models.extend(fallbacks)
+
+        last_error_resp = None
+
+        for current_model in try_models:
+            provider = (payload.get("provider") or provider_for_model(current_model, self.registry)).lower()
+            if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
+                if current_model == original_model:
+                    return provider, None
+                continue
+
+            try:
+                response = get_session().post(
+                    f"{settings.control_plane_url}/cluster/dispatch",
+                    json={
+                        "model": current_model,
+                        "provider": provider,
+                        "allow_queue": allow_queue,
+                        "task_payload": payload,
+                    },
+                    timeout=10,
+                )
+
+                if response.status_code == 200:
+                    dispatch = response.json()
+                    if dispatch.get("status") == "assigned":
+                        payload["model"] = current_model
+                        return provider, dispatch["worker"]
+                    else:
+                        last_error_resp = response
+                elif response.status_code in {429, 503}:
+                    last_error_resp = response
+                else:
+                    raise self._as_http_error(status_code=502, code="control_plane_error", message=response.text)
+
+            except requests.RequestException as exc:
+                last_error_resp = exc
+                if current_model == original_model:
+                    pass
+
+        if isinstance(last_error_resp, requests.Response):
+            status = last_error_resp.status_code
+            if status == 429:
+                detail = last_error_resp.json().get("detail", {})
+                retry_after = 3
+                if isinstance(detail, dict):
+                    message = str(detail.get("message", "All matching workers are at queue capacity."))
+                    retry_after = int(detail.get("retry_after", retry_after) or retry_after)
+                else:
+                    message = str(detail or "All matching workers are at queue capacity.")
+                raise HTTPException(
+                    status_code=429,
+                    detail={"code": "worker_queue_full", "message": message, "retry_after": retry_after},
+                    headers={"Retry-After": str(retry_after)},
+                )
+            if status == 503:
+                message = last_error_resp.json().get("detail", "No worker available.")
+                if isinstance(message, dict):
+                    message = str(message.get("message", "No worker available."))
+                raise self._as_http_error(status_code=503, code="worker_unavailable", message=str(message))
+            raise self._as_http_error(status_code=502, code="control_plane_error", message=last_error_resp.text)
+
+        elif isinstance(last_error_resp, Exception):
+            raise self._as_http_error(status_code=503, code="provider_unreachable", message=str(last_error_resp))
+
+        raise self._as_http_error(status_code=503, code="worker_unavailable", message="No suitable worker found in fallback chain.")
+
+    def _adapter(self, provider: str, worker: dict[str, Any] | None):
+        return adapter(provider, worker)
+
+    def _capabilities_for_model(self, model: str) -> list[str]:
+        return capabilities_for_model(model, self.registry)
+
+    def _find_registry_model(self, model: str) -> dict[str, Any] | None:
+        return find_registry_model(model, self.registry)
+
+    def _model_supports_required(self, model: dict[str, Any], required: set[str]) -> bool:
+        capabilities = set(model.get("capabilities", []))
+        return required.issubset(capabilities)
+
+    def _apply_generation_defaults(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return payload
+
+    def _normalize_payload_for_provider(self, payload: dict[str, Any], provider: str) -> dict[str, Any]:
+        if provider != "ollama":
+            return payload
+
+        normalized = dict(payload)
+        messages = self._extract_messages_from_payload(normalized)
+        if messages is not None:
+            normalized["messages"] = [self._normalize_ollama_message(message) for message in messages]
+        return normalized
+
+    def _extract_messages_from_payload(self, payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            return [item for item in messages if isinstance(item, dict)]
+
+        if "input" not in payload:
+            return None
+
+        return self._responses_input_to_messages(payload.get("input"))
+
+    def _responses_input_to_messages(self, input_value: Any) -> list[dict[str, Any]] | None:
+        if isinstance(input_value, str):
+            return [{"role": "user", "content": input_value}]
+
+        if isinstance(input_value, dict):
+            role = str(input_value.get("role", "user"))
+            if "content" in input_value:
+                return [{"role": role, "content": input_value.get("content")}]
+            if "text" in input_value:
+                return [{"role": role, "content": str(input_value.get("text", ""))}]
+            return None
+
+        if not isinstance(input_value, list):
+            return None
+
+        messages: list[dict[str, Any]] = []
+        for item in input_value:
+            if isinstance(item, str):
+                messages.append({"role": "user", "content": item})
+                continue
+            if not isinstance(item, dict):
+                continue
+
+            role = str(item.get("role", "user"))
+            if "content" in item:
+                messages.append({"role": role, "content": item.get("content")})
+                continue
+            if "text" in item:
+                messages.append({"role": role, "content": str(item.get("text", ""))})
+                continue
+        return messages or None
+
+    def _normalize_ollama_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(message)
+        self._normalize_inbound_tool_calls_for_ollama(normalized)
+        content = normalized.get("content")
+        if not isinstance(content, list):
+            return normalized
+
+        text_parts: list[str] = []
+        images: list[str] = list(normalized.get("images", [])) if isinstance(normalized.get("images"), list) else []
+
+        for part in content:
+            text, extracted_images = self._extract_content_part(part)
+            if text:
+                text_parts.append(text)
+            if extracted_images:
+                images.extend(extracted_images)
+
+        normalized["content"] = "\n".join(text_parts)
+        if images:
+            normalized["images"] = images
+        return normalized
+
+    def _normalize_inbound_tool_calls_for_ollama(self, message: dict[str, Any]) -> None:
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            return
+
+        normalized_calls: list[dict[str, Any]] = []
+        for item in tool_calls:
+            if not isinstance(item, dict):
+                continue
+            function = item.get("function")
+            if not isinstance(function, dict):
+                continue
+
+            call = dict(item)
+            fn = dict(function)
+            arguments = fn.get("arguments")
+            if isinstance(arguments, str):
+                parsed = self._try_parse_json(arguments)
+                if isinstance(parsed, (dict, list)):
+                    fn["arguments"] = parsed
+                elif parsed is None:
+                    fn["arguments"] = {}
+                else:
+                    fn["arguments"] = {"value": parsed}
+            elif arguments is None:
+                fn["arguments"] = {}
+
+            call["function"] = fn
+            normalized_calls.append(call)
+
+        message["tool_calls"] = normalized_calls
+
+    def _try_parse_json(self, value: str) -> Any | None:
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return None
+
+    def _extract_content_part(self, part: Any) -> tuple[str, list[str]]:
+        return content_part_to_text_and_images(part)
+
+    def _normalize_image_ref(self, value: str) -> str:
+        return normalize_image_ref(value)
+
+    def _is_async_requested(self, payload: dict[str, Any]) -> bool:
+        for key in ("async", "background", "queue"):
+            value = payload.get(key)
+            if isinstance(value, bool) and value:
+                return True
+            if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}:
+                return True
+        return False
+
+    def _enqueue_async_task(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        requested_model = payload.get("model")
+        if not requested_model:
+            raise self._as_http_error(status_code=400, code="bad_request", message="The request must include a model.")
+        model = settings.resolve_model_alias(str(requested_model))
+
+        provider = (payload.get("provider") or provider_for_model(model, self.registry)).lower()
+        task_payload = dict(payload)
+        task_payload["model"] = model
+        task_payload["endpoint"] = endpoint
+        task_payload["provider"] = provider
+        task_payload.pop("async", None)
+        task_payload.pop("background", None)
+        task_payload.pop("queue", None)
+        task_payload.pop("stream", None)
+
+        try:
+            response = get_session().post(
+                f"{settings.control_plane_url}/cluster/tasks",
+                json={"payload": task_payload},
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise self._as_http_error(status_code=503, code="control_plane_unavailable", message=f"Control plane unavailable: {exc}") from exc
+
+        if not response.ok:
+            raise self._as_http_error(status_code=502, code="control_plane_error", message=response.text)
+
+        task = response.json().get("task", {})
+        task_id = str(task.get("task_id") or "")
+        return {
+            "id": f"task_{task_id or uuid.uuid4().hex}",
+            "object": "task",
+            "status": "queued",
+            "task_id": task_id,
+            "model": model,
+            "created": int(task.get("created_at", time.time())),
+            "poll_url": f"{settings.control_plane_url}/cluster/tasks/{task_id}" if task_id else "",
+        }
+
+    def _finalize_request(
+        self,
+        *,
+        endpoint: str,
+        payload: dict[str, Any],
+        provider: str,
+        worker: dict[str, Any] | None,
+        latency_ms: float,
+        error: bool,
+        error_code: str = "",
+    ) -> None:
+        routing_engine.set_provider_latency(provider, latency_ms)
+        if error:
+            routing_engine.set_provider_failure(provider, code=error_code, message=error_code)
+        else:
+            routing_engine.set_provider_health(provider, True)
+
+        if worker is not None:
+            try:
+                worker_id = worker.get("worker_id")
+                if worker_id:
+                    get_session().post(
+                        f"{settings.control_plane_url}/cluster/release",
+                        json={"worker_id": worker_id, "success": not error},
+                        timeout=5,
+                    )
+            except requests.RequestException:
+                pass
+        try:
+            get_session().post(
+                f"{settings.control_plane_url}/cluster/telemetry",
+                json={
+                    "endpoint": endpoint,
+                    "latency_ms": latency_ms,
+                    "model": payload.get("model", ""),
+                    "provider": provider,
+                    "worker_id": worker.get("worker_id", "") if worker is not None else "",
+                    "error": error,
+                    "error_code": error_code,
+                },
+                timeout=5,
+            )
+        except requests.RequestException:
+            pass

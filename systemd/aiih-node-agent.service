@@ -1,5 +1,5 @@
 [Unit]
-Description=AI Inference Hub Node Agent
+Description=AetherMesh Node Agent
 After=network-online.target aiih-worker-agent.service
 Wants=network-online.target
 

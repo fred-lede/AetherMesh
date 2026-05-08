@@ -11,7 +11,7 @@ fi
 
 mkdir -p logs
 
-echo "Starting AI Inference Hub Ubuntu node services..."
+echo "Starting AetherMesh Ubuntu node services..."
 echo "Assumption: Ollama workers are already running on ports 11434/11435 (or your configured ports)."
 
 nohup python -m uvicorn node.worker_agent:app --host 0.0.0.0 --port "${AIIH_WORKER_RPC_PORT:-9300}" > logs/worker_agent.log 2>&1 &

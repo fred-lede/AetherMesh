@@ -1,5 +1,5 @@
 [Unit]
-Description=AI Inference Hub Worker Agent
+Description=AetherMesh Worker Agent
 After=network-online.target
 Wants=network-online.target
 

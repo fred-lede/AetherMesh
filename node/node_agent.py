@@ -13,7 +13,7 @@ from cluster.gpu_discovery import discover_gpus
 from config.settings import settings
 
 
-app = FastAPI(title="AI Inference Hub Node Agent", version="4.0.0")
+app = FastAPI(title="AetherMesh Node Agent", version="4.0.0")
 
 
 class NodeAgent:

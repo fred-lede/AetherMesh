@@ -13,13 +13,13 @@ from fastapi.templating import Jinja2Templates
 from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
-from router.routing_engine import routing_engine
+from runtime.orchestration.routing_engine import routing_engine
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 STATIC_DIR = BASE_DIR / "static"
 
-app = FastAPI(title="AI Inference Hub Dashboard", version="4.0.0")
+app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")
 
 AUTH_EXEMPT_PATHS = {"/health", "/api/health", "/favicon.ico", "/login"}
 AUTH_EXEMPT_PREFIXES = ("/static/",)
@@ -31,7 +31,7 @@ def _unauthorized_response() -> Response:
     return Response(
         content="Dashboard authentication required.",
         status_code=401,
-        headers={"WWW-Authenticate": 'Basic realm="AI Inference Hub Dashboard"'},
+        headers={"WWW-Authenticate": 'Basic realm="AetherMesh Dashboard"'},
     )
 
 

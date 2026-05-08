@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from router.capabilities import required_anthropic_capabilities, required_openai_capabilities
-from router.openai_router import RouterService
-from router.routing_engine import ModelRoutingEngine
+from runtime.orchestration.capabilities import required_anthropic_capabilities, required_openai_capabilities
+from runtime.orchestration.openai_handler import RouterService
+from runtime.orchestration.routing_engine import ModelRoutingEngine
 
 
 def test_anthropic_required_capabilities_include_audio_vision_tools_thinking() -> None:

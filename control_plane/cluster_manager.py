@@ -236,7 +236,7 @@ class ClusterManager:
 
 
 manager = ClusterManager()
-app = FastAPI(title="AI Inference Hub Control Plane", version="4.0.0")
+app = FastAPI(title="AetherMesh Control Plane", version="4.0.0")
 
 
 @app.on_event("startup")

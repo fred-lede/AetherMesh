@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from router.anthropic_sse_builder import AnthropicSSEBuilder
+from protocols.anthropic.sse_builder import AnthropicSSEBuilder
 
 
 def _payloads(events: list[str]) -> list[dict]:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from router.web_server_tools import (
+from runtime.tools.builtin.web_search import (
     content_text,
     extract_fetch_url,
     extract_search_query,

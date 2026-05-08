@@ -25,7 +25,7 @@ powershell -NoProfile -Command ^
 timeout /t 1 /nobreak >nul
 
 echo ==========================================
-echo AI Inference Hub startup sequence
+echo AetherMesh startup sequence
 echo 1. Ensure Ollama workers are already running
 echo 2. Ensure Redis is already running
 echo 3. Launching control plane
