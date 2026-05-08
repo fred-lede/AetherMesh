@@ -34,27 +34,27 @@ class AnthropicRouter:
         for model in self.registry.get("models", []):
             data.append(
                 {
-                    "name": model["name"],
-                    "type": "model",
+                    "id": model["name"],
+                    "object": "model",
                     "created": 0,
-                    "owner": model.get("provider", "ollama"),
+                    "owned_by": model.get("provider", "ollama"),
                     "capabilities": model.get("capabilities", []),
                 }
             )
         alias_prefix = settings.model_alias_prefix()
         for alias, target in settings.model_alias_entries().items():
-            name = f"{alias_prefix}/{alias}" if alias_prefix else alias
+            model_id = f"{alias_prefix}/{alias}" if alias_prefix else alias
             data.append(
                 {
-                    "name": name,
-                    "type": "model",
+                    "id": model_id,
+                    "object": "model",
                     "created": 0,
-                    "owner": "alias",
+                    "owned_by": "alias",
                     "capabilities": self._capabilities_for_model(target),
                     "target": target,
                 }
             )
-        return {"type": "list", "data": data}
+        return {"object": "list", "data": data}
 
     def _to_openai_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         messages = []
