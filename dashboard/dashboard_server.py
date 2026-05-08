@@ -9,6 +9,7 @@ import requests
 from fastapi import FastAPI, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader, Template
 
 from config.settings import settings
 from providers.http_client import get_session
@@ -16,7 +17,25 @@ from metrics.request_metrics import request_metrics
 from runtime.orchestration.routing_engine import routing_engine
 
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+class _Jinja2SafeEnvironment(Environment):
+    """Workaround for Jinja2 3.1.5+ bug where get_template() passes
+    self.globals (a dict) to _load_template(), creating an unhashable
+    cache_key (name, dict) that causes TypeError: unhashable type: 'dict'."""
+
+    def get_template(self, name, parent=None, globals=None):
+        if isinstance(name, Template):
+            return name
+        if parent is not None:
+            name = self.join_path(name, parent)
+        return self._load_template(name, globals)
+
+
+_safe_env = _Jinja2SafeEnvironment(
+    loader=FileSystemLoader(str(BASE_DIR / "templates")),
+)
+templates = Jinja2Templates(env=_safe_env)
 STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")

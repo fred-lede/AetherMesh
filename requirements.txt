@@ -4,5 +4,5 @@ requests
 redis
 pyyaml
 prometheus_client
-jinja2>=3.0,<3.1.5
+jinja2>=3.1.6
 psutil
