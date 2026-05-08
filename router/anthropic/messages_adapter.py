@@ -137,7 +137,13 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             )
 
         try:
-            adapter = anthropic_service._adapter(provider, worker)
+            try:
+                adapter = anthropic_service._adapter(provider, worker)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"type": "overloaded_error", "message": str(exc)},
+                )
             if is_streaming:
                 iterator = iter(adapter.stream(openai_payload))
                 try:

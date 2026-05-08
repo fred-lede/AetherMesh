@@ -436,6 +436,8 @@ class ModelRoutingEngine:
                         )
                         worker = self._worker_for_model(best.model, best.model, registry_models)
                         rules_applied.append(f"local_model_fallback {clean_model} -> {best.model}")
+                    else:
+                        rules_applied.append("no_ollama_worker_available")
 
             return RoutingDecision(
                 provider=best.provider,
