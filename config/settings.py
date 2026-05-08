@@ -28,6 +28,22 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _detect_config_dir() -> Path:
+    env_dir = os.getenv("AIIH_CONFIG_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir)
+    try:
+        file_dir = Path(__file__).resolve().parent
+        if (file_dir / "models.yaml").exists():
+            return file_dir
+    except NameError:
+        pass
+    cwd_config = Path.cwd() / "config"
+    if (cwd_config / "models.yaml").exists():
+        return cwd_config
+    return Path.cwd()
+
+
 @dataclass(slots=True)
 class Settings:
     host: str = field(default_factory=lambda: os.getenv("AIIH_HOST", "0.0.0.0"))
@@ -72,9 +88,7 @@ class Settings:
     rate_limit_per_minute: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_PER_MINUTE", 60))
     rate_limit_burst: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_BURST", 10))
     local_worker_ports: list[int] = field(default_factory=lambda: [11434, 11435, 11436, 11437])
-    config_dir: Path = field(
-        default_factory=lambda: Path(os.getenv("AIIH_CONFIG_DIR", Path(__file__).resolve().parent))
-    )
+    config_dir: Path = field(default_factory=_detect_config_dir)
 
     def config_path(self, filename: str) -> Path:
         return self.config_dir / filename
