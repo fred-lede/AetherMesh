@@ -191,7 +191,7 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 |----------|---------|-------------|
 | Ollama (local) | `providers/ollama_adapter.py` | chat, stream, responses, embeddings, rerank |
 | OpenAI | `providers/openai_adapter.py` | chat, stream, responses |
-| Gemini | `providers/gemini_adapter.py` | chat, stream, responses |
+| Gemini | `providers/gemini_adapter.py` | chat, stream, responses, rerank |
 | NVIDIA NIM | `providers/nvidia_nim_adapter.py` | chat, stream, responses, embeddings, rerank |
 | Ollama Cloud | `providers/ollama_cloud_adapter.py` | chat, stream, responses, embeddings, rerank |
 
