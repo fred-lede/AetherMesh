@@ -15,6 +15,7 @@ from providers.base import ProviderError
 from runtime.orchestration.anthropic_converter import AnthropicRouter
 from runtime.orchestration.capabilities import required_anthropic_capabilities
 from runtime.intelligence import execution_selector
+from runtime.memory import memory_manager
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
 from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
@@ -214,6 +215,14 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                 routing_engine.set_provider_latency(provider, latency_ms)
                 routing_engine.set_provider_health(provider, True)
                 result = anthropic_service._to_anthropic_response(response, model, allowed_tool_names=allowed_tool_names)
+                memory_manager.episodic.record(
+                    session_id=request_id,
+                    model=model,
+                    provider=provider,
+                    duration_ms=latency_ms,
+                    success=True,
+                    token_count=dict(usage) if usage else None,
+                )
                 return ASCIISafeJSONResponse(
                     content=result,
                     media_type="application/json; charset=utf-8",
@@ -224,6 +233,14 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
         except ProviderError as exc:
             latency_ms = (time.time() - start_time) * 1000
             logger.error(f"ProviderError for model={model}, provider={provider}: {exc}")
+            memory_manager.episodic.record(
+                session_id=request_id,
+                model=model,
+                provider=provider,
+                duration_ms=latency_ms,
+                success=False,
+                error=str(exc)[:200],
+            )
             status_code = int(getattr(exc, "status_code", None) or 502)
             retry_after = getattr(exc, "retry_after", None)
             error_code = str(getattr(exc, "code", "") or "")
