@@ -16,7 +16,7 @@ from runtime.orchestration.anthropic_converter import AnthropicRouter
 from runtime.orchestration.capabilities import required_anthropic_capabilities
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
-from runtime.security.tool_policy import evaluate_server_tool_policy
+from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
 from runtime.tools.builtin.web_search import stream_web_server_tool_response
 
 logger = logging.getLogger("anthropic.messages_adapter")
@@ -86,6 +86,13 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             model, openai_payload["model"], provider,
             "yes" if worker else "no", routing_decision.score,
         )
+
+        if settings.web_server_tools_enabled and not listed_server_tools(payload):
+            payload = dict(payload)
+            tools = list(payload.get("tools") or [])
+            tools.append({"type": "web_search", "name": "web_search", "input_schema": {"type": "object"}})
+            payload["tools"] = tools
+            payload["tool_choice"] = {"type": "tool", "name": "web_search"}
 
         server_tool_policy = evaluate_server_tool_policy(
             payload,
