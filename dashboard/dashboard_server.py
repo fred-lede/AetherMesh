@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 import secrets
-import weakref
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -23,12 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent
 class _Jinja2SafeEnvironment(Environment):
     """Workaround for Jinja2 3.1.5 bug where _load_template() uses
     globals (a dict) in the cache key, causing TypeError: unhashable type: 'dict'.
-    Uses (weakref.ref(loader), name) as cache key — same as Jinja2 3.1.6+."""
+    Uses (id(loader), name) as cache key — loader is long-lived so id() is stable."""
 
     def _load_template(self, name, globals=None):
         if self.loader is None:
             raise TypeError("no loader for this environment specified")
-        cache_key = (weakref.ref(self.loader), name)
+        cache_key = (id(self.loader), name)
         if self.cache is not None:
             template = self.cache.get(cache_key)
             if template is not None and (
@@ -46,6 +45,7 @@ class _Jinja2SafeEnvironment(Environment):
 _safe_env = _Jinja2SafeEnvironment(
     loader=FileSystemLoader(str(BASE_DIR / "templates")),
 )
+_safe_env.cache = None
 templates = Jinja2Templates(env=_safe_env)
 STATIC_DIR = BASE_DIR / "static"
 
