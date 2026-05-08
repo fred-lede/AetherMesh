@@ -17,7 +17,14 @@ from runtime.orchestration.capabilities import required_anthropic_capabilities
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
 from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
-from runtime.tools.builtin.web_search import stream_web_server_tool_response
+from runtime.tools.builtin.web_search import (
+    append_references_to_stream,
+    extract_search_query,
+    inject_search_context,
+    latest_user_text,
+    run_web_search,
+    stream_web_server_tool_response,
+)
 
 logger = logging.getLogger("anthropic.messages_adapter")
 
@@ -87,12 +94,20 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             "yes" if worker else "no", routing_decision.score,
         )
 
+        web_search_results: list[dict[str, str]] | None = None
         if settings.web_server_tools_enabled and not listed_server_tools(payload):
-            payload = dict(payload)
-            tools = list(payload.get("tools") or [])
-            tools.append({"type": "web_search", "name": "web_search", "input_schema": {"type": "object"}})
-            payload["tools"] = tools
-            payload["tool_choice"] = {"type": "tool", "name": "web_search"}
+            query = extract_search_query(latest_user_text(payload))
+            if query:
+                try:
+                    results = run_web_search(query, settings.web_search_max_results, settings.web_tool_timeout_s)
+                    if results:
+                        web_search_results = results
+                        payload = dict(payload)
+                        inject_search_context(payload, query, results)
+                        openai_payload = anthropic_service._to_openai_payload(payload)
+                        openai_payload["model"] = routing_decision.model if routing_decision.score >= 10 else anthropic_service._strip_model_prefix(model)
+                except Exception as exc:
+                    logger.warning(f"Auto web search failed: {exc}")
 
         server_tool_policy = evaluate_server_tool_policy(
             payload,
@@ -105,7 +120,9 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                 status_code=400,
                 detail={"type": "invalid_request_error", "message": server_tool_policy.error},
             )
-        if server_tool_policy.should_handle_locally:
+
+        old_short_circuit = server_tool_policy.should_handle_locally and not web_search_results
+        if old_short_circuit:
             request_metrics.record_request(RequestRecord(
                 request_id=request_id, model=model, provider="aiih_web_tools",
                 endpoint="/v1/messages", streaming=True, latency_ms=0,
@@ -160,11 +177,14 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                     yield from iterator
 
                 response_headers = {"Cache-Control": "no-cache", "X-Request-Id": request_id}
+                inner = stream_anthropic_with_metrics(
+                    anthropic_service, stream_with_first(), model, provider,
+                    request_id, start_time, allowed_tool_names=allowed_tool_names,
+                )
+                if web_search_results:
+                    inner = append_references_to_stream(inner, web_search_results)
                 return StreamingResponse(
-                    stream_anthropic_with_metrics(
-                        anthropic_service, stream_with_first(), model, provider,
-                        request_id, start_time, allowed_tool_names=allowed_tool_names,
-                    ),
+                    inner,
                     media_type="text/event-stream; charset=utf-8",
                     headers=response_headers,
                 )

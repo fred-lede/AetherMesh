@@ -217,6 +217,79 @@ def stream_web_server_tool_response(
     yield format_anthropic_sse("message_stop", {"type": "message_stop"})
 
 
+def inject_search_context(payload: dict[str, Any], query: str, results: list[dict[str, str]]) -> None:
+    now = datetime.now(UTC).strftime("%Y-%m-%d")
+    parts = [
+        f"Today's date: {now}",
+        f"Web search results for: {query}",
+        "",
+    ]
+    for i, r in enumerate(results, 1):
+        parts.append(f"{i}. {r['title']}\n   URL: {r['url']}")
+    parts.extend([
+        "",
+        "Answer the user's question based on the web search results above.",
+        "Include the source URL when you reference information from a result.",
+        'At the end of your response, add a "---" separator and a "References:" section',
+        "listing the numbered URLs you used.",
+    ])
+    context = "\n".join(parts)
+    existing = payload.get("system", "")
+    if isinstance(existing, str) and existing:
+        payload["system"] = context + "\n\n" + existing
+    else:
+        payload["system"] = context
+
+
+def _format_references_text(results: list[dict[str, str]]) -> str:
+    if not results:
+        return ""
+    refs = "\n---\nReferences:"
+    for i, r in enumerate(results, 1):
+        refs += f"\n{i}. {r['url']}"
+    return refs
+
+
+def append_references_to_stream(
+    inner_stream: Iterable[str],
+    results: list[dict[str, str]],
+) -> Iterable[str]:
+    if not results:
+        yield from inner_stream
+        return
+
+    ref_text = _format_references_text(results)
+    max_index = -1
+
+    for chunk in inner_stream:
+        if isinstance(chunk, str) and "data:" in chunk:
+            try:
+                data_str = chunk.split("data:", 1)[1].strip()
+                data = json.loads(data_str)
+                idx = data.get("index", -1)
+                if idx >= 0:
+                    max_index = max(max_index, idx)
+            except (json.JSONDecodeError, IndexError):
+                pass
+
+        if isinstance(chunk, str) and '"type":"message_delta"' in chunk:
+            ref_idx = max_index + 1
+            yield format_anthropic_sse(
+                "content_block_start",
+                {"type": "content_block_start", "index": ref_idx, "content_block": {"type": "text", "text": ""}},
+            )
+            yield format_anthropic_sse(
+                "content_block_delta",
+                {"type": "content_block_delta", "index": ref_idx, "delta": {"type": "text_delta", "text": ref_text}},
+            )
+            yield format_anthropic_sse(
+                "content_block_stop",
+                {"type": "content_block_stop", "index": ref_idx},
+            )
+
+        yield chunk
+
+
 def _search_summary(query: str, results: list[dict[str, str]]) -> str:
     if not results:
         return f"No web search results found for: {query}"
