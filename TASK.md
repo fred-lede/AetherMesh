@@ -90,6 +90,36 @@
 - [x] docs/security/sandbox.md
 - [x] docs/security/policies.md
 
+## Phase 7 — Kernel Stabilization (Execution Context) ✅
+- [x] `runtime/context/` — Unified `ExecutionContext` with 12 sub-context states (provider, tool, gpu, session, stream, memory, security, graph, trace, etc.)
+- [x] `runtime/events/` — Typed event bus with 26 event types, pub/sub, history, async + sync dispatch
+- [x] `runtime/state/` — Deterministic state machines with validated transitions across 5 domains (execution, stream, session, agent, provider)
+- [x] `runtime/event_bridge.py` — Bidirectional bridge between graph event bus and runtime event bus
+
+## Phase 8 — Execution Replay + Runtime ABI ✅
+- [x] `runtime/replay/` — `ExecutionRecorder` (event stream + snapshots + serialization), `ReplayEngine` (load/replay/export), `TraceRebuilder`
+- [x] `runtime/abi/` — 7 stable `RuntimeComponent` plugin interfaces (agent, gpu, memory, provider, stream, tool, runtime_contract)
+- [x] `runtime/abi/lifecycle_manager.py` — `RuntimeLifecycleManager` with `initialize/start/pause/resume/cancel/shutdown` for all components
+- [x] `runtime/kernel.py` — `AetherKernel` bootstrapper with `create_execution/start/pause/resume/cancel/fail/complete/shutdown`
+
+## Phase 8b — Full Responses API Support ✅
+- [x] `runtime/responses/` — `ResponseRuntime`, response models (`ResponseObject`, `ResponseStatus`, `ResponseUsage`, `OutputItem`, `ContentPart`)
+- [x] `runtime/responses/input_converter.py` — Convert chat/Anthropic formats to Responses format
+- [x] `runtime/responses/output_converter.py` — Convert Responses format to chat/streaming format
+- [x] `runtime/responses/response_stream.py` — SSE streaming for Responses API responses
+- [x] `router/responses_router.py` — FastAPI router with CRUD endpoints (`POST/GET/DELETE/PATCH /v1/responses`)
+- [x] All 5 provider adapters (ollama, openai, gemini, nvidia_nim, ollama_cloud) implement `responses` capability
+- [x] Auto-conversion: native passthrough for OpenAI, format conversion for all other providers
+
+## Phase 16 — README Full Rewrite ✅ (2026-05-08)
+- [x] Rewrote 983-line v4 README to 382-line v5 kernel-focused README
+- [x] Architecture layer diagram (kernel-centric instead of old cluster topology)
+- [x] Kernel Core documentation (AetherKernel, ExecutionContext, EventBus, StateMachine, ReplayEngine, LifecycleManager)
+- [x] Python quick-start for standalone kernel usage
+- [x] Responses API documentation + validation curl command
+- [x] Condensed deployment, config, routing, monitoring sections
+- [x] Removed v4-era maintenance log, baseline benchmarks, systemd/launchd edge cases
+
 ---
 
 ## 執行記錄
@@ -99,3 +129,6 @@
 | 2026-05-07 | All | 15-phase refactoring 完成 (平台更名 + runtime/ + protocols/) |
 | 2026-05-07 | Phase 2/3 | Dashboard Jinja2 crash fix (pre-compiled templates) |
 | 2026-05-07 | Phase 2/3 | Windows Dashboard 驗證通過 |
+| 2026-05-08 | Phase 7-8 | Kernel stabilization 完成 (context/events/state/replay/abi/kernel.py) |
+| 2026-05-08 | Phase 8b | Full OpenAI Responses API 支援完成 (runtime/responses/ + router/responses_router.py + 5 provider adapters) |
+| 2026-05-08 | Phase 16 | README.md 完整重寫為 v5 kernel-focused 版本 (983→382 lines) |
