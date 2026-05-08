@@ -106,6 +106,21 @@ await kernel.shutdown()
 ### Run the Full Cluster
 
 ```bash
+# All platforms — one terminal, one command (starts 8 services)
+python -m runtime.launcher
+
+# Start specific services only
+python -m runtime.launcher start control_plane openai_router dashboard
+
+# Show status of all services
+python -m runtime.launcher status
+
+# Stop all services
+python -m runtime.launcher stop
+
+# Custom log directory
+python -m runtime.launcher --log-dir /var/log/aethermesh
+
 # Windows
 scripts\start_all.bat
 
@@ -115,6 +130,17 @@ sudo systemctl restart aiih-ollama-gpu0 aiih-ollama-gpu1 aiih-worker-agent aiih-
 # macOS
 bash scripts/start_cluster_macos.sh
 ```
+
+Each service writes its own log file to `logs/<name>.log`. Debug a specific service:
+```bash
+tail -f logs/openai_router.log        # watch OpenAI router logs
+tail -f logs/control_plane.log        # watch control plane logs
+```
+
+The launcher starts 8 services in a single process group:
+`control_plane` (9200), `openai_router` (8001), `anthropic_router` (8002),
+`dashboard` (9001), `metrics` (9100), `node_agent` (9400), `worker_agent` (9300),
+`task_worker`. Press Ctrl+C to gracefully stop all.
 
 ### Configure Claude Code / Claude Desktop
 
@@ -263,6 +289,7 @@ AetherMesh/
   runtime/              AI Runtime Kernel (v5.0.0)
     kernel.py           AetherKernel bootstrapper
     event_bridge.py     Event bus bridge (graph ↔ runtime)
+    launcher/           Service launcher (start/stop/status all services)
     context/            Unified ExecutionContext (12 sub-contexts)
     events/             Typed event bus (26 event types, pub/sub, history)
     state/              Deterministic state machines (5 domains)

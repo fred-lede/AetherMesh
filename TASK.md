@@ -128,6 +128,15 @@
 - [x] Added `dashboard.js` as a static file served via `app.get("/static/{file_path:path}")`
 - [x] No functional changes — all 18 `/api/*` endpoints maintain identical paths
 
+## Phase 18 — Service Launcher ✅ (2026-05-08)
+- [x] Created `runtime/launcher/` package with `python -m runtime.launcher` entry point
+- [x] Unified launcher starts all 8 services in a single process group from one terminal
+- [x] Each service writes output to `logs/<name>.log` for independent debugging
+- [x] Supports `start`, `stop`, `status`, `restart` commands with per-service targeting
+- [x] Loads `.env` automatically before launching services
+- [x] Graceful Ctrl+C shutdown — SIGTERM all subprocesses, SIGKILL after 5s timeout
+- [x] Updated README.md with launcher usage examples and directory layout
+
 ---
 
 ## 執行記錄
@@ -141,3 +150,4 @@
 | 2026-05-08 | Phase 8b | Full OpenAI Responses API 支援完成 (runtime/responses/ + router/responses_router.py + 5 provider adapters) |
 | 2026-05-08 | Phase 16 | README.md 完整重寫為 v5 kernel-focused 版本 (983→382 lines) |
 | 2026-05-08 | Phase 17 | Dashboard template modernization: JS extracted, CSS inlined, API routes consolidated |
+| 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal |
