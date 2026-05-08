@@ -178,6 +178,13 @@ Proxies MCP connections with auth, sandboxing, and bridging.
 - `local` — AIIH handles `web_search` / `web_fetch` locally
 - `passthrough` — leaves server tools to Claude Code / runtime client
 
+### Auto Web Search
+
+`AIIH_WEB_TOOLS_AUTO_SEARCH=true` injects web search results into every request
+automatically, even if the client does not send tool definitions. The latest user
+message is used as the search query, and results + today's date are prepended as
+a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) routers.
+
 ## Provider Adapters
 
 | Provider | Adapter | Capabilities |
