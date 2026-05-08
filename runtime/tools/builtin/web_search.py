@@ -217,8 +217,12 @@ def _search_summary(query: str, results: list[dict[str, str]]) -> str:
         return f"No web search results found for: {query}"
     lines = [f"Search results for: {query}"]
     for index, result in enumerate(results, start=1):
-        lines.append(f"{index}. {result['title']}\n{result['url']}")
-    return "\n\n".join(lines)
+        lines.append(f"{index}. {result['title']}")
+    summary = "\n\n".join(lines)
+    references = "\n\n---\nReferences:"
+    for index, result in enumerate(results, start=1):
+        references += f"\n{index}. {result['url']}"
+    return summary + references
 
 
 def _strip_html(value: str) -> str:
