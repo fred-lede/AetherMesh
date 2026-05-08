@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger("providers.registry")
 
 
 class Capability(str, Enum):
@@ -63,6 +66,10 @@ class ProviderCapabilityEntry:
     base_url_env: str = ""
     api_key_env: str = ""
     default_base_url: str = ""
+    latency_ms: float = 0.0
+    healthy: bool = True
+    gpu_pressure: float = 0.0
+    cost_score: float = 0.5
 
     def has_capability(self, cap: Capability | str) -> bool:
         if isinstance(cap, str):
@@ -71,3 +78,114 @@ class ProviderCapabilityEntry:
 
     def supports_all(self, required: set[Capability]) -> bool:
         return required.issubset(self.capabilities)
+
+
+def _default_weight(required: set[Capability]) -> float:
+    if Capability.THINKING in required:
+        return 0.08
+    if Capability.VISION in required:
+        return 0.06
+    return 0.04
+
+
+class ProviderCapabilityRegistry:
+    def __init__(self) -> None:
+        self._entries: dict[str, ProviderCapabilityEntry] = {}
+
+    def register(self, entry: ProviderCapabilityEntry) -> None:
+        self._entries[entry.name] = entry
+        logger.info("Registered provider: %s (%d capabilities)", entry.name, len(entry.capabilities))
+
+    def unregister(self, name: str) -> None:
+        self._entries.pop(name, None)
+
+    def get(self, name: str) -> ProviderCapabilityEntry | None:
+        return self._entries.get(name)
+
+    def list_providers(self) -> list[ProviderCapabilityEntry]:
+        return list(self._entries.values())
+
+    def get_providers_for(self, required: set[Capability | str]) -> list[ProviderCapabilityEntry]:
+        parsed: set[Capability] = set()
+        for r in required:
+            if isinstance(r, Capability):
+                parsed.add(r)
+            else:
+                cap = CAPABILITY_ALIASES.get(r.lower())
+                if cap:
+                    parsed.add(cap)
+        if not parsed:
+            parsed = {Capability.CHAT}
+        return [e for e in self._entries.values() if e.supports_all(parsed)]
+
+    def score_provider(
+        self,
+        name: str,
+        required: set[Capability | str],
+        latency_ms: float = 0.0,
+        health_ok: bool = True,
+        gpu_pressure: float = 0.0,
+        tool_requirement: bool = False,
+        is_cloud: bool = False,
+    ) -> float:
+        entry = self._entries.get(name)
+        if not entry:
+            return 0.0
+
+        parsed: set[Capability] = set()
+        for r in required:
+            if isinstance(r, Capability):
+                parsed.add(r)
+            else:
+                cap = CAPABILITY_ALIASES.get(r.lower())
+                if cap:
+                    parsed.add(cap)
+
+        if not entry.supports_all(parsed):
+            return 0.0
+
+        base = 100.0
+        weight = _default_weight(parsed)
+
+        if not health_ok:
+            base *= 0.3
+
+        latency_penalty = min(latency_ms / 100, weight) if latency_ms > 0 else 0.0
+        base *= 1 - latency_penalty
+
+        if gpu_pressure > 0:
+            gpu_penalty = min(gpu_pressure, weight)
+            base *= 1 - gpu_penalty
+
+        if is_cloud:
+            base *= 1 - entry.cost_score * 0.2
+
+        if tool_requirement and Capability.TOOLS in entry.capabilities:
+            base *= 1.1
+
+        return round(base, 1)
+
+    def get_openai_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": e.name,
+                    "description": f"Provider: {e.name}",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "capabilities": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": sorted(c.value for c in e.capabilities),
+                            },
+                        },
+                    },
+                },
+            }
+            for e in self._entries.values()
+        ]
+
+
+provider_capability_registry = ProviderCapabilityRegistry()

@@ -257,6 +257,7 @@ class ModelRoutingEngine:
         required_capabilities: list[str] | None = None,
         registry_models: list[dict[str, Any]] | None = None,
         request_payload: dict[str, Any] | None = None,
+        tool_requirement: bool = False,
     ) -> RoutingDecision:
         with self._lock:
             clean_model = settings.resolve_model_alias(model)
@@ -324,6 +325,23 @@ class ModelRoutingEngine:
                     latency = self._provider_latency.get(provider, 0)
                     latency_penalty = min(latency / 100, 0.3)
                     final_score = base_score * (1 - latency_penalty)
+
+                    gpu_pressure = self._gpu_pressure_score(provider)
+                    if gpu_pressure > 0:
+                        gpu_penalty = min(gpu_pressure / 100, 0.25)
+                        final_score *= 1 - gpu_penalty
+                        rules_applied.append(f"gpu_pressure {provider}: {gpu_pressure:.1f}%")
+
+                    is_cloud = provider in CLOUD_PROVIDERS
+                    if is_cloud:
+                        cost_penalty = self._cloud_cost_penalty(provider)
+                        final_score *= 1 - cost_penalty
+                        rules_applied.append(f"cost_penalty {provider}: {cost_penalty:.2f}")
+
+                    if tool_requirement and provider not in CLOUD_PROVIDERS:
+                        final_score *= 1.05
+                        rules_applied.append(f"tool_affinity {provider}")
+
                     existing = next((c for c in candidates if c.provider == provider), None)
                     if existing:
                         existing.score = max(existing.score, final_score)
@@ -414,6 +432,31 @@ class ModelRoutingEngine:
                 candidates=candidates,
                 rules_applied=rules_applied,
             )
+
+    def _gpu_pressure_score(self, provider: str) -> float:
+        if provider != "ollama":
+            return 0.0
+        try:
+            from runtime.gpu.vram_scheduler import vram_scheduler
+            usage = vram_scheduler.gpu_usage_summary() if hasattr(vram_scheduler, "gpu_usage_summary") else {}
+            if isinstance(usage, dict):
+                queue_total = sum(
+                    len(q.get("queue", []))
+                    for q in usage.values() if isinstance(q, dict)
+                )
+                return min(queue_total * 10, 100.0)
+        except Exception:
+            pass
+        return 0.0
+
+    def _cloud_cost_penalty(self, provider: str) -> float:
+        cost_factors = {
+            "nvidia_nim": 0.15,
+            "openai": 0.12,
+            "gemini": 0.08,
+            "ollama_cloud": 0.10,
+        }
+        return cost_factors.get(provider, 0.05)
 
     def _worker_for_model(
         self,
