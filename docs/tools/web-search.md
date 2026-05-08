@@ -20,6 +20,14 @@ runtime/tools/web_search/
   duckduckgo.py        # DuckDuckGo HTML scraper (fallback)
 ```
 
+## Configuration
+Set API keys via environment variables (`.env`):
+```env
+TAVILY_API_KEY=tvly-xxxxxxxx
+SERPER_API_KEY=xxxxxxxxxxxx
+```
+Without keys, AetherMesh falls back to DuckDuckGo (no key required).
+
 ## Execution Flow
 1. `web_search` tool call received by Tool Runtime
 2. Tool Runtime calls `web_search_manager.search()`

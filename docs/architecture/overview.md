@@ -68,14 +68,16 @@ AetherMesh/
     openai/
     anthropic/
     mcp/
-  providers/        LLM provider adapters
-  router/           Lightweight protocol adapters (legacy)
+  providers/        LLM provider adapters + capability registry
+  router/           Protocol adapters (openai/ anthropic/ mcp/)
+  cli/              CLI client
+  clients/          Client SDKs (openai_sdk, anthropic_sdk, mcp_sdk)
   control_plane/    Cluster management
   dashboard/        Web UI
-  metrics/          Observability
+  metrics/          Observability (extended metrics)
   cluster/          Cluster services
   node/             Node/worker agents
   ai_queue/         Async task queue
   config/           Configuration
-  docs/             Documentation
+  docs/             Documentation (16 docs)
 ```
