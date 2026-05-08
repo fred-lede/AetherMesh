@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from typing import Any, Iterable
 
 import requests
@@ -22,6 +23,9 @@ class NvidiaNIMAdapter(ProviderAdapter):
         self.api_key = os.getenv("NVIDIA_NIM_API_KEY", "")
         self.timeout_s = int(os.getenv("NVIDIA_NIM_TIMEOUT", "12"))
         self.min_interval_s = float(os.getenv("NVIDIA_NIM_MIN_INTERVAL", "1.5"))
+        self.max_retries = int(os.getenv("NVIDIA_NIM_MAX_RETRIES", "2"))
+        self.backoff_factor = float(os.getenv("NVIDIA_NIM_BACKOFF_FACTOR", "2.0"))
+        self.retryable_statuses = {429, 502, 503, 504}
         self._session = requests.Session()
         self._session.mount("http://", HTTPAdapter(max_retries=0))
         self._session.mount("https://", HTTPAdapter(max_retries=0))
@@ -72,20 +76,7 @@ class NvidiaNIMAdapter(ProviderAdapter):
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
         body = self._strip_prefix(payload)
         body["stream"] = True
-        self._wait_for_turn()
-        try:
-            response = self._session.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers(),
-                json=body,
-                timeout=self.timeout_s,
-                stream=True,
-            )
-        except requests.Timeout as exc:
-            raise self._timeout_error(exc) from exc
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise self._provider_error(response)
+        response = self._post_with_retry("/chat/completions", body, stream=True)
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
                 continue
@@ -109,24 +100,48 @@ class NvidiaNIMAdapter(ProviderAdapter):
 
     def health_check(self) -> dict[str, Any]:
         self._wait_for_turn()
-        response = self._session.get(f"{self.base_url}/models", headers=self._headers(), timeout=5)
+        response = self._session.get(f"{self.base_url}/models", headers=self._headers(), timeout=15)
         return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        self._wait_for_turn()
-        try:
-            response = self._session.post(
-                f"{self.base_url}{path}",
-                headers=self._headers(),
-                json=payload,
-                timeout=self.timeout_s,
-            )
-        except requests.Timeout as exc:
-            raise self._timeout_error(exc) from exc
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise self._provider_error(response)
+        response = self._post_with_retry(path, payload, stream=False)
         return response.json()
+
+    def _post_with_retry(
+        self, path: str, payload: dict[str, Any], stream: bool = False,
+    ) -> requests.Response:
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            self._wait_for_turn()
+            try:
+                response = self._session.post(
+                    f"{self.base_url}{path}",
+                    headers=self._headers(),
+                    json=payload,
+                    timeout=self.timeout_s,
+                    stream=stream,
+                )
+            except requests.Timeout as exc:
+                if attempt < self.max_retries:
+                    delay = self.backoff_factor ** attempt
+                    time.sleep(delay)
+                    last_exc = exc
+                    continue
+                raise self._timeout_error(exc) from exc
+            response.encoding = "utf-8"
+            if response.ok:
+                return response
+            if response.status_code in self.retryable_statuses and attempt < self.max_retries:
+                delay = self.backoff_factor ** attempt
+                time.sleep(delay)
+                last_exc = self._provider_error(response)
+                continue
+            raise self._provider_error(response)
+        if isinstance(last_exc, requests.Timeout):
+            raise self._timeout_error(last_exc) from last_exc
+        if isinstance(last_exc, ProviderError):
+            raise last_exc
+        raise ProviderError(f"NVIDIA NIM request failed after {self.max_retries + 1} attempts")
 
     def _headers(self) -> dict[str, str]:
         return {
