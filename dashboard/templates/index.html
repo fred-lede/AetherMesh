@@ -550,6 +550,7 @@
       <div class="subsection-title">Provider Telemetry</div>
       <div id="providers"></div>
       <div id="cloud-providers" style="margin-top: 8px;"></div>
+      <div id="web-search-providers" style="margin-top: 6px;"></div>
       <div class="subsection-title">Request Metrics</div>
       <div id="request-metrics-summary" class="muted-line">Tracking requests via Anthropic router</div>
       <div id="request-metrics-cards" class="grid" style="margin-top: 12px;"></div>
@@ -1263,6 +1264,17 @@
             : (cp.message || cp.status);
           return `<span class="pill"><strong>${cp.name}</strong><span class="${statusCls}">${cp.ok ? 'healthy' : cp.status}</span><span style="color: var(--muted); font-size: 0.85rem;">${detail}</span></span>`;
         }).join('');
+      }
+
+      const webSearchEl = document.getElementById('web-search-providers');
+      if (data.web_search_providers) {
+        const wsList = data.web_search_providers || [];
+        webSearchEl.innerHTML = '<span class="subsection-title" style="font-size:0.85rem;">Web Search</span>' +
+          wsList.map(ws => {
+            const cls = ws.configured ? 'ok' : 'warn';
+            const label = ws.configured ? 'configured' : 'not set';
+            return `<span class="pill"><strong>${ws.name}</strong><span class="${cls}">${label}</span></span>`;
+          }).join('');
       }
 
       alerts.innerHTML = (data.alerts || []).map(alert => (

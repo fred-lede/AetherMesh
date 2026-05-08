@@ -144,6 +144,20 @@ async def dashboard_basic_auth(request: Request, call_next):
     return RedirectResponse(url="/login", status_code=303)
 
 
+def _web_search_providers() -> list[dict[str, Any]]:
+    try:
+        from runtime.tools.web_search import web_search_manager
+        return [
+            {
+                "name": p.name,
+                "configured": bool(getattr(p, "configured", False)),
+            }
+            for p in web_search_manager.providers
+        ]
+    except Exception:
+        return []
+
+
 def _check_cloud_provider(name: str, base_url_env: str, api_key_env: str, default_base: str) -> dict[str, Any]:
     """Check health of a cloud provider by calling its /models or /api/tags endpoint."""
     base_url = os.getenv(base_url_env, default_base).rstrip("/")
@@ -664,6 +678,7 @@ def overview() -> dict[str, Any]:
         "routing_status": routing_engine.get_routing_status(),
         "overview_status": "degraded" if overview_errors else "ok",
         "overview_errors": overview_errors,
+        "web_search_providers": _web_search_providers(),
     }
 
 
@@ -671,6 +686,18 @@ def overview() -> dict[str, Any]:
 def providers_health() -> dict[str, Any]:
     """Check health of all cloud providers."""
     return {"providers": _check_cloud_providers()}
+
+
+@app.get("/api/web-search/status")
+def web_search_status() -> dict[str, Any]:
+    from runtime.tools.web_search import web_search_manager
+    providers_info = []
+    for p in web_search_manager.providers:
+        providers_info.append({
+            "name": p.name,
+            "configured": bool(getattr(p, "configured", False)),
+        })
+    return {"providers": providers_info}
 
 
 @app.post("/api/providers/{provider}/probe")
