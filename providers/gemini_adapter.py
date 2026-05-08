@@ -142,7 +142,40 @@ class GeminiAdapter(ProviderAdapter):
             )
         return {"object": "list", "data": rows, "model": model, "usage": {}}
     def rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
-        raise ProviderError("Rerank is not implemented for Gemini adapter in AIIH yet.")
+        model = payload.get("model", "embedding-001")
+        documents = payload.get("documents", [])
+        query = str(payload.get("query", ""))
+        top_n = payload.get("top_n", len(documents) if documents else 0)
+
+        response = post_with_retry(
+            get_session(),
+            f"{self.base_url}/models/{model}:rankDocuments",
+            params={"key": self.api_key},
+            json={
+                "model": f"models/{model}",
+                "query": {"text": query},
+                "documents": [{"text": d} if isinstance(d, str) else d for d in documents],
+                "top_n": max(1, int(top_n)),
+            },
+            timeout=settings.request_timeout_s,
+        )
+        data = response.json()
+        ranks = data.get("ranks", [])
+        rows = []
+        for r in ranks:
+            idx = int(r.get("index", 0))
+            doc = documents[idx] if 0 <= idx < len(documents) else None
+            rows.append({
+                "index": idx,
+                "relevance_score": float(r.get("relevance_score", 0.0)),
+                "document": doc,
+            })
+        return {
+            "object": "list",
+            "data": rows,
+            "model": model,
+            "usage": {},
+        }
 
     def health_check(self) -> dict[str, Any]:
         response = get_session().get(
