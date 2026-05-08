@@ -57,6 +57,7 @@ class Settings:
     debug_tool_calls: bool = field(default_factory=lambda: _env_bool("AIIH_DEBUG_TOOL_CALLS", "false"))
     server_tool_mode: str = field(default_factory=lambda: os.getenv("AIIH_SERVER_TOOL_MODE", "reject").strip().lower())
     web_server_tools_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_WEB_SERVER_TOOLS_ENABLED", "false"))
+    web_tools_auto_search: bool = field(default_factory=lambda: _env_bool("AIIH_WEB_TOOLS_AUTO_SEARCH", "false"))
     web_tool_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_WEB_TOOL_TIMEOUT", 15))
     web_search_max_results: int = field(default_factory=lambda: _env_int("AIIH_WEB_SEARCH_MAX_RESULTS", 5))
     task_prune_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_TASK_PRUNE_ENABLED", "true"))

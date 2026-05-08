@@ -95,7 +95,7 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
         )
 
         web_search_results: list[dict[str, str]] | None = None
-        if settings.web_server_tools_enabled and not listed_server_tools(payload):
+        if settings.web_tools_auto_search and not listed_server_tools(payload):
             query = extract_search_query(latest_user_text(payload))
             if query:
                 try:
