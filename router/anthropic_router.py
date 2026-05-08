@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Iterable
 
+from dotenv import load_dotenv
 from fastapi import APIRouter, Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from config.settings import settings
 from metrics.request_metrics import RequestRecord, request_metrics

@@ -5,9 +5,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from dotenv import load_dotenv
 import requests
 from fastapi import FastAPI, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from jinja2 import Environment, FileSystemLoader, Template
 
 from config.settings import settings
