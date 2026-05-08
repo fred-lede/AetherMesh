@@ -17,6 +17,12 @@ from config.settings import settings
 LOGGER = logging.getLogger("aiih.http")
 
 
+import time
+from typing import Any
+
+from .base import ProviderError
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, str(default)).strip()
     try:
@@ -30,6 +36,68 @@ POOL_CONNECTIONS = _env_int("AIIH_HTTP_POOL_CONNECTIONS", 20)
 POOL_MAXSIZE = _env_int("AIIH_HTTP_POOL_MAXSIZE", 10)
 MAX_RETRIES = _env_int("AIIH_HTTP_MAX_RETRIES", 3)
 RETRY_BACKOFF_FACTOR = float(os.getenv("AIIH_HTTP_RETRY_BACKOFF", "0.5"))
+CLOUD_MAX_RETRIES = _env_int("AIIH_CLOUD_MAX_RETRIES", 2)
+CLOUD_BACKOFF_FACTOR = float(os.getenv("AIIH_CLOUD_BACKOFF_FACTOR", "2.0"))
+RETRYABLE_STATUSES = {429, 502, 503, 504}
+
+
+def post_with_retry(
+    session: requests.Session,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    json: dict[str, Any] | None = None,
+    params: dict[str, str] | None = None,
+    timeout: float | int | None = None,
+    stream: bool = False,
+    max_retries: int = CLOUD_MAX_RETRIES,
+    backoff_factor: float = CLOUD_BACKOFF_FACTOR,
+    retryable_statuses: set[int] | None = None,
+) -> requests.Response:
+    if retryable_statuses is None:
+        retryable_statuses = RETRYABLE_STATUSES
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = session.post(
+                url, headers=headers, json=json, params=params,
+                timeout=timeout, stream=stream,
+            )
+        except requests.Timeout as exc:
+            if attempt < max_retries:
+                delay = backoff_factor ** attempt
+                time.sleep(delay)
+                last_exc = exc
+                continue
+            raise ProviderError(
+                f"provider_timeout after {timeout}s: {exc}",
+                status_code=504, code="provider_timeout",
+            ) from exc
+        response.encoding = "utf-8"
+        if response.ok:
+            return response
+        if response.status_code in retryable_statuses and attempt < max_retries:
+            delay = backoff_factor ** attempt
+            time.sleep(delay)
+            last_exc = response
+            continue
+        raise ProviderError(
+            response.text or response.reason,
+            status_code=response.status_code,
+            code="provider_error",
+        )
+    if isinstance(last_exc, requests.Timeout):
+        raise ProviderError(
+            f"provider_timeout after {timeout}s: {last_exc}",
+            status_code=504, code="provider_timeout",
+        ) from last_exc
+    if isinstance(last_exc, requests.Response):
+        raise ProviderError(
+            last_exc.text or last_exc.reason,
+            status_code=last_exc.status_code,
+            code="provider_error",
+        )
+    raise ProviderError(f"request failed after {max_retries + 1} attempts")
 
 
 def _create_session() -> requests.Session:

@@ -11,7 +11,7 @@ import requests
 from config.settings import settings
 
 from .base import ProviderAdapter, ProviderError
-from .http_client import get_session
+from .http_client import get_session, post_with_retry
 
 
 class GeminiAdapter(ProviderAdapter):
@@ -32,15 +32,13 @@ class GeminiAdapter(ProviderAdapter):
             "contents": self._messages_to_contents(payload.get("messages", [])),
             "tools": self._tools_to_gemini(payload.get("tools", [])),
         }
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/models/{model}:generateContent",
             params={"key": self.api_key},
             json=body,
             timeout=settings.request_timeout_s,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
         data = response.json()
         text = self._extract_text(data)
         return {
@@ -127,15 +125,13 @@ class GeminiAdapter(ProviderAdapter):
             inputs = [inputs]
         rows = []
         for index, value in enumerate(inputs):
-            response = get_session().post(
+            response = post_with_retry(
+                get_session(),
                 f"{self.base_url}/models/{model}:embedContent",
                 params={"key": self.api_key},
                 json={"content": {"parts": [{"text": value}]}},
                 timeout=settings.request_timeout_s,
             )
-            response.encoding = "utf-8"
-            if not response.ok:
-                raise ProviderError(response.text)
             data = response.json()
             rows.append(
                 {

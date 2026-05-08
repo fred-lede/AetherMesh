@@ -11,7 +11,7 @@ import requests
 from config.settings import settings
 
 from .base import ProviderAdapter, ProviderError
-from .http_client import get_session
+from .http_client import get_session, post_with_retry
 
 
 class OllamaCloudAdapter(ProviderAdapter):
@@ -25,15 +25,13 @@ class OllamaCloudAdapter(ProviderAdapter):
 
     def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         body = self._chat_payload(payload, stream=False)
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/api/chat",
             headers=self._headers(),
             json=body,
             timeout=settings.request_timeout_s,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
         data = response.json()
         return self._to_chat_completion(payload.get("model", "unknown"), data)
 
@@ -76,16 +74,14 @@ class OllamaCloudAdapter(ProviderAdapter):
 
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
         body = self._chat_payload(payload, stream=True)
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/api/chat",
             headers=self._headers(),
             json=body,
             timeout=settings.request_timeout_s,
             stream=True,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         model = payload.get("model", "unknown")
@@ -130,15 +126,13 @@ class OllamaCloudAdapter(ProviderAdapter):
             "model": payload["model"],
             "input": payload.get("input", []),
         }
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/api/embed",
             headers=self._headers(),
             json=body,
             timeout=settings.request_timeout_s,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
         data = response.json()
         embeddings = data.get("embeddings", [])
         rows = []
@@ -155,15 +149,13 @@ class OllamaCloudAdapter(ProviderAdapter):
         if "top_n" in payload:
             body["top_n"] = payload["top_n"]
 
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/api/rerank",
             headers=self._headers(),
             json=body,
             timeout=settings.request_timeout_s,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
 
         data = response.json()
         rows: list[dict[str, Any]] = []

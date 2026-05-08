@@ -9,7 +9,7 @@ import requests
 from config.settings import settings
 
 from .base import ProviderAdapter, ProviderError
-from .http_client import get_session
+from .http_client import get_session, post_with_retry
 
 
 class OpenAIAdapter(ProviderAdapter):
@@ -30,16 +30,14 @@ class OpenAIAdapter(ProviderAdapter):
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
         body = dict(payload)
         body["stream"] = True
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}/chat/completions",
             headers=self._headers(),
             json=body,
             timeout=settings.request_timeout_s,
             stream=True,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
                 continue
@@ -65,15 +63,13 @@ class OpenAIAdapter(ProviderAdapter):
         return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        response = get_session().post(
+        response = post_with_retry(
+            get_session(),
             f"{self.base_url}{path}",
             headers=self._headers(),
             json=payload,
             timeout=settings.request_timeout_s,
         )
-        response.encoding = "utf-8"
-        if not response.ok:
-            raise ProviderError(response.text)
         return response.json()
 
     def _headers(self) -> dict[str, str]:
