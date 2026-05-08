@@ -30,6 +30,11 @@ from router.anthropic.messages_adapter import create_messages_routes
 anthropic_service = AnthropicRouter()
 logger = logging.getLogger("anthropic_router")
 
+print(f"DEBUG: registry type={type(anthropic_service.registry)} keys={list(anthropic_service.registry.keys()) if isinstance(anthropic_service.registry, dict) else 'N/A'}")
+print(f"DEBUG: model count={len(anthropic_service.registry.get('models', []))}")
+print(f"DEBUG: settings.config_dir={settings.config_dir}")
+print(f"DEBUG: models.yaml exists={(settings.config_dir / 'models.yaml').exists()}")
+
 
 class ASCIISafeJSONResponse(JSONResponse):
     def render(self, content: Any) -> bytes:
