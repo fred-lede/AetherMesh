@@ -471,6 +471,10 @@ See `.env.example` for the full list.
 ### Config Files
 
 - `config/models.yaml` — model registry and worker bindings
+  Models can list multiple workers under `worker_bindings`. The routing engine
+  selects the best available worker by GPU tier (5090 > 4070 > P40), queue depth,
+  GPU utilization, and model affinity. Dead or overloaded workers are skipped
+  automatically — no manual failover needed.
 - `config/cluster.yaml` — cluster defaults
 - `config/routing_rules.yaml` — model routing rules, gateway-safe `model_aliases`, fallback settings
 - `config/routing_state.yaml` — runtime routing state (auto-generated, gitignored)
