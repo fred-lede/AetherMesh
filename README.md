@@ -120,15 +120,6 @@ python -m runtime.launcher stop
 
 # Custom log directory
 python -m runtime.launcher --log-dir /var/log/aethermesh
-
-# Windows
-scripts\start_all.bat
-
-# Linux (systemd)
-sudo systemctl restart aiih-ollama-gpu0 aiih-ollama-gpu1 aiih-worker-agent aiih-node-agent
-
-# macOS
-bash scripts/start_cluster_macos.sh
 ```
 
 Each service writes its own log file to `logs/<name>.log`. Debug a specific service:
