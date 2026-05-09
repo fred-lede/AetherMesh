@@ -131,6 +131,7 @@ class ServiceProcess:
         self.return_code: int | None = None
         self.log_file: TextIO | None = None
         self.thread: threading.Thread | None = None
+        self._stopped = False
 
     def start(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +157,8 @@ class ServiceProcess:
     def _pipe_logger(self) -> None:
         assert self.process is not None and self.process.stdout is not None
         for line in iter(self.process.stdout.readline, b""):
+            if self._stopped:
+                break
             if self.log_file is not None:
                 self.log_file.write(line.decode("utf-8", errors="replace"))
                 self.log_file.flush()
@@ -170,12 +173,15 @@ class ServiceProcess:
     def stop(self, timeout: float = 5.0) -> None:
         if self.process is None or self.process.poll() is not None:
             return
+        self._stopped = True
         self.process.terminate()
         try:
             self.process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
+        if self.thread is not None:
+            self.thread.join(timeout=2)
         if self.log_file is not None:
             self.log_file.close()
             self.log_file = None
