@@ -7,15 +7,15 @@ model_aliases:
   # Claude Desktop gateway-safe aliases for local Ollama models.
   # External clients can use anthropic/AIIH/<alias>; AIIH resolves the
   # alias to the actual model name before routing.
-  alias_prefix: AIIH
+  alias_prefix: anthropic
   entries:
-    anthropic/z-ai/glm4.7: z-ai/glm4.7
-    anthropic/z-ai/glm-5.1: z-ai/glm-5.1
-    anthropic/deepseek-ai/deepseek-v4-pro: deepseek-ai/deepseek-v4-pro
-    anthropic/deepseek-ai/deepseek-v4-flash: deepseek-ai/deepseek-v4-flash
-    anthropic/glm-4.7-flash-q4: glm-4.7-flash:q4_K_M
-    anthropic/qwen3-coder-480b: qwen3-coder:480b
-    anthropic/qwen3-vl-235b: qwen3-vl:235b
+    z-ai/glm4.7: z-ai/glm4.7
+    z-ai/glm-5.1: z-ai/glm-5.1
+    deepseek-ai/deepseek-v4-pro: deepseek-ai/deepseek-v4-pro
+    deepseek-ai/deepseek-v4-flash: deepseek-ai/deepseek-v4-flash
+    glm-4.7-flash-q4: glm-4.7-flash:q4_K_M
+    qwen3-coder-480b: qwen3-coder:480b
+    qwen3-vl-235b: qwen3-vl:235b
     # Claude tier → local model mapping
     claude-sonnet-4-20250514: qwen3.6:35b      # Opus tier — strongest reasoning(5090)
     claude-sonnet-4-6: gemma4:31b               # Sonnet tier — balanced all-round(5090)
