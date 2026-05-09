@@ -10,10 +10,10 @@ model_aliases:
   alias_prefix: AIIH
   entries:
     glm-4.7-flash-q4: glm-4.7-flash:q4_K_M
-    # Claude Code sends its default model name; map to a local Ollama model
-    claude-sonnet-4-20250514: gemma4:31b
-    claude-sonnet-4-6: gemma4:31b
-    claude-3-5-sonnet-20241022: gemma4:31b
+    # Claude tier → local model mapping
+    claude-sonnet-4-20250514: qwen3.6:35b      # Opus tier — strongest reasoning
+    claude-sonnet-4-6: gemma4:31b               # Sonnet tier — balanced all-round
+    claude-3-5-haiku-20241022: qwen3.5:9b       # Haiku tier — fast & light (P40)
 
 fallback:
   # Explicit local Ollama model used when cloud providers are rate-limited,
