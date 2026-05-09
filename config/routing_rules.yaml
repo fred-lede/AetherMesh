@@ -7,7 +7,7 @@ model_aliases:
   # Claude Desktop gateway-safe aliases for local Ollama models.
   # External clients can use anthropic/AIIH/<alias>; AIIH resolves the
   # alias to the actual model name before routing.
-  alias_prefix: anthropic
+  alias_prefix: AIIH
   entries:
     z-ai/glm4.7: z-ai/glm4.7
     z-ai/glm-5.1: z-ai/glm-5.1
