@@ -182,8 +182,9 @@ sudo systemctl stop aiih-launcher
 # macOS
 launchctl unload ~/Library/LaunchAgents/com.aiih.launcher.plist
 
-# Windows
-# Task Scheduler → disable or delete the task
+# Windows (Task Scheduler)
+schtasks /Change /TN "AetherMesh" /DISABLE
+# or via GUI: taskschd.msc → Disable the task
 ```
 
 ### Boot Startup
