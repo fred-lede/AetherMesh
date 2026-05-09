@@ -164,7 +164,27 @@ tail -f logs/control_plane.log        # watch control plane logs
 The launcher starts 8 services in a single process group:
 `control_plane` (9200), `openai_router` (8001), `anthropic_router` (8002),
 `dashboard` (9001), `metrics` (9100), `node_agent` (9400), `worker_agent` (9300),
-`task_worker`. Press Ctrl+C to gracefully stop all.
+`task_worker`.
+
+### Stop Services
+
+```bash
+# Graceful stop — sends SIGTERM to all services, waits up to 5s, then SIGKILL
+python -m runtime.launcher stop
+
+# Or press Ctrl+C in the terminal where launcher is running
+```
+When using boot startup configs (systemd/launchd/Task Scheduler):
+```bash
+# Ubuntu
+sudo systemctl stop aiih-launcher
+
+# macOS
+launchctl unload ~/Library/LaunchAgents/com.aiih.launcher.plist
+
+# Windows
+# Task Scheduler → disable or delete the task
+```
 
 ### Boot Startup
 
