@@ -83,6 +83,10 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
     capabilities: [chat, thinking, tools, vision]
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
@@ -131,15 +135,6 @@ models:
         port: 11435
     capabilities: [embeddings]
     
-  - name: qwen3.5:0.8b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-
   # ── Tesla P40 #1 (24GB, tier B) — translation ─────────────────
   - name: qwen3.5:9b
     provider: ollama
@@ -185,15 +180,6 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [embeddings]
-    
-  - name: qwen3.5:0.8b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
 
   # ── Cloud providers ─────────────────────────────────────────
   - name: gpt-4.1-mini
