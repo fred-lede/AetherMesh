@@ -85,9 +85,42 @@ transitions), full execution recording/replay, and 7 stable plugin interfaces.
 
 ### Installation
 
+Requires **Python 3.10+** and (for GPU workers) **NVIDIA drivers + CUDA**.
+
 ```bash
+# 1. Clone and enter the project
+git clone <repo-url> AetherMesh
+cd AetherMesh
+
+# 2. Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\activate         # Windows
+
+# 3. Install Python dependencies
 pip install -r requirements.txt
+
+# 4. Configure environment
+cp .env.example .env
+# Edit .env to match your setup (at minimum: AIIH_NODE_ID, AIIH_NODE_IP)
+
+# 5. (GPU workers only) Install Ollama
+# https://ollama.com/download
+# Start Ollama instances on ports 11434, 11435, etc.
 ```
+
+### Profiles
+
+Configuration templates for different machine roles are in `profiles/`:
+
+| Profile | File | Use |
+|---------|------|-----|
+| Control plane | `profiles/control-plane/.env.example` | Main AIIH host (routers, dashboard, control plane) |
+| Worker node | `profiles/worker-node/.env.example` | Remote GPU node (Ollama workers, node/worker agents) |
+| Ollama GPU 0 | `profiles/worker-node/ollama-gpu0.env.example` | First GPU worker environment |
+| Ollama GPU 1 | `profiles/worker-node/ollama-gpu1.env.example` | Second GPU worker environment |
+
+Copy the profile that matches the machine's role to `.env` and adjust the values.
 
 ### Run the Kernel (standalone, no cluster)
 
@@ -171,6 +204,68 @@ Set up the launcher to start automatically on boot:
 4. **Trigger**: At startup
 5. **Action**: Start a program → `C:\path\to\AetherMesh\.venv\Scripts\python.exe` with args `-m runtime.launcher`, start in `C:\path\to\AetherMesh`
 6. **Settings**: If task fails, restart every 10 minutes
+
+### Remote Worker Nodes
+
+Add GPU machines to the cluster as worker nodes. Each worker runs only the node/worker agents
+and Ollama — no routers, dashboard, or control plane.
+
+**Prerequisites** on the worker machine:
+- Python 3.10+, NVIDIA drivers, CUDA, Ollama installed
+- Network access to the control plane host (ports 9200, 6379)
+
+**Step 1: Clone and install**
+```bash
+git clone <repo-url> AetherMesh && cd AetherMesh
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Step 2: Configure `.env`** (use the worker-node profile)
+```bash
+cp profiles/worker-node/.env.example .env
+```
+
+Edit these required values:
+```ini
+AIIH_CONTROL_URL=http://<CONTROL_PLANE_IP>:9200
+AIIH_NODE_ID=node-p40-01          # unique per cluster
+AIIH_NODE_IP=<WORKER_LAN_IP>      # worker's LAN address
+AIIH_REDIS_URL=redis://<CONTROL_PLANE_IP>:6379/0
+```
+
+**Step 3: Start Ollama workers** (one per GPU)
+```bash
+# GPU 0
+CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11434 ollama serve &
+
+# GPU 1
+CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11435 ollama serve &
+```
+
+**Step 4: Start node and worker agents**
+```bash
+# Starts only node_agent + worker_agent on this machine
+python -m runtime.launcher start node_agent worker_agent
+```
+
+**Step 5: Register models on the control plane**
+
+On the control plane host, edit `config/models.yaml` to bind models to the new node:
+```yaml
+models:
+  - name: llama3.2:3b
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+        gpu_id: 0
+```
+
+**Verify**: The worker appears in the dashboard within 15 seconds, or check directly:
+```bash
+curl http://<CONTROL_PLANE_IP>:9200/cluster/nodes
+curl http://<CONTROL_PLANE_IP>:9200/cluster/workers
+```
 
 ### Configure Claude Code / Claude Desktop
 

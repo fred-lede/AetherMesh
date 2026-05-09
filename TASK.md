@@ -138,6 +138,8 @@
 - [x] Updated README.md with launcher usage, boot startup (systemd/launchd/Task Scheduler)
 - [x] Updated old systemd files from `ai_inference_hub` → `__ROOT_DIR__` placeholders
 - [x] Created `systemd/aiih-launcher.service` and `launchd/com.aiih.launcher.plist.example`
+- [x] README: expanded Installation (venv, Python version, system deps), added Profiles section
+- [x] README: added Remote Worker Nodes section (multi-node cluster setup guide)
 - [x] Boot startup: systemd service (Ubuntu), launchd plist (macOS), Task Scheduler (Windows)
 - [x] Updated old systemd files from `ai_inference_hub` to `__ROOT_DIR__` placeholders
 
@@ -154,4 +156,4 @@
 | 2026-05-08 | Phase 8b | Full OpenAI Responses API 支援完成 (runtime/responses/ + router/responses_router.py + 5 provider adapters) |
 | 2026-05-08 | Phase 16 | README.md 完整重寫為 v5 kernel-focused 版本 (983→382 lines) |
 | 2026-05-08 | Phase 17 | Dashboard template modernization: JS extracted, CSS inlined, API routes consolidated |
-| 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal + boot startup configs |
+| 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal + boot startup configs + multi-node docs |
