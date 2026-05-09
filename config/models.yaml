@@ -88,6 +88,15 @@ models:
         port: 11434
     capabilities: [embeddings]
 
+  - name: nomic-embed-text:latest
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [embeddings]
+
   # ── Tesla P40 #1 (24GB, tier B) — embeddings + translation ───
   - name: translategemma:4b
     provider: ollama
