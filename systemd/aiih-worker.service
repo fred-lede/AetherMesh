@@ -10,6 +10,8 @@ EnvironmentFile=__ROOT_DIR__/.env
 ExecStart=__ROOT_DIR__/.venv/bin/python -m runtime.launcher start node_agent worker_agent
 Restart=on-failure
 RestartSec=10
+User=fred
+Group=fred
 KillMode=control-group
 
 [Install]

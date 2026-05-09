@@ -200,15 +200,16 @@ Set up the launcher to start automatically on boot:
 
 **Ubuntu (systemd)**
 1. Replace `__ROOT_DIR__` in `systemd/aiih-launcher.service` with the absolute path to this project
-2. Install and enable:
+2. **Replace `fred` in `User=fred` and `Group=fred` with your actual Linux username** — mismatched user will cause permission errors on logs and prevent proper process management
+3. Install and enable:
    ```bash
    sudo cp systemd/aiih-launcher.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable aiih-launcher
    sudo systemctl start aiih-launcher
    ```
-3. Check status: `sudo systemctl status aiih-launcher`
-4. View logs: `sudo journalctl -u aiih-launcher -f`
+4. Check status: `sudo systemctl status aiih-launcher`
+5. View logs: `sudo journalctl -u aiih-launcher -f`
 
 **macOS (launchd)**
 1. Replace `__ROOT_DIR__` in `launchd/com.aiih.launcher.plist.example` with the absolute path
@@ -313,7 +314,8 @@ python -m runtime.launcher start node_agent worker_agent
 **Boot startup** (so agents start automatically when the worker reboots):
 
 Worker-node service files are in `systemd/aiih-worker.service` and
-`launchd/com.aiih.worker.plist.example`. Replace `__ROOT_DIR__` with the actual path:
+`launchd/com.aiih.worker.plist.example`. Replace `__ROOT_DIR__` with the actual path,
+and **replace `fred` in `User=fred`/`Group=fred` with your Linux username**:
 
 ```bash
 # Ubuntu
