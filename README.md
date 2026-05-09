@@ -263,12 +263,45 @@ AIIH_REDIS_URL=redis://<CONTROL_PLANE_IP>:6379/0
 ```
 
 **Step 3: Start Ollama workers** (one per GPU)
-```bash
-# GPU 0
-CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11434 ollama serve &
 
-# GPU 1
-CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11435 ollama serve &
+Detailed environment templates for each GPU are in `profiles/worker-node/`:
+```bash
+# GPU 0 — binds to port 11434, uses CUDA device 0
+export CUDA_VISIBLE_DEVICES=0
+export OLLAMA_HOST=0.0.0.0:11434
+export OLLAMA_ORIGINS=*
+export OLLAMA_CONTEXT_LENGTH=64000
+export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_MAX_LOADED_MODELS=1
+export OLLAMA_NUM_PARALLEL=1
+ollama serve &
+
+# GPU 1 — binds to port 11435, uses CUDA device 1
+export CUDA_VISIBLE_DEVICES=1
+export OLLAMA_HOST=0.0.0.0:11435
+ollama serve &
+```
+
+Or use the env files directly:
+```bash
+env $(cat profiles/worker-node/ollama-gpu0.env.example | grep -v '^#') ollama serve &
+env $(cat profiles/worker-node/ollama-gpu1.env.example | grep -v '^#') ollama serve &
+```
+
+**Ollama boot startup** (Ubuntu systemd):
+```bash
+# Edit systemd/aiih-ollama-gpu0.service and aiih-ollama-gpu1.service
+# to match your GPU IDs and paths, then:
+sudo cp systemd/aiih-ollama-gpu{0,1}.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now aiih-ollama-gpu0 aiih-ollama-gpu1
+```
+
+Pull models on each worker:
+```bash
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text
+# Pull any other models you need
 ```
 
 **Step 4: Start node and worker agents**
