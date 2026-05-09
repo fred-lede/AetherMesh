@@ -10,7 +10,6 @@ model_aliases:
   alias_prefix: AIIH
   entries:
     glm-4.7-flash-q4: glm-4.7-flash:q4_K_M
-    gemma4-e4b: gemma4:e4b
     # Claude Code sends its default model name; map to a local Ollama model
     claude-sonnet-4-20250514: gemma4:31b
     claude-sonnet-4-6: gemma4:31b
