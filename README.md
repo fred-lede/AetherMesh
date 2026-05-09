@@ -176,14 +176,21 @@ python -m runtime.launcher stop
 ```
 When using boot startup configs (systemd/launchd/Task Scheduler):
 ```bash
-# Ubuntu
+# Ubuntu (control plane)
 sudo systemctl stop aiih-launcher
 
-# macOS
+# Ubuntu (worker node)
+sudo systemctl stop aiih-worker
+
+# macOS (control plane)
 launchctl unload ~/Library/LaunchAgents/com.aiih.launcher.plist
+
+# macOS (worker node)
+launchctl unload ~/Library/LaunchAgents/com.aiih.worker.plist
 
 # Windows (Task Scheduler)
 schtasks /Change /TN "AetherMesh" /DISABLE
+schtasks /Change /TN "AetherMesh-Worker" /DISABLE
 # or via GUI: taskschd.msc → Disable the task
 ```
 
@@ -268,6 +275,25 @@ CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11435 ollama serve &
 ```bash
 # Starts only node_agent + worker_agent on this machine
 python -m runtime.launcher start node_agent worker_agent
+```
+
+**Boot startup** (so agents start automatically when the worker reboots):
+
+Worker-node service files are in `systemd/aiih-worker.service` and
+`launchd/com.aiih.worker.plist.example`. Replace `__ROOT_DIR__` with the actual path:
+
+```bash
+# Ubuntu
+sudo cp systemd/aiih-worker.service /etc/systemd/system/
+sudo systemctl enable aiih-worker
+sudo systemctl start aiih-worker
+
+# macOS
+cp launchd/com.aiih.worker.plist.example ~/Library/LaunchAgents/com.aiih.worker.plist
+launchctl load ~/Library/LaunchAgents/com.aiih.worker.plist
+
+# Windows (Task Scheduler) — run only node_agent + worker_agent
+schtasks /Create /SC ONSTART /TN "AetherMesh-Worker" /TR "C:\path\to\.venv\Scripts\python.exe -m runtime.launcher start node_agent worker_agent" /RU SYSTEM /RL HIGHEST
 ```
 
 **Step 5: Register models on the control plane**

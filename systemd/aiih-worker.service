@@ -1,0 +1,16 @@
+[Unit]
+Description=AetherMesh Worker Node (node_agent + worker_agent)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT_DIR__
+EnvironmentFile=__ROOT_DIR__/.env
+ExecStart=__ROOT_DIR__/.venv/bin/python -m runtime.launcher start node_agent worker_agent
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
