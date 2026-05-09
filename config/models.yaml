@@ -77,6 +77,13 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [chat, vision]
+    
+  - name: qwen3.5:0.8b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
   - name: qwen3.5:9b
@@ -87,6 +94,15 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
+    
+  - name: translategemma:12b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-01
+        port: 11435
+    capabilities: [vision]
 
   - name: qwen3-embedding:8b
     provider: ollama
@@ -110,13 +126,31 @@ models:
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
-        port: 11435
+        port: 11434
       - node_id: node-01
         port: 11435
     capabilities: [embeddings]
+    
+  - name: qwen3.5:0.8b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
 
   # ── Tesla P40 #1 (24GB, tier B) — translation ─────────────────
-  - name: translategemma:4b
+  - name: qwen3.5:9b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
+    
+  - name: translategemma:12b
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
@@ -124,6 +158,42 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [vision]
+    
+  - name: qwen3-embedding:8b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [embeddings]
+
+  - name: nomic-embed-text-v2-moe:latest
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [embeddings]
+
+  - name: nomic-embed-text:latest
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [embeddings]
+    
+  - name: qwen3.5:0.8b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
 
   # ── Cloud providers ─────────────────────────────────────────
   - name: gpt-4.1-mini
