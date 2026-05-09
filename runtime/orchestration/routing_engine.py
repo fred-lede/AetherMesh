@@ -12,6 +12,7 @@ import requests
 import yaml
 
 from config.settings import settings
+from cluster.load_balancer import choose_best_worker
 
 
 logger = logging.getLogger("routing_engine")
@@ -72,6 +73,9 @@ class ModelRoutingEngine:
         }
         self._worker_health_cache: dict[str, tuple[float, bool]] = {}
         self._worker_health_cache_ttl = 15
+        self._workers_cache: list[dict[str, Any]] = []
+        self._workers_cache_at: float = 0.0
+        self._workers_cache_ttl = 10
         self._provider_credentials: dict[str, bool] = self._check_provider_credentials()
         self._model_overrides: dict[str, str] = {}
         self._routing_rules: list[dict[str, Any]] = []
@@ -315,11 +319,9 @@ class ModelRoutingEngine:
                 bindings = registry_match.get("worker_bindings", [])
                 worker = None
                 if provider == "ollama" and bindings:
-                    for b in bindings:
-                        base_url = settings.worker_base_url(b)
-                        if base_url and self._worker_is_alive(base_url):
-                            worker = {"base_url": base_url}
-                            break
+                    result = self._first_healthy_binding(bindings)
+                    if result:
+                        worker = result
                 if not self._model_supports_required(registry_match, required_capabilities):
                     rules_applied.append(
                         "registry_match_missing_capabilities "
@@ -491,14 +493,50 @@ class ModelRoutingEngine:
             if m.get("name") in (model, clean_model):
                 bindings = m.get("worker_bindings", [])
                 if bindings:
-                    for b in bindings:
-                        base_url = settings.worker_base_url(b)
-                        if base_url and self._worker_is_alive(base_url):
-                            return {"base_url": base_url}
+                    result = self._first_healthy_binding(bindings)
+                    if result:
+                        return result
                 return None
         return None
 
-    def _worker_is_alive(self, base_url: str) -> bool:
+    def _get_workers(self) -> list[dict[str, Any]]:
+        now = time.time()
+        if now - self._workers_cache_at < self._workers_cache_ttl:
+            return self._workers_cache
+        try:
+            resp = requests.get("http://127.0.0.1:9200/cluster/workers", timeout=3)
+            if resp.ok:
+                data = resp.json()
+                self._workers_cache = data.get("workers", [])
+                self._workers_cache_at = now
+            else:
+                logger.warning("Failed to fetch workers: HTTP %s", resp.status_code)
+        except requests.RequestException as exc:
+            logger.warning("Failed to fetch workers: %s", exc)
+        return self._workers_cache
+
+    def _first_healthy_binding(self, bindings: list[dict[str, Any]]) -> dict[str, Any] | None:
+        workers = self._get_workers()
+        if workers:
+            binding_urls = []
+            for b in bindings:
+                base_url = settings.worker_base_url(b)
+                if base_url:
+                    binding_urls.append(base_url)
+            candidates = [w for w in workers if w.get("base_url") in binding_urls]
+            if candidates:
+                best = choose_best_worker(candidates, max_queue_size=settings.max_worker_queue_size)
+                if best:
+                    logger.debug("load_balancer selected %s (queue=%s, util=%s%%)",
+                                 best.get("base_url"), best.get("queue_size"), best.get("gpu_utilization"))
+                    return {"base_url": best["base_url"]}
+        for b in bindings:
+            base_url = settings.worker_base_url(b)
+            if base_url and self._probe_worker(base_url):
+                return {"base_url": base_url}
+        return None
+
+    def _probe_worker(self, base_url: str) -> bool:
         now = time.time()
         cached = self._worker_health_cache.get(base_url)
         if cached and now - cached[0] < self._worker_health_cache_ttl:
@@ -510,7 +548,7 @@ class ModelRoutingEngine:
             alive = False
         self._worker_health_cache[base_url] = (now, alive)
         if not alive:
-            logger.warning("Worker %s is unreachable, skipping", base_url)
+            logger.warning("Worker %s unreachable, skipping", base_url)
         return alive
 
     def _local_model_fallback(
