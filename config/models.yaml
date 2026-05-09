@@ -48,6 +48,10 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
     capabilities: [chat, thinking, tools, vision]
 
   - name: qwen3-vl:8b
