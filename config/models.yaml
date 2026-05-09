@@ -76,6 +76,10 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
     capabilities: [chat, vision]
     
   - name: qwen3.5:0.8b
@@ -95,68 +99,17 @@ models:
     worker_bindings:
       - node_id: node-p40-01
         port: 11434
+      - node_id: node-p40-01
+        port: 11435
       - node_id: node-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
-    
-  - name: translategemma:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-01
-        port: 11435
-    capabilities: [vision]
 
   - name: qwen3-embedding:8b
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
         port: 11434
-      - node_id: node-01
-        port: 11435
-    capabilities: [embeddings]
-
-  - name: nomic-embed-text-v2-moe:latest
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-01
-        port: 11435
-    capabilities: [embeddings]
-
-  - name: nomic-embed-text:latest
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-01
-        port: 11435
-    capabilities: [embeddings]
-    
-  # ── Tesla P40 #1 (24GB, tier B) — translation ─────────────────
-  - name: qwen3.5:9b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: translategemma:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [vision]
-    
-  - name: qwen3-embedding:8b
-    provider: ollama
-    worker_bindings:
       - node_id: node-p40-01
         port: 11435
       - node_id: node-01
@@ -167,6 +120,8 @@ models:
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
         port: 11435
       - node_id: node-01
         port: 11435
@@ -175,6 +130,8 @@ models:
   - name: nomic-embed-text:latest
     provider: ollama
     worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
       - node_id: node-p40-01
         port: 11435
       - node_id: node-01
