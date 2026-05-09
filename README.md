@@ -107,6 +107,19 @@ cp .env.example .env
 # 5. (GPU workers only) Install Ollama
 # https://ollama.com/download
 # Start Ollama instances on ports 11434, 11435, etc.
+
+# 6. Install & start Redis (required for cluster coordination, async tasks)
+#
+#   macOS (Homebrew):
+#     brew install redis && brew services start redis
+#
+#   Ubuntu / Debian:
+#     sudo apt install redis-server
+#     sudo systemctl enable --now redis-server
+#
+#   Windows WSL (Ubuntu):
+#     # Same as Ubuntu above inside WSL
+#     # Verify: redis-cli ping → PONG
 ```
 
 ### Profiles

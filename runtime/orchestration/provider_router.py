@@ -40,8 +40,7 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
                 return p, None
             if p == "ollama":
                 bindings = item.get("worker_bindings", [])
-                if bindings:
-                    b = bindings[0]
+                for b in bindings:
                     base_url = settings.worker_base_url(b)
                     if base_url:
                         return p, {"base_url": base_url}
@@ -106,10 +105,10 @@ def local_ollama_fallback(
             continue
         capabilities = set(model.get("capabilities", []))
         if required.issubset(capabilities):
-            binding = model.get("worker_bindings", [])[0]
-            base_url = settings.worker_base_url(binding)
-            if base_url:
-                return str(model.get("name")), {"base_url": base_url}
+            for binding in model.get("worker_bindings", []):
+                base_url = settings.worker_base_url(binding)
+                if base_url:
+                    return str(model.get("name")), {"base_url": base_url}
     return None
 
 
@@ -129,12 +128,9 @@ def ollama_model_for_fallback(
             return None
         if explicit_base_url:
             return model_name, {"base_url": explicit_base_url}
-        bindings = model.get("worker_bindings", [])
-        if not bindings:
-            return None
-        binding = bindings[0]
-        base_url = settings.worker_base_url(binding)
-        if not base_url:
-            return None
-        return model_name, {"base_url": base_url}
+        for binding in model.get("worker_bindings", []):
+            base_url = settings.worker_base_url(binding)
+            if base_url:
+                return model_name, {"base_url": base_url}
+        return None
     return None

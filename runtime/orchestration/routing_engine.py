@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
 
 from config.settings import settings
+
+
+logger = logging.getLogger("routing_engine")
 
 
 CAPABILITY_PROVIDER_SCORES = {
@@ -65,6 +70,8 @@ class ModelRoutingEngine:
         self._provider_enabled: dict[str, bool] = {
             provider: True for provider in ROUTING_PROVIDERS
         }
+        self._worker_health_cache: dict[str, tuple[float, bool]] = {}
+        self._worker_health_cache_ttl = 15
         self._provider_credentials: dict[str, bool] = self._check_provider_credentials()
         self._model_overrides: dict[str, str] = {}
         self._routing_rules: list[dict[str, Any]] = []
@@ -308,10 +315,11 @@ class ModelRoutingEngine:
                 bindings = registry_match.get("worker_bindings", [])
                 worker = None
                 if provider == "ollama" and bindings:
-                    b = bindings[0]
-                    base_url = settings.worker_base_url(b)
-                    if base_url:
-                        worker = {"base_url": base_url}
+                    for b in bindings:
+                        base_url = settings.worker_base_url(b)
+                        if base_url and self._worker_is_alive(base_url):
+                            worker = {"base_url": base_url}
+                            break
                 if not self._model_supports_required(registry_match, required_capabilities):
                     rules_applied.append(
                         "registry_match_missing_capabilities "
@@ -483,12 +491,27 @@ class ModelRoutingEngine:
             if m.get("name") in (model, clean_model):
                 bindings = m.get("worker_bindings", [])
                 if bindings:
-                    b = bindings[0]
-                    base_url = settings.worker_base_url(b)
-                    if base_url:
-                        return {"base_url": base_url}
+                    for b in bindings:
+                        base_url = settings.worker_base_url(b)
+                        if base_url and self._worker_is_alive(base_url):
+                            return {"base_url": base_url}
                 return None
         return None
+
+    def _worker_is_alive(self, base_url: str) -> bool:
+        now = time.time()
+        cached = self._worker_health_cache.get(base_url)
+        if cached and now - cached[0] < self._worker_health_cache_ttl:
+            return cached[1]
+        try:
+            resp = requests.get(f"{base_url}/api/tags", timeout=2)
+            alive = resp.ok
+        except requests.RequestException:
+            alive = False
+        self._worker_health_cache[base_url] = (now, alive)
+        if not alive:
+            logger.warning("Worker %s is unreachable, skipping", base_url)
+        return alive
 
     def _local_model_fallback(
         self,
