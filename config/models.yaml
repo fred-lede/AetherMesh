@@ -79,6 +79,8 @@ models:
     worker_bindings:
       - node_id: node-p40-01
         port: 11434
+      - node_id: node-01
+        port: 11435
     capabilities: [embeddings]
 
   - name: nomic-embed-text-v2-moe:latest
@@ -97,27 +99,15 @@ models:
         port: 11435
     capabilities: [embeddings]
 
-  # ── Tesla P40 #1 (24GB, tier B) — embeddings + translation ───
+  # ── Tesla P40 #1 (24GB, tier B) — translation ─────────────────
   - name: translategemma:4b
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
         port: 11435
+      - node_id: node-01
+        port: 11435
     capabilities: [vision]
-
-  - name: qwen3-embedding:4b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [embeddings]
-
-  - name: qwen3-embedding:0.6b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [embeddings]
 
   # ── Cloud providers ─────────────────────────────────────────
   - name: gpt-4.1-mini
