@@ -531,7 +531,8 @@
       const providerSummary = buildProviderSummary(data, pm, routingProviderData, cloudList);
       renderOverallHealth(data, metrics, rm, providerSummary);
 
-      document.getElementById('request-metrics-summary').textContent =
+      const rmsEl = document.getElementById('request-metrics-summary');
+      if (rmsEl) rmsEl.textContent =
         `${rm.total_requests || 0} requests tracked • ${formatPercent(rm.error_rate)} error rate`;
       requestMetricsCards.innerHTML = [
         metricCard('Total Requests', rm.total_requests || 0, `Streaming: ${rm.streaming_requests || 0} | Non-streaming: ${rm.non_streaming_requests || 0}`),
@@ -1233,7 +1234,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model, provider }),
         });
-        document.getElementById('override-model').value = '';
+        const omEl = document.getElementById('override-model');
+        if (omEl) omEl.value = '';
         setOperationStatus(`${model} now routes through ${provider}.`, 'ok');
         await refresh();
       } catch (error) {
