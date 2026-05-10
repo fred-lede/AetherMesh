@@ -637,8 +637,13 @@ async def login(request: Request):
 
     try:
         db = SessionLocal()
+        from sqlalchemy import func, or_
         from runtime.security.auth.password import verify_password
-        db_user = db.query(User).filter(User.email == username.strip().lower(), User.is_active == True).first()
+        lowered = username.strip().lower()
+        db_user = db.query(User).filter(
+            or_(User.email == lowered, func.lower(User.display_name) == lowered),
+            User.is_active == True,
+        ).first()
         if db_user and verify_password(password, db_user.password_hash):
             authenticated = True
         db.close()
