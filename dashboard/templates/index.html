@@ -615,6 +615,7 @@
       <div id="alerts"></div>
     </section>
 
+    {% if user_role == 'admin' %}
     <section class="section card" id="providers-section">
       <div class="section-head">
         <h2>Providers & Routing</h2>
@@ -674,6 +675,7 @@
       <div class="subsection-title">Recent Routing Activity</div>
       <div class="table-wrap" style="margin-top: 12px;"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody id="routing-audit-table"></tbody></table></div>
     </section>
+    {% endif %}
 
     <div class="chart-toolbar">
       <div>
@@ -683,7 +685,9 @@
       <div class="chart-tabs" aria-label="Chart groups">
         <button class="chart-tab active" data-chart-tab="health" onclick="setChartGroup('health')">Health</button>
         <button class="chart-tab" data-chart-tab="traffic" onclick="setChartGroup('traffic')">Traffic</button>
+        {% if user_role == 'admin' %}
         <button class="chart-tab" data-chart-tab="hardware" onclick="setChartGroup('hardware')">Hardware</button>
+        {% endif %}
       </div>
     </div>
 
@@ -739,6 +743,7 @@
           <canvas id="model-chart"></canvas>
         </div>
       </div>
+      {% if user_role == 'admin' %}
       <!-- 硬體監控 (9-12) -->
       <div class="chart-card" data-chart-group="health hardware">
         <h3>GPU Utilization (5m)</h3>
@@ -764,8 +769,10 @@
           <canvas id="temp-chart"></canvas>
         </div>
       </div>
+      {% endif %}
     </section>
 
+    {% if user_role == 'admin' %}
     <section class="section card">
       <div class="section-head">
         <h2>Cluster Nodes</h2>
@@ -793,6 +800,7 @@
       </div>
       <div class="table-wrap"><table><thead><tr><th>Model</th><th>Provider</th><th>Workers (cfg/online)</th><th>Capabilities</th></tr></thead><tbody id="models-table"></tbody></table></div>
     </section>
+    {% endif %}
 
     <section class="section card">
       <div class="section-head">
@@ -816,6 +824,7 @@
       <div class="table-wrap"><table><thead><tr><th>Endpoint</th><th>Requests</th><th>Avg (ms)</th><th>P95 (ms)</th><th>P99 (ms)</th></tr></thead><tbody id="endpoint-latency-table"></tbody></table></div>
     </section>
 
+    {% if user_role == 'admin' %}
     <section class="section card">
       <div class="section-head">
         <h2>GPU OS</h2>
@@ -844,7 +853,7 @@
         </div>
       </div>
     </section>
-
+    {% endif %}
 
   </div>
 
