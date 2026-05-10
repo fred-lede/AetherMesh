@@ -220,6 +220,9 @@ class Launcher:
         self._running = False
 
     def start_all(self, names: list[str] | None = None, daemon: bool = False) -> None:
+        if names is None:
+            from runtime.security import bootstrap_admin
+            bootstrap_admin()
         defs = [s for s in SERVICE_DEFS if names is None or s["name"] in names]
         self._running = True
 

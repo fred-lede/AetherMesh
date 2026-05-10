@@ -460,6 +460,11 @@ All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 | `AIIH_MAX_WORKER_QUEUE` | — | Max queued tasks per worker |
 | `AIIH_PROVIDER_COOLDOWN` | — | Seconds before retrying failed provider |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
+| `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
+| `AIIH_ADMIN_EMAIL` | — | Admin email for first-run bootstrap (creates initial admin) |
+| `AIIH_ADMIN_PASSWORD` | — | Admin password for first-run bootstrap |
+| `AIIH_DB_PATH` | `config/aiih.db` | SQLite database path for auth subsystem |
+| `AIIH_JWT_SECRET` | dev-only fallback | Secret key for JWT token signing |
 | `AIIH_SERVER_TOOL_MODE` | `reject` | Server tool policy (`reject`/`local`/`passthrough`) |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `GEMINI_API_KEY` | — | Gemini API key |
@@ -525,7 +530,7 @@ AetherMesh/
     multi_agent/        Coordinator, planner agent, worker agent
     observability/      Event bus, tracing, metrics
     gpu_os/             GPU device manager, model scheduler
-    security/           Rate limiter, input validator, API key auth
+    security/           Rate limiter, input validator, API key auth, SQLAlchemy DB (User/ApiKey/Session models), JWT, scrypt passwords
     tools/              Tool runtime + builtin tools
     agents/             Agent loop + lifecycle adapter
     mcp/                MCP gateway

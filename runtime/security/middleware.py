@@ -1,15 +1,34 @@
 from __future__ import annotations
 
 import logging
-import time
+import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from runtime.security import api_key_auth, rate_limiter, input_validator
+from runtime.security import rate_limiter, input_validator
+from runtime.security.auth.api_key import validate_api_key
+from runtime.security.database import SessionLocal
 
 logger = logging.getLogger("security.middleware")
+
+
+def _verify_api_key(key: str) -> bool:
+    env_keys = os.getenv("AIIH_API_KEY", "").strip()
+    if env_keys:
+        env_list = [k.strip() for k in env_keys.split(",") if k.strip()]
+        if key in env_list:
+            return True
+    try:
+        db = SessionLocal()
+        try:
+            result = validate_api_key(db, key)
+            return result is not None
+        finally:
+            db.close()
+    except Exception:
+        return False
 
 
 def add_security_middleware(
@@ -26,14 +45,14 @@ def add_security_middleware(
         client_ip = request.client.host if request.client else "unknown"
         api_key = request.headers.get("x-api-key", "") or request.headers.get("authorization", "").replace("Bearer ", "")
 
-        if enable_auth and api_key_auth.enabled:
+        if enable_auth:
             if not api_key:
                 return JSONResponse(
                     status_code=401,
                     content={"type": "error", "error": {"type": "authentication_error", "message": "Missing API key"}},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            if not api_key_auth.validate(api_key):
+            if not _verify_api_key(api_key):
                 return JSONResponse(
                     status_code=401,
                     content={"type": "error", "error": {"type": "authentication_error", "message": "Invalid API key"}},

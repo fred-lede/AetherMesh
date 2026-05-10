@@ -12,7 +12,8 @@ from urllib.parse import parse_qs
 
 from dotenv import load_dotenv
 import requests
-from fastapi import FastAPI, HTTPException, Request, Body
+from fastapi import Depends, FastAPI, HTTPException, Request, Body
+from sqlalchemy.orm import Session as SASession
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi import APIRouter
 
@@ -25,7 +26,9 @@ from metrics.request_metrics import request_metrics
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
-from runtime.security import rate_limiter, api_key_auth, input_validator
+from runtime.security import rate_limiter, api_key_auth, input_validator, SessionLocal
+from runtime.security.database import get_db, init_db
+from runtime.security.models import User
 from runtime.observability import metrics_collector, graph_event_bus
 
 LOGGER = logging.getLogger("aiih.dashboard")
@@ -65,6 +68,14 @@ templates = _Templates()
 STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    init_db()
+    from runtime.security.auth.admin_bootstrap import bootstrap_admin
+
+    bootstrap_admin()
 LOGGER.info("Dashboard starting — auth=%s, refresh=%ss", settings.dashboard_auth_enabled, settings.dashboard_refresh_s)
 api = APIRouter(prefix="/api")
 
@@ -852,6 +863,45 @@ def routing_local_only_enable(request: Request) -> dict[str, Any]:
 def routing_local_only_disable(request: Request) -> dict[str, Any]:
     routing_engine.set_local_only_mode(False, actor=_dashboard_actor(request))
     return {"ok": True, "local_only": False}
+
+# ── API Key management routes ─────────────────────────────────────
+
+@api.get("/security/api-keys")
+def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+    from runtime.security.auth.api_key import list_api_keys as _list_keys
+
+    return _list_keys(db)
+
+
+@api.post("/security/api-keys")
+def create_api_key(
+    request: Request,
+    body: dict[str, Any] = Body(...),
+    db: SASession = Depends(get_db),
+) -> dict[str, Any]:
+    from runtime.security.auth.api_key import create_api_key as _create_key
+
+    name = str(body.get("name", "")).strip()
+    user = db.query(User).filter(User.role == "admin").first()
+    if user is None:
+        raise HTTPException(status_code=500, detail="No admin user found")
+    key, raw = _create_key(db, user.id, name=name)
+    return {**key.to_dict(), "raw_key": raw}
+
+
+@api.delete("/security/api-keys/{key_id}")
+def revoke_api_key(
+    request: Request,
+    key_id: int,
+    db: SASession = Depends(get_db),
+) -> dict[str, Any]:
+    from runtime.security.auth.api_key import revoke_api_key as _revoke_key
+
+    ok = _revoke_key(db, key_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"ok": True}
+
 
 app.include_router(api)
 

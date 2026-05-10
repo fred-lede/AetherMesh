@@ -795,6 +795,37 @@
         <div class="stat-row"><span class="label">Histograms</span><span class="value">${histogramKeys.length}</span></div>
         ${counterKeys.slice(0, 5).map(k => `<div class="stat-row"><span class="label">${escapeHtml(k.slice(8))}</span><span class="value">${obsMetrics[k]}</span></div>`).join('')}`;
 
+      // Render API Keys
+      (async () => {
+        const panel = document.getElementById('api-keys-panel');
+        if (!panel) return;
+        try {
+          const resp = await fetch('/api/security/api-keys');
+          if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load API keys</span>'; return; }
+          const keys = await resp.json();
+          if (!keys || keys.length === 0) {
+            panel.innerHTML = `<span class="pill">No API keys configured</span>
+              <button class="btn btn-sm" onclick="createApiKey()" style="margin-top:8px">Generate Key</button>`;
+            return;
+          }
+          panel.innerHTML = `<table class="table"><thead><tr>
+            <th>Prefix</th><th>Name</th><th>Status</th><th>Created</th><th>Last Used</th><th></th>
+          </tr></thead><tbody>
+            ${keys.map(k => `<tr>
+              <td><code>${escapeHtml(k.key_prefix)}...</code></td>
+              <td>${escapeHtml(k.name || '-')}</td>
+              <td><span class="pill ${k.is_active ? 'ok' : 'disabled'}">${k.is_active ? 'Active' : 'Revoked'}</span></td>
+              <td>${k.created_at ? timeAgo(k.created_at) : '-'}</td>
+              <td>${k.last_used_at ? timeAgo(k.last_used_at) : 'Never'}</td>
+              <td>${k.is_active ? `<button class="btn btn-sm btn-danger" onclick="revokeApiKey(${k.id})">Revoke</button>` : ''}</td>
+            </tr>`).join('')}
+          </tbody></table>
+          <button class="btn btn-sm" onclick="createApiKey()" style="margin-top:8px">Generate Key</button>`;
+        } catch(e) {
+          panel.innerHTML = '<span class="pill warn">Error loading API keys</span>';
+        }
+      })();
+
       // Update chart history
       const now = new Date();
       const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1234,6 +1265,45 @@
         restoreButton();
       }
     }
+
+    window.createApiKey = async function() {
+      const name = prompt('Enter a label for this API key (optional):');
+      if (name === null) return;
+      const restoreButton = setButtonBusy(null, 'Generating...');
+      setOperationStatus('Generating API key...', 'warn');
+      try {
+        const resp = await fetch('/api/security/api-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name || '' }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to create key');
+        const result = await resp.json();
+        alert(`API Key generated!\n\n${result.raw_key}\n\nThis key will only be shown once. Copy it now.`);
+        setOperationStatus('API key generated.', 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    };
+
+    window.revokeApiKey = async function(keyId) {
+      if (!confirm('Revoke this API key? This cannot be undone.')) return;
+      const restoreButton = setButtonBusy(null, 'Revoking...');
+      setOperationStatus('Revoking API key...', 'warn');
+      try {
+        const resp = await fetch(`/api/security/api-keys/${keyId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to revoke key');
+        setOperationStatus('API key revoked.', 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    };
 
     setChartGroup(activeChartGroup);
     refresh().catch(renderDashboardError);

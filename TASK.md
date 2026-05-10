@@ -143,6 +143,19 @@
 - [x] Boot startup: systemd service (Ubuntu), launchd plist (macOS), Task Scheduler (Windows)
 - [x] Updated old systemd files from `ai_inference_hub` to `__ROOT_DIR__` placeholders
 
+## Phase 19 — Database-Backed Auth Subsystem ✅ (2026-05-10)
+- [x] SQLAlchemy + SQLite setup (`runtime/security/database.py`)
+- [x] User / ApiKey / Session ORM models (`runtime/security/models.py`)
+- [x] Password hashing with scrypt (`runtime/security/auth/password.py`)
+- [x] JWT token create/decode (`runtime/security/auth/jwt.py`)
+- [x] Admin bootstrap from env vars (`runtime/security/auth/admin_bootstrap.py`)
+- [x] API key generation / validation / CRUD (`runtime/security/auth/api_key.py`)
+- [x] FastAPI auth dependencies (`runtime/security/auth/dependencies.py`)
+- [x] Middleware updated: env var + DB fallback for API key verification
+- [x] Dashboard API Key management routes + UI (list / create / revoke)
+- [x] Launcher calls bootstrap_admin on startup
+- [x] `.env.example` — added `AIIH_ADMIN_EMAIL`, `AIIH_ADMIN_PASSWORD`, `AIIH_DB_PATH`
+
 ---
 
 ## 執行記錄
@@ -157,3 +170,4 @@
 | 2026-05-08 | Phase 16 | README.md 完整重寫為 v5 kernel-focused 版本 (983→382 lines) |
 | 2026-05-08 | Phase 17 | Dashboard template modernization: JS extracted, CSS inlined, API routes consolidated |
 | 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal + boot startup configs + multi-node docs |
+| 2026-05-10 | Phase 19 | Database-backed auth subsystem: SQLAlchemy models + scrypt passwords + JWT + DB API key validation + Dashboard UI for key management |
