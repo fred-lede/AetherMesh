@@ -669,10 +669,10 @@ async def login(request: Request):
     if not authenticated:
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
 
-    user_info = {}
+    user_info = {"role": "admin"}
     if db_user:
         user_info = {"id": db_user.id, "email": db_user.email, "display_name": db_user.display_name, "role": db_user.role}
-    token = _rotate_session_token(user_info=user_info if user_info else None)
+    token = _rotate_session_token(user_info=user_info)
 
     if db_user and db_user.must_change_password:
         resp = RedirectResponse(url=f"/change-password?email={url_quote(db_user.email)}", status_code=303)
