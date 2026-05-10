@@ -795,6 +795,23 @@
         <div class="stat-row"><span class="label">Histograms</span><span class="value">${histogramKeys.length}</span></div>
         ${counterKeys.slice(0, 5).map(k => `<div class="stat-row"><span class="label">${escapeHtml(k.slice(8))}</span><span class="value">${obsMetrics[k]}</span></div>`).join('')}`;
 
+      // Token usage summary
+      (async () => {
+        const el = document.getElementById('token-usage-summary-dash');
+        if (!el) return;
+        try {
+          const isAdmin = window._userRole === 'admin';
+          const url = isAdmin ? '/api/admin/token-usage/summary' : '/api/auth/me/token-usage/summary';
+          const resp = await fetch(url);
+          if (!resp.ok) { el.innerHTML = ''; return; }
+          const s = await resp.json();
+          if (!s || s.record_count === 0) { el.innerHTML = '<span class="pill">No usage data</span>'; return; }
+          const fmt = (n) => n.toLocaleString();
+          el.innerHTML = `<div class="stat-row"><span class="label">Total Tokens</span><span class="value">${fmt(s.total_tokens)}</span></div>
+            <div class="stat-row"><span class="label">Requests</span><span class="value">${fmt(s.record_count)}</span></div>`;
+        } catch(e) { el.innerHTML = ''; }
+      })();
+
       // Update chart history
       const now = new Date();
       const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });

@@ -61,6 +61,17 @@ def init_db() -> None:
         except Exception:
             pass
 
+        try:
+            row = conn.execute(
+                sqlalchemy.text("PRAGMA table_info(token_usage)")
+            ).fetchall()
+            if not row:
+                Base.metadata.tables["token_usage"].create(bind=conn)
+                conn.commit()
+                logger.info("Created token_usage table")
+        except Exception:
+            pass
+
     logger.info("Database initialized at %s", db_path())
 
 

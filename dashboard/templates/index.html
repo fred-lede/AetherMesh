@@ -615,6 +615,14 @@
       <div id="alerts"></div>
     </section>
 
+    <section class="section card" id="token-usage-section">
+      <div class="section-head">
+        <h2>{% if user_role == 'admin' %}Global{% else %}My{% endif %} Token Usage</h2>
+        <span class="mono" style="color: var(--muted);">Total tokens consumed</span>
+      </div>
+      <div id="token-usage-summary-dash"></div>
+    </section>
+
     {% if user_role == 'admin' %}
     <section class="section card" id="providers-section">
       <div class="section-head">
@@ -857,6 +865,7 @@
 
   </div>
 
+  <script>window._userRole = '{{ user_role }}';</script>
   <script src="/static/dashboard.js"></script>
 </body>
 </html>

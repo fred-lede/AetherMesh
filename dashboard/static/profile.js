@@ -107,8 +107,50 @@
     } finally { restoreButton(); }
   }
 
+  async function loadTokenUsage() {
+    const summaryEl = document.getElementById('token-usage-summary');
+    const chartCanvas = document.getElementById('token-usage-chart');
+    if (!summaryEl) return;
+    try {
+      const [summary, records] = await Promise.all([
+        fetch('/api/auth/me/token-usage/summary').then(r => r.ok ? r.json() : null),
+        fetch('/api/auth/me/token-usage?limit=50').then(r => r.ok ? r.json() : []),
+      ]);
+      if (!summary) { summaryEl.innerHTML = '<span class="pill">No usage data</span>'; return; }
+      const fmt = (n) => n.toLocaleString();
+      summaryEl.innerHTML = `
+        <div class="stat-row"><span class="label">Total Input Tokens</span><span class="value">${fmt(summary.total_input_tokens)}</span></div>
+        <div class="stat-row"><span class="label">Total Output Tokens</span><span class="value">${fmt(summary.total_output_tokens)}</span></div>
+        <div class="stat-row"><span class="label">Total Tokens</span><span class="value">${fmt(summary.total_tokens)}</span></div>
+        <div class="stat-row"><span class="label">Requests</span><span class="value">${fmt(summary.record_count)}</span></div>`;
+      if (!chartCanvas || !records || records.length === 0) return;
+      const dayTotals = {};
+      records.forEach(r => {
+        const day = new Date(r.created_at * 1000).toISOString().slice(0, 10);
+        dayTotals[day] = (dayTotals[day] || 0) + (r.total_tokens || 0);
+      });
+      const days = Object.keys(dayTotals).sort().slice(-7);
+      const data = days.map(d => dayTotals[d]);
+      if (window._tokenChart) { window._tokenChart.destroy(); }
+      const ctx = chartCanvas.getContext('2d');
+      window._tokenChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: days.map(d => d.slice(5)),
+          datasets: [{ label: 'Tokens', data, backgroundColor: 'rgba(94, 234, 212, 0.5)', borderColor: '#5eead4', borderWidth: 1 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { color: '#9fb6c8' }, grid: { color: 'rgba(150,210,255,0.1)' } }, x: { ticks: { color: '#9fb6c8' } } },
+        },
+      });
+    } catch(e) { summaryEl.innerHTML = '<span class="pill warn">Error loading usage</span>'; }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     loadProfile();
+    loadTokenUsage();
     document.querySelector('.change-pwd-btn')?.addEventListener('click', showChangePasswordModal);
     document.querySelector('.toggle-keys-btn')?.addEventListener('click', toggleMyApiKeys);
     window.createMyApiKey = createMyApiKey;

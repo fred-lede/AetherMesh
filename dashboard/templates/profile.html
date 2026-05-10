@@ -141,6 +141,7 @@
     .status-bad { background: rgba(248, 113, 113, 0.14); color: var(--bad); }
 
     .mono { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.82rem; letter-spacing: 0.02em; }
+    .chart-container { position: relative; width: 100%; }
   </style>
 </head>
 <body>
@@ -172,6 +173,14 @@
       <h2>My API Keys</h2>
       <button class="btn btn-sm toggle-keys-btn">Manage My API Keys</button>
       <div id="my-api-keys-panel" style="margin-top:12px;display:none"></div>
+    </div>
+
+    <div class="card">
+      <h2>Token Usage</h2>
+      <div id="token-usage-summary"></div>
+      <div class="chart-container" style="margin-top:14px;max-height:200px">
+        <canvas id="token-usage-chart"></canvas>
+      </div>
     </div>
   </div>
 

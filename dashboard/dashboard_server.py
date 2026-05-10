@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, quote as url_quote
 
 from dotenv import load_dotenv
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Request, Body
+from fastapi import Depends, FastAPI, HTTPException, Request, Body, Query
 from sqlalchemy.orm import Session as SASession
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi import APIRouter
@@ -1268,6 +1268,101 @@ def revoke_my_api_key(request: Request, key_id: int) -> dict[str, Any]:
         if not ok:
             raise HTTPException(status_code=404, detail="API key not found")
         return {"ok": True}
+    finally:
+        db.close()
+
+
+# ── Token usage endpoints ────────────────────────────────────────
+
+@api.post("/auth/me/token-usage/record")
+def record_my_token_usage(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.token_tracker import record_token_usage
+    db = SessionLocal()
+    try:
+        record = record_token_usage(
+            db,
+            user_id=user.id,
+            input_tokens=int(body.get("input_tokens", 0)),
+            output_tokens=int(body.get("output_tokens", 0)),
+            provider=str(body.get("provider", "")),
+            model=str(body.get("model", "")),
+            api_key_id=body.get("api_key_id"),
+        )
+        return record.to_dict()
+    finally:
+        db.close()
+
+
+@api.get("/auth/me/token-usage")
+def my_token_usage(
+    request: Request,
+    from_: float | None = Query(None, alias="from"),
+    to: float | None = Query(None),
+    limit: int = Query(100, le=1000),
+) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.token_tracker import get_token_usage
+    db = SessionLocal()
+    try:
+        records = get_token_usage(db, user_id=user.id, from_ts=from_, to_ts=to, limit=limit)
+        return JSONResponse(content=records)
+    finally:
+        db.close()
+
+
+@api.get("/auth/me/token-usage/summary")
+def my_token_usage_summary(
+    request: Request,
+    from_: float | None = Query(None, alias="from"),
+    to: float | None = Query(None),
+) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.token_tracker import get_token_usage_summary
+    db = SessionLocal()
+    try:
+        summary = get_token_usage_summary(db, user_id=user.id, from_ts=from_, to_ts=to)
+        return JSONResponse(content=summary)
+    finally:
+        db.close()
+
+
+@api.get("/admin/token-usage")
+def admin_token_usage(
+    request: Request,
+    user_id: int | None = Query(None),
+    from_: float | None = Query(None, alias="from"),
+    to: float | None = Query(None),
+    limit: int = Query(100, le=1000),
+) -> JSONResponse:
+    _require_admin(request)
+    from runtime.security.auth.token_tracker import get_token_usage
+    db = SessionLocal()
+    try:
+        records = get_token_usage(db, user_id=user_id, from_ts=from_, to_ts=to, limit=limit)
+        return JSONResponse(content=records)
+    finally:
+        db.close()
+
+
+@api.get("/admin/token-usage/summary")
+def admin_token_usage_summary(
+    request: Request,
+    from_: float | None = Query(None, alias="from"),
+    to: float | None = Query(None),
+) -> JSONResponse:
+    _require_admin(request)
+    from runtime.security.auth.token_tracker import get_token_usage_summary
+    db = SessionLocal()
+    try:
+        summary = get_token_usage_summary(db, from_ts=from_, to_ts=to)
+        return JSONResponse(content=summary)
     finally:
         db.close()
 

@@ -84,3 +84,32 @@ class Session(Base):
             "expires_at": self.expires_at,
             "created_at": self.created_at,
         }
+
+
+class TokenUsage(Base):
+    __tablename__ = "token_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)
+    provider = Column(String(100), nullable=False, default="")
+    model = Column(String(255), nullable=False, default="")
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    created_at = Column(Float, nullable=False, default=time.time)
+
+    user = relationship("User")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "api_key_id": self.api_key_id,
+            "provider": self.provider,
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "created_at": self.created_at,
+        }
