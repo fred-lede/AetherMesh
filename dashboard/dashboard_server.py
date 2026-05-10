@@ -88,12 +88,21 @@ AUTH_EXEMPT_PATHS = {"/health", "/api/health", "/favicon.ico", "/login", "/chang
 AUTH_EXEMPT_PREFIXES = ("/static/",)
 DASHBOARD_SESSION_COOKIE = "aiih_dashboard_session"
 _dashboard_session_token: str = secrets.token_urlsafe(32)
+_sessions: dict[str, dict] = {}
 
 
-def _rotate_session_token() -> str:
+def _rotate_session_token(user_info: dict | None = None) -> str:
     global _dashboard_session_token
     _dashboard_session_token = secrets.token_urlsafe(32)
+    if user_info:
+        _sessions[_dashboard_session_token] = user_info
     return _dashboard_session_token
+
+
+def _session_user_role(request: Request) -> str | None:
+    token = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
+    info = _sessions.get(token)
+    return info.get("role") if info else None
 
 
 def _unauthorized_response() -> Response:
@@ -173,8 +182,15 @@ def _dashboard_actor(request: Request) -> str:
         if basic_username:
             return basic_username
         if _session_auth_valid(request):
-            return "dashboard-user"
+            info = _sessions.get(request.cookies.get(DASHBOARD_SESSION_COOKIE, ""), {})
+            return info.get("display_name", "dashboard-user")
     return "local-dashboard"
+
+
+def _require_admin(request: Request) -> None:
+    role = _session_user_role(request)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 @app.middleware("http")
@@ -653,7 +669,10 @@ async def login(request: Request):
     if not authenticated:
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
 
-    token = _rotate_session_token()
+    user_info = {}
+    if db_user:
+        user_info = {"id": db_user.id, "email": db_user.email, "display_name": db_user.display_name, "role": db_user.role}
+    token = _rotate_session_token(user_info=user_info if user_info else None)
 
     if db_user and db_user.must_change_password:
         resp = RedirectResponse(url=f"/change-password?email={url_quote(db_user.email)}", status_code=303)
@@ -1007,15 +1026,17 @@ def change_password(body: dict[str, Any] = Body(...), db: SASession = Depends(ge
     return {"token": token, "user": user.to_dict()}
 
 
-# ── User management routes ────────────────────────────────────────
+# ── User management routes (admin-only) ───────────────────────────
 
 @api.get("/users")
-def list_users(db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+def list_users(request: Request, db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+    _require_admin(request)
     return [u.to_dict() for u in db.query(User).order_by(User.created_at.desc()).all()]
 
 
 @api.post("/users")
-def create_user(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+def create_user(request: Request, body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    _require_admin(request)
     email = str(body.get("email", "")).strip().lower()
     password = str(body.get("password", ""))
     display_name = str(body.get("display_name", "")).strip() or email.split("@")[0]
@@ -1035,7 +1056,8 @@ def create_user(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db
 
 
 @api.patch("/users/{user_id}")
-def update_user(user_id: int, body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+def update_user(request: Request, user_id: int, body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    _require_admin(request)
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1056,7 +1078,8 @@ def update_user(user_id: int, body: dict[str, Any] = Body(...), db: SASession = 
 
 
 @api.delete("/users/{user_id}")
-def delete_user(user_id: int, db: SASession = Depends(get_db)) -> dict[str, Any]:
+def delete_user(request: Request, user_id: int, db: SASession = Depends(get_db)) -> dict[str, Any]:
+    _require_admin(request)
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
