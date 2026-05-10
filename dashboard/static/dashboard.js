@@ -826,6 +826,36 @@
         }
       })();
 
+      // Render Users
+      (async () => {
+        const panel = document.getElementById('users-panel');
+        if (!panel) return;
+        try {
+          const resp = await fetch('/api/users');
+          if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load users</span>'; return; }
+          const users = await resp.json();
+          panel.innerHTML = `<table class="table"><thead><tr>
+            <th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th></th>
+          </tr></thead><tbody>
+            ${users.map(u => `<tr>
+              <td>${escapeHtml(u.email)}</td>
+              <td>${escapeHtml(u.display_name)}</td>
+              <td><span class="pill ${u.role === 'admin' ? 'warn' : 'ok'}">${escapeHtml(u.role)}</span></td>
+              <td><span class="pill ${u.is_active ? 'ok' : 'disabled'}">${u.is_active ? 'Active' : 'Disabled'}</span></td>
+              <td>${u.created_at ? timeAgo(u.created_at) : '-'}</td>
+              <td>${u.last_login_at ? timeAgo(u.last_login_at) : 'Never'}</td>
+              <td>
+                <button class="btn btn-sm" onclick="editUser(${u.id}, '${escapeHtml(u.email)}', '${escapeHtml(u.display_name)}', '${u.role}', ${u.is_active})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.email)}')">Delete</button>
+              </td>
+            </tr>`).join('')}
+          </tbody></table>
+          <button class="btn btn-sm" onclick="showCreateUserModal()" style="margin-top:8px">Add User</button>`;
+        } catch(e) {
+          panel.innerHTML = '<span class="pill warn">Error loading users</span>';
+        }
+      })();
+
       // Update chart history
       const now = new Date();
       const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1297,6 +1327,101 @@
         const resp = await fetch(`/api/security/api-keys/${keyId}`, { method: 'DELETE' });
         if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to revoke key');
         setOperationStatus('API key revoked.', 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    };
+
+    window.showCreateUserModal = function() {
+      const email = prompt('Email address:');
+      if (!email) return;
+      const password = prompt('Password (min 8 characters):');
+      if (!password || password.length < 8) { alert('Password must be at least 8 characters.'); return; }
+      const displayName = prompt('Display name (optional):') || email.split('@')[0];
+      const role = prompt('Role (admin or user):') || 'user';
+      createUser({ email, password, display_name: displayName, role });
+    };
+
+    async function createUser(data) {
+      const restoreButton = setButtonBusy(null, 'Creating...');
+      setOperationStatus('Creating user...', 'warn');
+      try {
+        const resp = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to create user');
+        setOperationStatus(`User ${data.email} created.`, 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    }
+
+    window.editUser = function(userId, email, displayName, role, isActive) {
+      const newDisplayName = prompt('Display name:', displayName);
+      if (newDisplayName === null) return;
+      const newRole = prompt('Role (admin or user):', role);
+      if (newRole === null) return;
+      const newPassword = prompt('New password (leave blank to keep current):');
+      const body = { display_name: newDisplayName, role: newRole };
+      if (newPassword) body.password = newPassword;
+
+      const restoreButton = setButtonBusy(null, 'Saving...');
+      setOperationStatus(`Updating user ${email}...`, 'warn');
+      (async () => {
+        try {
+          const resp = await fetch(`/api/users/${userId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to update user');
+          setOperationStatus(`User ${email} updated.`, 'ok');
+          await refresh();
+        } catch (error) {
+          setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+        } finally {
+          restoreButton();
+        }
+      })();
+    };
+
+    window.toggleUserStatus = async function(userId, email, currentActive) {
+      const action = currentActive ? 'disable' : 'enable';
+      if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} user ${email}?`)) return;
+      const restoreButton = setButtonBusy(null, 'Updating...');
+      setOperationStatus(`${action.charAt(0).toUpperCase() + action.slice(1)}ing user...`, 'warn');
+      try {
+        const resp = await fetch(`/api/users/${userId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: !currentActive }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to update user');
+        setOperationStatus(`User ${email} ${action}d.`, 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    };
+
+    window.deleteUser = async function(userId, email) {
+      if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
+      const restoreButton = setButtonBusy(null, 'Deleting...');
+      setOperationStatus(`Deleting user ${email}...`, 'warn');
+      try {
+        const resp = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to delete user');
+        setOperationStatus(`User ${email} deleted.`, 'ok');
         await refresh();
       } catch (error) {
         setOperationStatus(`Failed: ${summarizeError(error)}`, 'bad');

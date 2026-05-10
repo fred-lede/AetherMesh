@@ -155,6 +155,9 @@
 - [x] Dashboard API Key management routes + UI (list / create / revoke)
 - [x] Launcher calls bootstrap_admin on startup
 - [x] `.env.example` — added `AIIH_ADMIN_EMAIL`, `AIIH_ADMIN_PASSWORD`, `AIIH_DB_PATH`
+- [x] `POST /api/auth/login` — JWT login endpoint (email + password)
+- [x] User CRUD routes: `GET /api/users`, `POST /api/users`, `PATCH /api/users/{id}`, `DELETE /api/users/{id}`
+- [x] Dashboard Users section — list / create / edit (name, role, password) / delete
 
 ---
 
@@ -171,3 +174,4 @@
 | 2026-05-08 | Phase 17 | Dashboard template modernization: JS extracted, CSS inlined, API routes consolidated |
 | 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal + boot startup configs + multi-node docs |
 | 2026-05-10 | Phase 19 | Database-backed auth subsystem: SQLAlchemy models + scrypt passwords + JWT + DB API key validation + Dashboard UI for key management |
+| 2026-05-10 | Phase 19 | User management CRUD: `POST /api/auth/login`, `GET/POST /api/users`, `PATCH/DELETE /api/users/{id}`, Dashboard Users UI |

@@ -29,6 +29,8 @@ from runtime.gpu_os import gpu_manager, model_scheduler
 from runtime.security import rate_limiter, api_key_auth, input_validator, SessionLocal
 from runtime.security.database import get_db, init_db
 from runtime.security.models import User
+from runtime.security.auth.password import hash_password
+from runtime.security.auth.jwt import create_access_token
 from runtime.observability import metrics_collector, graph_event_bus
 
 LOGGER = logging.getLogger("aiih.dashboard")
@@ -863,6 +865,83 @@ def routing_local_only_enable(request: Request) -> dict[str, Any]:
 def routing_local_only_disable(request: Request) -> dict[str, Any]:
     routing_engine.set_local_only_mode(False, actor=_dashboard_actor(request))
     return {"ok": True, "local_only": False}
+
+# ── Auth routes ───────────────────────────────────────────────────
+
+@api.post("/auth/login")
+def login(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    email = str(body.get("email", "")).strip().lower()
+    password = str(body.get("password", ""))
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+    from runtime.security.auth.password import verify_password
+
+    user = db.query(User).filter(User.email == email, User.is_active == True).first()
+    if user is None or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    user.last_login_at = __import__("time").time()
+    db.commit()
+    token = create_access_token(user.id, user.role)
+    return {"token": token, "user": user.to_dict()}
+
+
+# ── User management routes ────────────────────────────────────────
+
+@api.get("/users")
+def list_users(db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+    return [u.to_dict() for u in db.query(User).order_by(User.created_at.desc()).all()]
+
+
+@api.post("/users")
+def create_user(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    email = str(body.get("email", "")).strip().lower()
+    password = str(body.get("password", ""))
+    display_name = str(body.get("display_name", "")).strip() or email.split("@")[0]
+    role = str(body.get("role", "user")).strip()
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+    if role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="role must be 'admin' or 'user'")
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(email=email, password_hash=hash_password(password), display_name=display_name, role=role)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user.to_dict()
+
+
+@api.patch("/users/{user_id}")
+def update_user(user_id: int, body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if "display_name" in body:
+        user.display_name = str(body["display_name"]).strip()
+    if "role" in body:
+        role = str(body["role"]).strip()
+        if role not in ("admin", "user"):
+            raise HTTPException(status_code=400, detail="role must be 'admin' or 'user'")
+        user.role = role
+    if "is_active" in body:
+        user.is_active = bool(body["is_active"])
+    if "password" in body and body["password"]:
+        user.password_hash = hash_password(str(body["password"]))
+    db.commit()
+    db.refresh(user)
+    return user.to_dict()
+
+
+@api.delete("/users/{user_id}")
+def delete_user(user_id: int, db: SASession = Depends(get_db)) -> dict[str, Any]:
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return {"ok": True}
+
 
 # ── API Key management routes ─────────────────────────────────────
 

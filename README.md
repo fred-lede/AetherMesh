@@ -530,7 +530,7 @@ AetherMesh/
     multi_agent/        Coordinator, planner agent, worker agent
     observability/      Event bus, tracing, metrics
     gpu_os/             GPU device manager, model scheduler
-    security/           Rate limiter, input validator, API key auth, SQLAlchemy DB (User/ApiKey/Session models), JWT, scrypt passwords
+    security/           Rate limiter, input validator, API key auth, SQLAlchemy DB (User/ApiKey/Session models), JWT, scrypt passwords, user management API
     tools/              Tool runtime + builtin tools
     agents/             Agent loop + lifecycle adapter
     mcp/                MCP gateway
