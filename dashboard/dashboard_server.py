@@ -42,7 +42,7 @@ _ENV = Environment(loader=FileSystemLoader(_TEMPLATES_DIR))
 _ENV.cache = None
 
 _compiled_templates: dict[str, Template] = {}
-for _tpl_name in ("index.html", "login.html", "task_detail.html", "change_password.html"):
+for _tpl_name in ("index.html", "login.html", "task_detail.html", "change_password.html", "profile.html", "admin_users.html", "admin_api_keys.html"):
     _source, _filename, _uptodate = _ENV.loader.get_source(_ENV, _tpl_name)
     _compiled_templates[_tpl_name] = _ENV.from_string(_source)
 
@@ -761,6 +761,7 @@ async def change_password_form(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    user_role = _session_user_role(request) or "user"
     return templates.TemplateResponse(
         "index.html",
         {
@@ -768,7 +769,39 @@ def index(request: Request):
             "refresh_seconds": settings.dashboard_refresh_s,
             "control_plane_url": settings.control_plane_url,
             "auth_enabled": settings.dashboard_auth_enabled,
+            "user_role": user_role,
         },
+    )
+
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile_page(request: Request):
+    token = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
+    info = _sessions.get(token)
+    if not info:
+        return RedirectResponse(url="/login", status_code=303)
+    user_role = info.get("role", "user")
+    return templates.TemplateResponse(
+        "profile.html",
+        {"request": request, "user_role": user_role},
+    )
+
+
+@app.get("/admin/users", response_class=HTMLResponse)
+def admin_users_page(request: Request):
+    _require_admin(request)
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {"request": request, "user_role": "admin"},
+    )
+
+
+@app.get("/admin/api-keys", response_class=HTMLResponse)
+def admin_api_keys_page(request: Request):
+    _require_admin(request)
+    return templates.TemplateResponse(
+        "admin_api_keys.html",
+        {"request": request, "user_role": "admin"},
     )
 
 
