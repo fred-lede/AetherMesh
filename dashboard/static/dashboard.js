@@ -801,6 +801,7 @@
         if (!panel) return;
         try {
           const resp = await fetch('/api/security/api-keys');
+          if (resp.status === 403) { panel.innerHTML = '<span class="pill">Admin access required</span>'; return; }
           if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load API keys</span>'; return; }
           const keys = await resp.json();
           if (!keys || keys.length === 0) {
@@ -832,6 +833,7 @@
         if (!panel) return;
         try {
           const resp = await fetch('/api/users');
+          if (resp.status === 403) { panel.innerHTML = '<span class="pill">Admin access required</span>'; return; }
           if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load users</span>'; return; }
           const users = await resp.json();
           panel.innerHTML = `<table class="table"><thead><tr>
