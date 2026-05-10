@@ -225,7 +225,10 @@ async def dashboard_basic_auth(request: Request, call_next):
         return await call_next(request)
 
     if request.url.path.startswith("/api/"):
-        return _unauthorized_response()
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Session expired, please login again"},
+        )
 
     if request.method == "GET" and _wants_html(request):
         return RedirectResponse(url="/login", status_code=303)

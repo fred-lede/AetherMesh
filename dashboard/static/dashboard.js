@@ -1199,8 +1199,13 @@
       setChartGroup(activeChartGroup);
     }
 
+    function redirectLogin() {
+      window.location.href = '/login';
+    }
+
     async function refresh() {
       const response = await fetch('/api/overview');
+      if (response.status === 401) { redirectLogin(); return; }
       if (!response.ok) {
         let message = `Overview API returned ${response.status}`;
         try {
@@ -1535,6 +1540,7 @@
       if (!panel) return;
       try {
         const resp = await fetch('/api/auth/me');
+        if (resp.status === 401) { redirectLogin(); return; }
         if (!resp.ok) { panel.innerHTML = ''; return; }
         const me = await resp.json();
         panel.innerHTML = `
