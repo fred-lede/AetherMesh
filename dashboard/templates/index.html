@@ -81,22 +81,6 @@
       text-align: right;
       color: var(--muted);
     }
-    .logout-form {
-      margin: 0;
-    }
-    .logout-button {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 7px 10px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.04);
-      font: inherit;
-      cursor: pointer;
-    }
-    .logout-button:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
@@ -596,11 +580,6 @@
         <div>Control Plane: <span class="mono">{{ control_plane_url }}</span></div>
         <div>Refresh: <span class="mono">{{ refresh_seconds }}s</span></div>
         <div id="updated">Updating...</div>
-        {% if auth_enabled %}
-          <form class="logout-form" method="post" action="/logout">
-            <button class="logout-button" type="submit">Sign out</button>
-          </form>
-        {% endif %}
       </div>
     </section>
 
