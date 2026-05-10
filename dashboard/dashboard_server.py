@@ -42,7 +42,7 @@ _ENV = Environment(loader=FileSystemLoader(_TEMPLATES_DIR))
 _ENV.cache = None
 
 _compiled_templates: dict[str, Template] = {}
-for _tpl_name in ("index.html", "login.html", "task_detail.html"):
+for _tpl_name in ("index.html", "login.html", "task_detail.html", "change_password.html"):
     _source, _filename, _uptodate = _ENV.loader.get_source(_ENV, _tpl_name)
     _compiled_templates[_tpl_name] = _ENV.from_string(_source)
 
@@ -84,7 +84,7 @@ def _on_startup() -> None:
 LOGGER.info("Dashboard starting — auth=%s, refresh=%ss", settings.dashboard_auth_enabled, settings.dashboard_refresh_s)
 api = APIRouter(prefix="/api")
 
-AUTH_EXEMPT_PATHS = {"/health", "/api/health", "/favicon.ico", "/login"}
+AUTH_EXEMPT_PATHS = {"/health", "/api/health", "/favicon.ico", "/login", "/change-password"}
 AUTH_EXEMPT_PREFIXES = ("/static/",)
 DASHBOARD_SESSION_COOKIE = "aiih_dashboard_session"
 _dashboard_session_token: str = secrets.token_urlsafe(32)
@@ -653,18 +653,15 @@ async def login(request: Request):
     if not authenticated:
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
 
+    token = _rotate_session_token()
+
     if db_user and db_user.must_change_password:
-        return RedirectResponse(url=f"/change-password?email={url_quote(db_user.email)}", status_code=303)
+        resp = RedirectResponse(url=f"/change-password?email={url_quote(db_user.email)}", status_code=303)
+        resp.set_cookie(DASHBOARD_SESSION_COOKIE, token, httponly=True, samesite="lax", secure=request.url.scheme == "https")
+        return resp
 
     response = RedirectResponse(url="/", status_code=303)
-    token = _rotate_session_token()
-    response.set_cookie(
-        DASHBOARD_SESSION_COOKIE,
-        token,
-        httponly=True,
-        samesite="lax",
-        secure=request.url.scheme == "https",
-    )
+    response.set_cookie(DASHBOARD_SESSION_COOKIE, token, httponly=True, samesite="lax", secure=request.url.scheme == "https")
     return response
 
 
