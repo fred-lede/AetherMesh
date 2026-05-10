@@ -629,22 +629,21 @@ async def login(request: Request):
     password = form.get("password", [""])[0]
 
     authenticated = False
+    db_user = None
     if _auth_credentials_configured():
         username_ok = secrets.compare_digest(username, settings.dashboard_auth_username)
         password_ok = secrets.compare_digest(password, settings.dashboard_auth_password)
         authenticated = username_ok and password_ok
 
-    db_user = None
-    if not authenticated:
-        try:
-            db = SessionLocal()
-            from runtime.security.auth.password import verify_password
-            db_user = db.query(User).filter(User.email == username.strip().lower(), User.is_active == True).first()
-            if db_user and verify_password(password, db_user.password_hash):
-                authenticated = True
-            db.close()
-        except Exception:
-            pass
+    try:
+        db = SessionLocal()
+        from runtime.security.auth.password import verify_password
+        db_user = db.query(User).filter(User.email == username.strip().lower(), User.is_active == True).first()
+        if db_user and verify_password(password, db_user.password_hash):
+            authenticated = True
+        db.close()
+    except Exception as exc:
+        LOGGER.warning("DB login fallback failed: %s", exc)
 
     if not authenticated:
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
