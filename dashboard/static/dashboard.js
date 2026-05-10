@@ -859,29 +859,6 @@
         }
       })();
 
-      // Render Profile
-      (async () => {
-        const panel = document.getElementById('profile-panel');
-        if (!panel) return;
-        try {
-          const resp = await fetch('/api/auth/me');
-          if (!resp.ok) { panel.innerHTML = ''; return; }
-          const me = await resp.json();
-          panel.innerHTML = `
-            <div class="stat-row"><span class="label">Email</span><span class="value">${escapeHtml(me.email)}</span></div>
-            <div class="stat-row"><span class="label">Name</span><span class="value">${escapeHtml(me.display_name)}</span></div>
-            <div class="stat-row"><span class="label">Role</span><span class="value"><span class="pill ${me.role === 'admin' ? 'warn' : 'ok'}">${escapeHtml(me.role)}</span></span></div>
-            <hr style="border-color:var(--line);margin:12px 0">
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-sm" onclick="showChangePasswordModal()">Change Password</button>
-              <button class="btn btn-sm" onclick="showMyApiKeys()">Manage My API Keys</button>
-            </div>
-            <div id="my-api-keys-panel" style="margin-top:12px;display:none"></div>`;
-        } catch(e) {
-          panel.innerHTML = '';
-        }
-      })();
-
       // Update chart history
       const now = new Date();
       const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1551,6 +1528,29 @@
 
     setChartGroup(activeChartGroup);
     refresh().catch(renderDashboardError);
+
+    // Render Profile once (not inside renderOverview to avoid SSE refresh destroying panels)
+    (async () => {
+      const panel = document.getElementById('profile-panel');
+      if (!panel) return;
+      try {
+        const resp = await fetch('/api/auth/me');
+        if (!resp.ok) { panel.innerHTML = ''; return; }
+        const me = await resp.json();
+        panel.innerHTML = `
+          <div class="stat-row"><span class="label">Email</span><span class="value">${escapeHtml(me.email)}</span></div>
+          <div class="stat-row"><span class="label">Name</span><span class="value">${escapeHtml(me.display_name)}</span></div>
+          <div class="stat-row"><span class="label">Role</span><span class="value"><span class="pill ${me.role === 'admin' ? 'warn' : 'ok'}">${escapeHtml(me.role)}</span></span></div>
+          <hr style="border-color:var(--line);margin:12px 0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="showChangePasswordModal()">Change Password</button>
+            <button class="btn btn-sm" onclick="showMyApiKeys()">Manage My API Keys</button>
+          </div>
+          <div id="my-api-keys-panel" style="margin-top:12px;display:none"></div>`;
+      } catch(e) {
+        panel.innerHTML = '';
+      }
+    })();
 
     // SSE with exponential backoff
     let sseRetryDelay = 1000;
