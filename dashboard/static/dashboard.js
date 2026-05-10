@@ -876,7 +876,7 @@
               <button class="btn btn-sm" onclick="showChangePasswordModal()">Change Password</button>
               <button class="btn btn-sm" onclick="showMyApiKeys()">Manage My API Keys</button>
             </div>
-            <div id="my-api-keys-panel" style="margin-top:12px"></div>`;
+            <div id="my-api-keys-panel" style="margin-top:12px;display:none"></div>`;
         } catch(e) {
           panel.innerHTML = '';
         }
@@ -1484,9 +1484,13 @@
     window.showMyApiKeys = async function() {
       const panel = document.getElementById('my-api-keys-panel');
       if (!panel) return;
-      const visible = panel.style.display !== 'none';
-      if (visible) { panel.style.display = 'none'; return; }
-      panel.style.display = 'block';
+      const isHidden = !panel.style.display || panel.style.display === 'none';
+      if (isHidden) {
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+        return;
+      }
       try {
         const resp = await fetch('/api/auth/me/api-keys');
         if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load</span>'; return; }
