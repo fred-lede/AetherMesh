@@ -105,6 +105,18 @@ def _session_user_role(request: Request) -> str | None:
     return info.get("role") if info else None
 
 
+def _current_user(request: Request) -> User | None:
+    token = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
+    info = _sessions.get(token)
+    if not info or "id" not in info:
+        return None
+    db = SessionLocal()
+    try:
+        return db.query(User).filter(User.id == info["id"]).first()
+    finally:
+        db.close()
+
+
 def _unauthorized_response() -> Response:
     return Response(
         content="Dashboard authentication required.",
@@ -168,7 +180,7 @@ def _basic_auth_username(request: Request) -> str | None:
 
 def _session_auth_valid(request: Request) -> bool:
     session = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
-    return bool(session) and secrets.compare_digest(session, _dashboard_session_token)
+    return bool(session) and session in _sessions
 
 
 def _wants_html(request: Request) -> bool:
@@ -1029,9 +1041,12 @@ def change_password(body: dict[str, Any] = Body(...), db: SASession = Depends(ge
 # ── User management routes (admin-only) ───────────────────────────
 
 @api.get("/users")
-def list_users(request: Request, db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+def list_users(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
     _require_admin(request)
-    return [u.to_dict() for u in db.query(User).order_by(User.created_at.desc()).all()]
+    return JSONResponse(
+        content=[u.to_dict() for u in db.query(User).order_by(User.created_at.desc()).all()],
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @api.post("/users")
@@ -1088,13 +1103,21 @@ def delete_user(request: Request, user_id: int, db: SASession = Depends(get_db))
     return {"ok": True}
 
 
-# ── API Key management routes ─────────────────────────────────────
+# ── API Key management routes (admin) ─────────────────────────────
 
 @api.get("/security/api-keys")
-def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> list[dict[str, Any]]:
+def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
+    _require_admin(request)
     from runtime.security.auth.api_key import list_api_keys as _list_keys
-
-    return _list_keys(db)
+    from runtime.security.models import User
+    keys = _list_keys(db)
+    user_ids = {k["user_id"] for k in keys}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    for k in keys:
+        owner = users.get(k["user_id"])
+        k["owner_email"] = owner.email if owner else None
+        k["owner_display_name"] = owner.display_name if owner else None
+    return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @api.post("/security/api-keys")
@@ -1103,6 +1126,7 @@ def create_api_key(
     body: dict[str, Any] = Body(...),
     db: SASession = Depends(get_db),
 ) -> dict[str, Any]:
+    _require_admin(request)
     from runtime.security.auth.api_key import create_api_key as _create_key
 
     name = str(body.get("name", "")).strip()
@@ -1119,12 +1143,97 @@ def revoke_api_key(
     key_id: int,
     db: SASession = Depends(get_db),
 ) -> dict[str, Any]:
+    _require_admin(request)
     from runtime.security.auth.api_key import revoke_api_key as _revoke_key
 
     ok = _revoke_key(db, key_id)
     if not ok:
         raise HTTPException(status_code=404, detail="API key not found")
     return {"ok": True}
+
+
+# ── Self-service routes (current user) ──────────────────────────
+
+@api.get("/auth/me")
+def get_me(request: Request) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return JSONResponse(content=user.to_dict(), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
+@api.post("/auth/me/change-password")
+def change_my_password(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    old_password = str(body.get("old_password", ""))
+    new_password = str(body.get("new_password", ""))
+    if not old_password or not new_password:
+        raise HTTPException(status_code=400, detail="old_password and new_password are required")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    from runtime.security.auth.password import verify_password
+
+    if not verify_password(old_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.id == user.id).first()
+        u.password_hash = hash_password(new_password)
+        u.must_change_password = False
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True}
+
+
+@api.get("/auth/me/api-keys")
+def list_my_api_keys(request: Request) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.api_key import list_api_keys as _list_keys
+
+    db = SessionLocal()
+    try:
+        keys = _list_keys(db, user_id=user.id)
+        return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    finally:
+        db.close()
+
+
+@api.post("/auth/me/api-keys")
+def create_my_api_key(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.api_key import create_api_key as _create_key
+
+    name = str(body.get("name", "")).strip()
+    db = SessionLocal()
+    try:
+        key, raw = _create_key(db, user.id, name=name)
+        return {**key.to_dict(), "raw_key": raw}
+    finally:
+        db.close()
+
+
+@api.delete("/auth/me/api-keys/{key_id}")
+def revoke_my_api_key(request: Request, key_id: int) -> dict[str, Any]:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from runtime.security.auth.api_key import revoke_api_key as _revoke_key
+
+    db = SessionLocal()
+    try:
+        ok = _revoke_key(db, key_id, user_id=user.id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="API key not found")
+        return {"ok": True}
+    finally:
+        db.close()
 
 
 app.include_router(api)
