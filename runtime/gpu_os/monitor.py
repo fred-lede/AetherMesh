@@ -79,6 +79,34 @@ class GPUManager:
         if device:
             device.utilization = round(pct, 1)
 
+    def refresh(self, ttl_seconds: float = 15.0) -> None:
+        now = time.time()
+        if getattr(self, "_last_refresh", 0) + ttl_seconds > now:
+            return
+        self._last_refresh = now
+        try:
+            from cluster.gpu_discovery import discover_gpus
+
+            for gpu in discover_gpus():
+                device_id = f"cuda:{gpu.get('id', 0)}"
+                total_mb = int(gpu.get("memory", 0))
+                existing = self._devices.get(device_id)
+                if existing:
+                    existing.utilization = gpu.get("utilization", 0.0)
+                    existing.temperature = gpu.get("temperature", 0.0)
+                else:
+                    dev = GPUDevice(
+                        device_id=device_id,
+                        name=gpu.get("name", "Unknown GPU"),
+                        total_vram_gb=round(total_mb / 1024.0, 1),
+                        available_vram_gb=round(total_mb / 1024.0, 1),
+                        utilization=gpu.get("utilization", 0.0),
+                        temperature=gpu.get("temperature", 0.0),
+                    )
+                    self.register_device(dev)
+        except Exception:
+            pass
+
     def snapshot(self) -> list[dict[str, Any]]:
         return [d.to_dict() for d in self._devices.values()]
 
@@ -90,3 +118,25 @@ class GPUManager:
 
 
 gpu_manager = GPUManager()
+
+
+def _auto_register_gpus() -> None:
+    try:
+        from cluster.gpu_discovery import discover_gpus
+
+        for gpu in discover_gpus():
+            total_mb = int(gpu.get("memory", 0))
+            dev = GPUDevice(
+                device_id=f"cuda:{gpu.get('id', 0)}",
+                name=gpu.get("name", "Unknown GPU"),
+                total_vram_gb=round(total_mb / 1024.0, 1),
+                available_vram_gb=round(total_mb / 1024.0, 1),
+                utilization=gpu.get("utilization", 0.0),
+                temperature=gpu.get("temperature", 0.0),
+            )
+            gpu_manager.register_device(dev)
+    except Exception:
+        pass  # GPU discovery may fail (no driver, no nvidia-smi, etc.)
+
+
+_auto_register_gpus()

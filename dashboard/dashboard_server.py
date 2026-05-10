@@ -683,7 +683,7 @@ def _build_overview() -> dict[str, Any]:
         "overview_errors": overview_errors,
         "web_search_providers": _web_search_providers(),
         "gpu_os": {
-            "devices": gpu_manager.snapshot(),
+            "devices": gpu_manager.refresh() or gpu_manager.snapshot(),
             "scheduler": model_scheduler.snapshot(),
         },
         "multi_agent": {
