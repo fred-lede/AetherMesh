@@ -699,6 +699,7 @@ async def login(request: Request):
     return response
 
 
+@app.get("/logout")
 @app.post("/logout")
 def logout():
     response = RedirectResponse(url="/login", status_code=303)
