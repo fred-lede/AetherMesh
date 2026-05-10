@@ -107,7 +107,7 @@ def _cmd_for(svc: dict[str, Any]) -> list[str]:
     pm = svc.get("python_module")
     if pm:
         return [sys.executable, "-m", pm]
-    return [
+    cmd = [
         sys.executable,
         "-m",
         "uvicorn",
@@ -119,6 +119,11 @@ def _cmd_for(svc: dict[str, Any]) -> list[str]:
         "--log-level",
         "info",
     ]
+    cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
+    key = os.getenv("AIIH_SSL_KEYFILE", "").strip()
+    if cert and key:
+        cmd += ["--ssl-certfile", cert, "--ssl-keyfile", key]
+    return cmd
 
 
 class ServiceProcess:

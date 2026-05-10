@@ -857,4 +857,10 @@ app.include_router(api)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=9001)
+    kwargs = {}
+    cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
+    key = os.getenv("AIIH_SSL_KEYFILE", "").strip()
+    if cert and key:
+        kwargs["ssl_certfile"] = cert
+        kwargs["ssl_keyfile"] = key
+    uvicorn.run(app, host="0.0.0.0", port=9001, **kwargs)

@@ -87,8 +87,18 @@ class Settings:
     rate_limit_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_RATE_LIMIT_ENABLED", "false"))
     rate_limit_per_minute: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_PER_MINUTE", 60))
     rate_limit_burst: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_BURST", 10))
+    ssl_certfile: str = field(default_factory=lambda: os.getenv("AIIH_SSL_CERTFILE", "").strip())
+    ssl_keyfile: str = field(default_factory=lambda: os.getenv("AIIH_SSL_KEYFILE", "").strip())
     local_worker_ports: list[int] = field(default_factory=lambda: [11434, 11435, 11436, 11437])
     config_dir: Path = field(default_factory=_detect_config_dir)
+
+    @property
+    def tls_enabled(self) -> bool:
+        return bool(self.ssl_certfile and self.ssl_keyfile)
+
+    @property
+    def api_scheme(self) -> str:
+        return "https" if self.tls_enabled else "http"
 
     def config_path(self, filename: str) -> Path:
         return self.config_dir / filename

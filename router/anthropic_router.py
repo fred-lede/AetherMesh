@@ -129,5 +129,12 @@ def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    kwargs = {}
+    cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
+    key = os.getenv("AIIH_SSL_KEYFILE", "").strip()
+    if cert and key:
+        kwargs["ssl_certfile"] = cert
+        kwargs["ssl_keyfile"] = key
+    uvicorn.run(app, host="0.0.0.0", port=8002, **kwargs)

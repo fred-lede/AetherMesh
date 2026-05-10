@@ -504,7 +504,7 @@ class ModelRoutingEngine:
         if now - self._workers_cache_at < self._workers_cache_ttl:
             return self._workers_cache
         try:
-            resp = requests.get("http://127.0.0.1:9200/cluster/workers", timeout=3)
+            resp = requests.get(f"{settings.control_plane_url}/cluster/workers", timeout=3)
             if resp.ok:
                 data = resp.json()
                 self._workers_cache = data.get("workers", [])
