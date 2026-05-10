@@ -18,6 +18,7 @@ class User(Base):
     display_name = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="user")
     is_active = Column(Boolean, nullable=False, default=True)
+    must_change_password = Column(Boolean, nullable=False, default=False)
     created_at = Column(Float, nullable=False, default=time.time)
     last_login_at = Column(Float, nullable=True)
 
@@ -30,6 +31,7 @@ class User(Base):
             "display_name": self.display_name,
             "role": self.role,
             "is_active": self.is_active,
+            "must_change_password": self.must_change_password,
             "created_at": self.created_at,
             "last_login_at": self.last_login_at,
         }

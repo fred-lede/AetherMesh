@@ -8,7 +8,7 @@ import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote as url_quote
 
 from dotenv import load_dotenv
 import requests
@@ -102,7 +102,15 @@ def _unauthorized_response() -> Response:
 
 
 def _auth_credentials_configured() -> bool:
-    return bool(settings.dashboard_auth_username and settings.dashboard_auth_password)
+    if settings.dashboard_auth_username and settings.dashboard_auth_password:
+        return True
+    try:
+        db = SessionLocal()
+        has_users = db.query(User).first() is not None
+        db.close()
+        return has_users
+    except Exception:
+        return False
 
 
 def _basic_auth_valid(request: Request) -> bool:
@@ -127,9 +135,23 @@ def _basic_auth_username(request: Request) -> str | None:
     if not separator:
         return None
 
-    username_ok = secrets.compare_digest(username, settings.dashboard_auth_username)
-    password_ok = secrets.compare_digest(password, settings.dashboard_auth_password)
-    return username if username_ok and password_ok else None
+    if _auth_credentials_configured():
+        username_ok = secrets.compare_digest(username, settings.dashboard_auth_username)
+        password_ok = secrets.compare_digest(password, settings.dashboard_auth_password)
+        if username_ok and password_ok:
+            return username
+
+    try:
+        from runtime.security.auth.password import verify_password
+        db = SessionLocal()
+        user = db.query(User).filter(User.email == username.strip().lower(), User.is_active == True).first()
+        db.close()
+        if user and verify_password(password, user.password_hash):
+            return username
+    except Exception:
+        pass
+
+    return None
 
 
 def _session_auth_valid(request: Request) -> bool:
@@ -148,7 +170,7 @@ def _dashboard_actor(request: Request) -> str:
         if basic_username:
             return basic_username
         if _session_auth_valid(request):
-            return settings.dashboard_auth_username
+            return "dashboard-user"
     return "local-dashboard"
 
 
@@ -597,18 +619,35 @@ def login_page(request: Request, error: str | None = None):
 async def login(request: Request):
     if not settings.dashboard_auth_enabled:
         return RedirectResponse(url="/", status_code=303)
-    if not _auth_credentials_configured():
-        return RedirectResponse(url="/login?error=missing_credentials", status_code=303)
 
     raw_body = (await request.body()).decode("utf-8")
     form = parse_qs(raw_body, keep_blank_values=True)
     username = form.get("username", [""])[0]
     password = form.get("password", [""])[0]
 
-    username_ok = secrets.compare_digest(username, settings.dashboard_auth_username)
-    password_ok = secrets.compare_digest(password, settings.dashboard_auth_password)
-    if not (username_ok and password_ok):
+    authenticated = False
+    if _auth_credentials_configured():
+        username_ok = secrets.compare_digest(username, settings.dashboard_auth_username)
+        password_ok = secrets.compare_digest(password, settings.dashboard_auth_password)
+        authenticated = username_ok and password_ok
+
+    db_user = None
+    if not authenticated:
+        try:
+            db = SessionLocal()
+            from runtime.security.auth.password import verify_password
+            db_user = db.query(User).filter(User.email == username.strip().lower(), User.is_active == True).first()
+            if db_user and verify_password(password, db_user.password_hash):
+                authenticated = True
+            db.close()
+        except Exception:
+            pass
+
+    if not authenticated:
         return RedirectResponse(url="/login?error=invalid_credentials", status_code=303)
+
+    if db_user and db_user.must_change_password:
+        return RedirectResponse(url=f"/change-password?email={url_quote(db_user.email)}", status_code=303)
 
     response = RedirectResponse(url="/", status_code=303)
     token = _rotate_session_token()
@@ -626,6 +665,59 @@ async def login(request: Request):
 def logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(DASHBOARD_SESSION_COOKIE)
+    return response
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+def change_password_page(request: Request, email: str = ""):
+    return templates.TemplateResponse(
+        "change_password.html",
+        {
+            "request": request,
+            "email": email,
+        },
+    )
+
+
+@app.post("/change-password")
+async def change_password_form(request: Request):
+    raw_body = (await request.body()).decode("utf-8")
+    form = parse_qs(raw_body, keep_blank_values=True)
+    email = form.get("email", [""])[0].strip().lower()
+    old_password = form.get("old_password", [""])[0]
+    new_password = form.get("new_password", [""])[0]
+    confirm_password = form.get("confirm_password", [""])[0]
+
+    if not email or not old_password or not new_password:
+        return RedirectResponse(url=f"/change-password?email={url_quote(email)}&error=missing_fields", status_code=303)
+    if new_password != confirm_password:
+        return RedirectResponse(url=f"/change-password?email={url_quote(email)}&error=password_mismatch", status_code=303)
+    if len(new_password) < 8:
+        return RedirectResponse(url=f"/change-password?email={url_quote(email)}&error=password_too_short", status_code=303)
+
+    try:
+        from runtime.security.auth.password import verify_password
+        db = SessionLocal()
+        user = db.query(User).filter(User.email == email, User.is_active == True).first()
+        if not user or not verify_password(old_password, user.password_hash):
+            db.close()
+            return RedirectResponse(url=f"/change-password?email={url_quote(email)}&error=invalid_credentials", status_code=303)
+        user.password_hash = hash_password(new_password)
+        user.must_change_password = False
+        db.commit()
+        db.close()
+    except Exception:
+        return RedirectResponse(url=f"/change-password?email={url_quote(email)}&error=server_error", status_code=303)
+
+    response = RedirectResponse(url="/login", status_code=303)
+    token = _rotate_session_token()
+    response.set_cookie(
+        DASHBOARD_SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
     return response
 
 
@@ -879,7 +971,33 @@ def login(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> 
     user = db.query(User).filter(User.email == email, User.is_active == True).first()
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if user.must_change_password:
+        return {"force_password_change": True, "user_id": user.id, "email": user.email}
+
     user.last_login_at = __import__("time").time()
+    db.commit()
+    token = create_access_token(user.id, user.role)
+    return {"token": token, "user": user.to_dict()}
+
+
+@api.post("/auth/change-password")
+def change_password(body: dict[str, Any] = Body(...), db: SASession = Depends(get_db)) -> dict[str, Any]:
+    email = str(body.get("email", "")).strip().lower()
+    old_password = str(body.get("old_password", ""))
+    new_password = str(body.get("new_password", ""))
+    if not email or not old_password or not new_password:
+        raise HTTPException(status_code=400, detail="email, old_password, and new_password are required")
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    from runtime.security.auth.password import verify_password
+
+    user = db.query(User).filter(User.email == email, User.is_active == True).first()
+    if user is None or not verify_password(old_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = False
     db.commit()
     token = create_access_token(user.id, user.role)
     return {"token": token, "user": user.to_dict()}

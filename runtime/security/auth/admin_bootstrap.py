@@ -18,7 +18,7 @@ def bootstrap_admin() -> None:
         if admin is not None:
             return
 
-        email = os.getenv("AIIH_ADMIN_EMAIL", "").strip()
+        email = os.getenv("AIIH_ADMIN_EMAIL", "").strip().lower()
         password = os.getenv("AIIH_ADMIN_PASSWORD", "").strip()
         if not email or not password:
             logger.warning(
@@ -32,6 +32,7 @@ def bootstrap_admin() -> None:
             password_hash=hash_password(password),
             display_name="Admin",
             role="admin",
+            must_change_password=True,
         )
         db.add(admin)
         db.commit()

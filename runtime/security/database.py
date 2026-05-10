@@ -44,6 +44,16 @@ def init_db() -> None:
     from runtime.security.models import User, ApiKey, Session
 
     Base.metadata.create_all(bind=engine)
+
+    with engine.connect() as conn:
+        import sqlalchemy
+        try:
+            conn.execute(sqlalchemy.text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+            conn.commit()
+            logger.info("Added must_change_password column to users table")
+        except Exception:
+            pass
+
     logger.info("Database initialized at %s", db_path())
 
 
