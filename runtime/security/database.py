@@ -48,9 +48,16 @@ def init_db() -> None:
     with engine.connect() as conn:
         import sqlalchemy
         try:
-            conn.execute(sqlalchemy.text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
-            conn.commit()
-            logger.info("Added must_change_password column to users table")
+            row = conn.execute(
+                sqlalchemy.text("PRAGMA table_info(users)")
+            ).fetchall()
+            cols = {r[1] for r in row}
+            if "must_change_password" not in cols:
+                conn.execute(
+                    sqlalchemy.text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0")
+                )
+                conn.commit()
+                logger.info("Added must_change_password column to users table")
         except Exception:
             pass
 

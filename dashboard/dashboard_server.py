@@ -74,10 +74,13 @@ app = FastAPI(title="AetherMesh Dashboard", version="4.0.0")
 
 @app.on_event("startup")
 def _on_startup() -> None:
-    init_db()
-    from runtime.security.auth.admin_bootstrap import bootstrap_admin
+    try:
+        init_db()
+        from runtime.security.auth.admin_bootstrap import bootstrap_admin
 
-    bootstrap_admin()
+        bootstrap_admin()
+    except Exception as exc:
+        LOGGER.warning("DB init failed (dashboard will still start): %s", exc)
 LOGGER.info("Dashboard starting — auth=%s, refresh=%ss", settings.dashboard_auth_enabled, settings.dashboard_refresh_s)
 api = APIRouter(prefix="/api")
 
