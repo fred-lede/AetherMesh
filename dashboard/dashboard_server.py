@@ -26,9 +26,9 @@ from metrics.request_metrics import request_metrics
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
-from runtime.security import rate_limiter, api_key_auth, input_validator, SessionLocal
+from runtime.security import rate_limiter, input_validator, SessionLocal
 from runtime.security.database import get_db, init_db
-from runtime.security.models import User
+from runtime.security.models import ApiKey, User
 from runtime.security.auth.password import hash_password
 from runtime.security.auth.jwt import create_access_token
 from runtime.observability import metrics_collector, graph_event_bus
@@ -234,6 +234,18 @@ async def dashboard_basic_auth(request: Request, call_next):
         return RedirectResponse(url="/login", status_code=303)
 
     return RedirectResponse(url="/login", status_code=303)
+
+
+def _api_key_auth_status() -> dict[str, Any]:
+    try:
+        db = SessionLocal()
+        try:
+            count = db.query(ApiKey).filter(ApiKey.is_active == True).count()
+            return {"enabled": count > 0, "key_count": count}
+        finally:
+            db.close()
+    except Exception:
+        return {"enabled": False, "key_count": 0}
 
 
 def _web_search_providers() -> list[dict[str, Any]]:
@@ -867,7 +879,7 @@ def _build_overview() -> dict[str, Any]:
             "agents": coordinator.list_agents(),
         },
         "security": {
-            "api_key_auth": api_key_auth.snapshot(),
+            "api_key_auth": _api_key_auth_status(),
             "rate_limiter_buckets": len(rate_limiter._buckets) if hasattr(rate_limiter, '_buckets') else 0,
             "max_text_length": input_validator.MAX_TEXT_LENGTH,
             "max_messages": input_validator.MAX_MESSAGES,
@@ -1146,7 +1158,6 @@ def delete_user(request: Request, user_id: int, db: SASession = Depends(get_db))
 def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
     _require_admin(request)
     from runtime.security.auth.api_key import list_api_keys as _list_keys
-    from runtime.security.models import User
     keys = _list_keys(db)
     user_ids = {k["user_id"] for k in keys}
     users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
