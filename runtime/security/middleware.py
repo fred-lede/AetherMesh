@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from runtime.security import rate_limiter, input_validator
 from runtime.security.auth.api_key import validate_api_key
 from runtime.security.database import SessionLocal
+from runtime.security.models import User
 
 logger = logging.getLogger("security.middleware")
 
@@ -20,6 +21,18 @@ def _verify_api_key(key: str) -> dict | None:
     if env_keys:
         env_list = [k.strip() for k in env_keys.split(",") if k.strip()]
         if key in env_list:
+            admin_email = os.getenv("AIIH_ADMIN_EMAIL", "").strip().lower()
+            if admin_email:
+                try:
+                    db = SessionLocal()
+                    try:
+                        admin = db.query(User).filter(User.email == admin_email).first()
+                        if admin:
+                            return {"user_id": admin.id, "api_key_id": None}
+                    finally:
+                        db.close()
+                except Exception:
+                    pass
             return {"user_id": None, "api_key_id": None}
     try:
         db = SessionLocal()
