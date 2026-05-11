@@ -55,6 +55,13 @@
     .nav a:hover { background: rgba(255,255,255,0.04); color: var(--text); }
     .nav a.active { background: rgba(94, 234, 212, 0.1); color: var(--accent); }
     .nav .spacer { flex: 1; }
+    .nav .user-name {
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding: 0 12px;
+      border-right: 1px solid var(--line);
+      margin-right: 4px;
+    }
     .nav .logout { color: var(--bad); }
     .hero {
       display: flex;
@@ -594,6 +601,7 @@
       {% endif %}
       <a href="/profile">Profile</a>
       <span class="spacer"></span>
+      <span class="user-name">{{ user_name }}</span>
       <a href="/logout" class="logout">Logout</a>
     </nav>
     <section class="hero">

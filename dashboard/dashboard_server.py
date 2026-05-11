@@ -105,6 +105,15 @@ def _session_user_role(request: Request) -> str | None:
     return info.get("role") if info else None
 
 
+def _session_user_name(request: Request) -> str:
+    token = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
+    info = _sessions.get(token)
+    if info:
+        return info.get("display_name", info.get("email", info.get("role", "admin")))
+    username = _basic_auth_username(request)
+    return username or "admin"
+
+
 def _current_user(request: Request) -> User | None:
     token = request.cookies.get(DASHBOARD_SESSION_COOKIE, "")
     info = _sessions.get(token)
@@ -775,6 +784,7 @@ async def change_password_form(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     user_role = _session_user_role(request) or "user"
+    user_name = _session_user_name(request)
     return templates.TemplateResponse(
         "index.html",
         {
@@ -783,6 +793,7 @@ def index(request: Request):
             "control_plane_url": settings.control_plane_url,
             "auth_enabled": settings.dashboard_auth_enabled,
             "user_role": user_role,
+            "user_name": user_name,
         },
     )
 
