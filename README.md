@@ -492,16 +492,33 @@ See `.env.example` for the full list.
     node-01: 192.168.1.200     # IP the worker agent binds to
     node-p40-01: 192.168.1.123
   ```
-  `local_workers` defines which Ollama ports run on this machine and their GPU
-  assignment:
+  `local_workers` defines which Ollama ports run on this machine, their GPU
+  assignment, and intended workload role. Each port runs an independent
+  `ollama serve` process pinned to a specific GPU:
   ```yaml
   local_workers:
     - port: 11434
       gpu_id: 0
-      role: coding
+      role: coding        # Coding / chat — primary GPU
     - port: 11435
       gpu_id: 1
-      role: embeddings
+      role: embeddings    # Embeddings, vision, lightweight models
+    - port: 11436
+      gpu_id: 0
+      role: reasoning     # Long-context / chain-of-thought models
+    - port: 11437
+      gpu_id: 1
+      role: agents        # Agent / tool-calling tasks
+  ```
+  Start them with:
+  ```bash
+  # GPU 0 (ports 11434, 11436)
+  CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11434 ollama serve &
+  CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11436 ollama serve &
+
+  # GPU 1 (ports 11435, 11437)
+  CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11435 ollama serve &
+  CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11437 ollama serve &
   ```
 - `config/routing_rules.yaml` — model routing rules, gateway-safe `model_aliases`, fallback settings
 - `config/routing_state.yaml` — runtime routing state (auto-generated, gitignored)
