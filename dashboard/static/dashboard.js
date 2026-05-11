@@ -29,6 +29,7 @@
     const overallHealth = document.getElementById('overall-health');
     const routingOperationStatus = document.getElementById('routing-operation-status');
     let operationStatusTimer = null;
+    const _isAdmin = cloudProviders !== null;
 
     // Chart instances
     let latencyChart = null;
@@ -148,6 +149,7 @@
         clearTimeout(operationStatusTimer);
         operationStatusTimer = null;
       }
+      if (!routingOperationStatus) return;
       routingOperationStatus.className = `operation-status ${level}`;
       routingOperationStatus.textContent = message;
       if (level === 'ok') {
@@ -341,13 +343,13 @@
         metricCard('Next Step', 'Check', 'Start control plane and worker services'),
       ].join('');
       alerts.innerHTML = `<span class="pill"><strong class="bad">critical</strong><span>${message}</span></span>`;
-      providerHealthGrid.innerHTML = '<span class="pill">Provider health unavailable until overview API responds</span>';
-      providers.innerHTML = '<span class="pill">No provider telemetry available</span>';
-      cloudProviders.innerHTML = '';
-      requestMetricsCards.innerHTML = '';
-      providerMetricsTable.innerHTML = '<tr><td colspan="6">No provider metrics available.</td></tr>';
-      routingProviders.innerHTML = '<span class="pill">Routing controls unavailable</span>';
-      routingOverridesTable.innerHTML = '<tr><td colspan="3">No routing data available.</td></tr>';
+      if (providerHealthGrid) providerHealthGrid.innerHTML = '<span class="pill">Provider health unavailable until overview API responds</span>';
+      if (providers) providers.innerHTML = '<span class="pill">No provider telemetry available</span>';
+      if (cloudProviders) cloudProviders.innerHTML = '';
+      if (requestMetricsCards) requestMetricsCards.innerHTML = '';
+      if (providerMetricsTable) providerMetricsTable.innerHTML = '<tr><td colspan="6">No provider metrics available.</td></tr>';
+      if (routingProviders) routingProviders.innerHTML = '<span class="pill">Routing controls unavailable</span>';
+      if (routingOverridesTable) routingOverridesTable.innerHTML = '<tr><td colspan="3">No routing data available.</td></tr>';
       updated.textContent = `Dashboard error: ${summary}`;
       setChartGroup(activeChartGroup);
     }
@@ -420,6 +422,7 @@
     }
 
     function renderProviderHealthCards(data, providerMetrics, routingProvidersData, cloudList) {
+      if (!providerHealthGrid) return;
       const providerStatusMap = data.provider_status || {};
       const providerDiagnostics = data.provider_diagnostics || {};
       const cloudByName = Object.fromEntries((cloudList || []).map((item) => [item.name, item]));
@@ -498,9 +501,9 @@
       ].join('');
 
       const cloudList = data.cloud_providers || [];
-      if (cloudList.length === 0) {
+      if (_isAdmin && cloudList.length === 0) {
         cloudProviders.innerHTML = '<span class="pill">No cloud providers configured</span>';
-      } else {
+      } else if (_isAdmin) {
         cloudProviders.innerHTML = cloudList.map(cp => {
           const statusCls = cp.ok ? 'ok' : (cp.status === 'not_configured' ? 'warn' : 'bad');
           const detail = cp.ok
@@ -510,15 +513,17 @@
         }).join('');
       }
 
-      const webSearchEl = document.getElementById('web-search-providers');
-      if (data.web_search_providers) {
-        const wsList = data.web_search_providers || [];
-        webSearchEl.innerHTML = '<span class="subsection-title" style="font-size:0.85rem;">Web Search</span>' +
-          wsList.map(ws => {
-            const cls = ws.configured ? 'ok' : 'warn';
-            const label = ws.configured ? 'configured' : 'not set';
-            return `<span class="pill"><strong>${ws.name}</strong><span class="${cls}">${label}</span></span>`;
-          }).join('');
+      if (_isAdmin) {
+        const webSearchEl = document.getElementById('web-search-providers');
+        if (data.web_search_providers) {
+          const wsList = data.web_search_providers || [];
+          webSearchEl.innerHTML = '<span class="subsection-title" style="font-size:0.85rem;">Web Search</span>' +
+            wsList.map(ws => {
+              const cls = ws.configured ? 'ok' : 'warn';
+              const label = ws.configured ? 'configured' : 'not set';
+              return `<span class="pill"><strong>${ws.name}</strong><span class="${cls}">${label}</span></span>`;
+            }).join('');
+        }
       }
 
       alerts.innerHTML = (data.alerts || []).map(alert => (
@@ -534,182 +539,186 @@
       const rmsEl = document.getElementById('request-metrics-summary');
       if (rmsEl) rmsEl.textContent =
         `${rm.total_requests || 0} requests tracked • ${formatPercent(rm.error_rate)} error rate`;
-      requestMetricsCards.innerHTML = [
-        metricCard('Total Requests', rm.total_requests || 0, `Streaming: ${rm.streaming_requests || 0} | Non-streaming: ${rm.non_streaming_requests || 0}`),
-        metricCard('Tokens', `${rm.total_input_tokens || 0} in / ${rm.total_output_tokens || 0} out`, `Ratio: ${((rm.total_output_tokens || 0) / Math.max(1, rm.total_input_tokens || 1) * 100).toFixed(0)}%`),
-        metricCard('Avg Latency', `${rm.avg_latency_ms || 0} ms`, `P50: ${rm.p50_latency_ms || 0}ms | P95: ${rm.p95_latency_ms || 0}ms | P99: ${rm.p99_latency_ms || 0}ms`),
-        metricCard('Error Rate', formatPercent(rm.error_rate), `${rm.total_errors || 0}/${rm.total_requests || 0} failed`),
-      ].join('');
+      if (_isAdmin) {
+        requestMetricsCards.innerHTML = [
+          metricCard('Total Requests', rm.total_requests || 0, `Streaming: ${rm.streaming_requests || 0} | Non-streaming: ${rm.non_streaming_requests || 0}`),
+          metricCard('Tokens', `${rm.total_input_tokens || 0} in / ${rm.total_output_tokens || 0} out`, `Ratio: ${((rm.total_output_tokens || 0) / Math.max(1, rm.total_input_tokens || 1) * 100).toFixed(0)}%`),
+          metricCard('Avg Latency', `${rm.avg_latency_ms || 0} ms`, `P50: ${rm.p50_latency_ms || 0}ms | P95: ${rm.p95_latency_ms || 0}ms | P99: ${rm.p99_latency_ms || 0}ms`),
+          metricCard('Error Rate', formatPercent(rm.error_rate), `${rm.total_errors || 0}/${rm.total_requests || 0} failed`),
+        ].join('');
 
-      renderProviderHealthCards(data, pm, routingProviderData, cloudList);
-      providerMetricsTable.innerHTML = Object.entries(pm).map(([provider, stats]) => `
-        <tr>
-          <td><strong>${provider}</strong></td>
-          <td>${stats.requests || 0}</td>
-          <td class="${(stats.error_rate || 0) > 0.05 ? 'bad' : 'ok'}">${((stats.error_rate || 0) * 100).toFixed(1)}%</td>
-          <td>${stats.avg_latency_ms || 0} ms</td>
-          <td>${stats.total_input_tokens || 0}</td>
-          <td>${stats.total_output_tokens || 0}</td>
-        </tr>
-      `).join('') || '<tr><td colspan="6">No provider metrics yet.</td></tr>';
-
-      const rs = data.routing_status || {};
-      const routingProvs = rs.providers || {};
-      const localOnly = Boolean(rs.local_only);
-      routingModeLabel.textContent = localOnly ? 'Local only mode' : 'Automatic routing';
-      routingModeDetail.textContent = localOnly
-        ? 'Only local Ollama routing is enabled. Cloud providers are paused.'
-        : 'Local and cloud providers may be used according to routing rules.';
-      const fallback = rs.fallback || {};
-      const fallbackModel = fallback.resolved_model || fallback.ollama_default_model || 'auto';
-      const fallbackWorker = fallback.worker?.base_url ? ` @ ${fallback.worker.base_url}` : '';
-      const fallbackSource = fallback.source === 'configured' ? 'configured' : 'auto';
-      routingFallbackDetail.textContent = `Cloud fallback: ${fallbackModel}${fallbackWorker} (${fallbackSource})`;
-      localOnlyButton.disabled = localOnly;
-      enableAllProvidersButton.disabled = !localOnly;
-      routingProviders.innerHTML = Object.entries(routingProvs).map(([name, p]) => {
-        const enabled = p.enabled;
-        const healthy = p.healthy;
-        const cooldownRemaining = Number(p.cooldown_remaining_s || 0);
-        const inCooldown = cooldownRemaining > 0;
-        const statusCls = enabled ? (inCooldown || healthy === false ? 'warn' : 'ok') : 'bad';
-        const statusText = enabled ? (inCooldown ? 'cooldown' : (healthy ? 'healthy' : 'unhealthy')) : 'disabled';
-        const latencyText = inCooldown ? `${Math.ceil(cooldownRemaining)}s left` : `${p.latency_ms || 0}ms`;
-        return `
-          <div class="routing-control-card">
-            <div>
-              <div class="routing-provider-name">${escapeHtml(name)}</div>
-              <div class="routing-provider-meta">
-                <span class="${statusCls}">${statusText}</span>
-                <span class="muted-line">${latencyText}</span>
-              </div>
-            </div>
-            <button onclick="toggleProvider(event, '${escapeHtml(escapeJsString(name))}', ${!enabled})" class="btn ${enabled ? 'btn-disable' : 'btn-enable'}">${enabled ? 'Disable' : 'Enable'}</button>
-          </div>
-        `;
-      }).join('');
-      routingProviders.innerHTML = routingProviders.innerHTML
-        ? `<div class="routing-control-grid">${routingProviders.innerHTML}</div>`
-        : '<span class="pill">No routing providers configured</span>';
-
-      const modelAliases = rs.model_aliases || [];
-      modelAliasTable.innerHTML = modelAliases.map((entry) => {
-        const configured = entry.configured !== false;
-        const providerClass = configured ? 'ok' : 'bad';
-        const workerLabel = entry.worker_label || entry.worker?.base_url || 'not configured';
-        const capabilities = Array.isArray(entry.capabilities) && entry.capabilities.length
-          ? entry.capabilities.join(', ')
-          : 'none';
-        return `
+        renderProviderHealthCards(data, pm, routingProviderData, cloudList);
+        providerMetricsTable.innerHTML = Object.entries(pm).map(([provider, stats]) => `
           <tr>
-            <td class="mono">${escapeHtml(entry.gateway_model || '')}</td>
-            <td class="mono">${escapeHtml(entry.prefixed_alias || entry.alias || '')}</td>
-            <td class="mono">${escapeHtml(entry.target_model || '')}</td>
-            <td><span class="${providerClass}">${escapeHtml(entry.provider || 'unknown')}</span></td>
-            <td class="mono">${escapeHtml(workerLabel)}</td>
-            <td>${escapeHtml(capabilities)}</td>
+            <td><strong>${provider}</strong></td>
+            <td>${stats.requests || 0}</td>
+            <td class="${(stats.error_rate || 0) > 0.05 ? 'bad' : 'ok'}">${((stats.error_rate || 0) * 100).toFixed(1)}%</td>
+            <td>${stats.avg_latency_ms || 0} ms</td>
+            <td>${stats.total_input_tokens || 0}</td>
+            <td>${stats.total_output_tokens || 0}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="6">No provider metrics yet.</td></tr>';
+
+        const rs = data.routing_status || {};
+        const routingProvs = rs.providers || {};
+        const localOnly = Boolean(rs.local_only);
+        routingModeLabel.textContent = localOnly ? 'Local only mode' : 'Automatic routing';
+        routingModeDetail.textContent = localOnly
+          ? 'Only local Ollama routing is enabled. Cloud providers are paused.'
+          : 'Local and cloud providers may be used according to routing rules.';
+        const fallback = rs.fallback || {};
+        const fallbackModel = fallback.resolved_model || fallback.ollama_default_model || 'auto';
+        const fallbackWorker = fallback.worker?.base_url ? ` @ ${fallback.worker.base_url}` : '';
+        const fallbackSource = fallback.source === 'configured' ? 'configured' : 'auto';
+        routingFallbackDetail.textContent = `Cloud fallback: ${fallbackModel}${fallbackWorker} (${fallbackSource})`;
+        localOnlyButton.disabled = localOnly;
+        enableAllProvidersButton.disabled = !localOnly;
+        routingProviders.innerHTML = Object.entries(routingProvs).map(([name, p]) => {
+          const enabled = p.enabled;
+          const healthy = p.healthy;
+          const cooldownRemaining = Number(p.cooldown_remaining_s || 0);
+          const inCooldown = cooldownRemaining > 0;
+          const statusCls = enabled ? (inCooldown || healthy === false ? 'warn' : 'ok') : 'bad';
+          const statusText = enabled ? (inCooldown ? 'cooldown' : (healthy ? 'healthy' : 'unhealthy')) : 'disabled';
+          const latencyText = inCooldown ? `${Math.ceil(cooldownRemaining)}s left` : `${p.latency_ms || 0}ms`;
+          return `
+            <div class="routing-control-card">
+              <div>
+                <div class="routing-provider-name">${escapeHtml(name)}</div>
+                <div class="routing-provider-meta">
+                  <span class="${statusCls}">${statusText}</span>
+                  <span class="muted-line">${latencyText}</span>
+                </div>
+              </div>
+              <button onclick="toggleProvider(event, '${escapeHtml(escapeJsString(name))}', ${!enabled})" class="btn ${enabled ? 'btn-disable' : 'btn-enable'}">${enabled ? 'Disable' : 'Enable'}</button>
+            </div>
+          `;
+        }).join('');
+        routingProviders.innerHTML = routingProviders.innerHTML
+          ? `<div class="routing-control-grid">${routingProviders.innerHTML}</div>`
+          : '<span class="pill">No routing providers configured</span>';
+
+        const modelAliases = rs.model_aliases || [];
+        modelAliasTable.innerHTML = modelAliases.map((entry) => {
+          const configured = entry.configured !== false;
+          const providerClass = configured ? 'ok' : 'bad';
+          const workerLabel = entry.worker_label || entry.worker?.base_url || 'not configured';
+          const capabilities = Array.isArray(entry.capabilities) && entry.capabilities.length
+            ? entry.capabilities.join(', ')
+            : 'none';
+          return `
+            <tr>
+              <td class="mono">${escapeHtml(entry.gateway_model || '')}</td>
+              <td class="mono">${escapeHtml(entry.prefixed_alias || entry.alias || '')}</td>
+              <td class="mono">${escapeHtml(entry.target_model || '')}</td>
+              <td><span class="${providerClass}">${escapeHtml(entry.provider || 'unknown')}</span></td>
+              <td class="mono">${escapeHtml(workerLabel)}</td>
+              <td>${escapeHtml(capabilities)}</td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="6">No model aliases configured.</td></tr>';
+
+        const overrides = rs.model_overrides || {};
+        routingOverridesTable.innerHTML = Object.entries(overrides).map(([model, provider]) => `
+          <tr>
+            <td class="mono">${escapeHtml(model)}</td>
+            <td><span class="pill"><strong>${escapeHtml(provider)}</strong></span></td>
+            <td><button onclick="removeOverride(event, '${escapeHtml(escapeJsString(model))}')" class="btn btn-danger">Remove</button></td>
+          </tr>
+        `).join('') || '<tr><td colspan="3">No model overrides set. Requests are routed automatically.</td></tr>';
+
+        const auditEvents = rs.audit_events || [];
+        routingAuditTable.innerHTML = auditEvents.slice().reverse().map((event) => `
+          <tr>
+            <td>${escapeHtml(timeAgo(event.timestamp))}</td>
+            <td class="mono">${escapeHtml(event.actor || 'system')}</td>
+            <td>${escapeHtml(formatAuditAction(event.action || 'unknown'))}</td>
+            <td>${escapeHtml(formatAuditDetails(event))}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No routing activity recorded yet.</td></tr>';
+      }
+
+      if (_isAdmin) {
+        nodesTable.innerHTML = (data.nodes || []).map(node => `
+          <tr>
+            <td class="mono">${node.node_id}</td>
+            <td class="mono">${node.ip}</td>
+            <td>${(node.gpus || []).map(gpu => gpu.name).join('<br>') || '-'}</td>
+            <td>${(node.workers || []).join(', ') || '-'}</td>
+            <td class="${statusClass(node.status)}">${node.status}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="5">No nodes registered yet.</td></tr>';
+
+        gpusTable.innerHTML = (data.gpus || []).map(gpu => {
+          const utilization = Number(gpu.utilization || 0);
+          const powerWatts = Number(gpu.power_watts ?? gpu.metadata?.power_watts ?? 0);
+          const temperature = Number(gpu.temperature || 0);
+          return `
+          <tr>
+            <td class="mono">${gpu.node_id || 'local'}</td>
+            <td>${gpu.name}</td>
+            <td>${gpu.memory || 0}</td>
+            <td>
+              <div>${utilization}%</div>
+              <div class="status-bar"><span style="width:${Math.min(utilization, 100)}%"></span></div>
+            </td>
+            <td>${powerWatts.toFixed(1)}W</td>
+            <td>${temperature.toFixed(1)}C</td>
           </tr>
         `;
-      }).join('') || '<tr><td colspan="6">No model aliases configured.</td></tr>';
+        }).join('') || '<tr><td colspan="6">No GPU telemetry available.</td></tr>';
 
-      const overrides = rs.model_overrides || {};
-      routingOverridesTable.innerHTML = Object.entries(overrides).map(([model, provider]) => `
-        <tr>
-          <td class="mono">${escapeHtml(model)}</td>
-          <td><span class="pill"><strong>${escapeHtml(provider)}</strong></span></td>
-          <td><button onclick="removeOverride(event, '${escapeHtml(escapeJsString(model))}')" class="btn btn-danger">Remove</button></td>
-        </tr>
-      `).join('') || '<tr><td colspan="3">No model overrides set. Requests are routed automatically.</td></tr>';
+        workersTable.innerHTML = (data.workers || []).map(worker => {
+          const runtime = worker.metadata || {};
+          const psCount = Number(runtime.ps_count || 0);
+          const psModels = Array.isArray(runtime.ps_models) ? runtime.ps_models : [];
+          const processors = Array.isArray(runtime.processors) ? runtime.processors : [];
+          const psError = runtime.error ? String(runtime.error) : '';
+          let runtimeLabel = 'idle';
+          let runtimeClass = 'ok';
+          if (psCount > 0 && Number(worker.queue_size || 0) > 0) {
+            runtimeLabel = 'running';
+            runtimeClass = 'warn';
+          } else if (psCount > 0) {
+            runtimeLabel = 'loaded';
+            runtimeClass = 'ok';
+          }
+          const processorsText = processors.length ? processors.join(', ') : '-';
+          const psCell = psError
+            ? `<span class="warn">${psError}</span>`
+            : `${psCount} active${psModels.length ? `<br>${psModels.join(', ')}` : ''}${processors.length ? `<br>${processors.join(', ')}` : ''}`;
+          return `
+          <tr>
+            <td class="mono">${worker.worker_id}</td>
+            <td class="mono">${worker.base_url}</td>
+            <td>${worker.gpu_name} (#${worker.gpu_id})</td>
+            <td>${worker.queue_size}</td>
+            <td>${(worker.models || []).join(', ') || 'dynamic'}</td>
+            <td><span class="${runtimeClass}">${runtimeLabel}</span></td>
+            <td>${processorsText}</td>
+            <td>${psCell}</td>
+            <td>${formatTime(worker.last_heartbeat)}</td>
+            <td class="${statusClass(worker.status)}">${worker.status}</td>
+          </tr>
+        `;
+        }).join('') || '<tr><td colspan="10">No workers registered yet.</td></tr>';
 
-      const auditEvents = rs.audit_events || [];
-      routingAuditTable.innerHTML = auditEvents.slice().reverse().map((event) => `
-        <tr>
-          <td>${escapeHtml(timeAgo(event.timestamp))}</td>
-          <td class="mono">${escapeHtml(event.actor || 'system')}</td>
-          <td>${escapeHtml(formatAuditAction(event.action || 'unknown'))}</td>
-          <td>${escapeHtml(formatAuditDetails(event))}</td>
-        </tr>
-      `).join('') || '<tr><td colspan="4">No routing activity recorded yet.</td></tr>';
-
-      nodesTable.innerHTML = (data.nodes || []).map(node => `
-        <tr>
-          <td class="mono">${node.node_id}</td>
-          <td class="mono">${node.ip}</td>
-          <td>${(node.gpus || []).map(gpu => gpu.name).join('<br>') || '-'}</td>
-          <td>${(node.workers || []).join(', ') || '-'}</td>
-          <td class="${statusClass(node.status)}">${node.status}</td>
-        </tr>
-      `).join('') || '<tr><td colspan="5">No nodes registered yet.</td></tr>';
-
-      gpusTable.innerHTML = (data.gpus || []).map(gpu => {
-        const utilization = Number(gpu.utilization || 0);
-        const powerWatts = Number(gpu.power_watts ?? gpu.metadata?.power_watts ?? 0);
-        const temperature = Number(gpu.temperature || 0);
-        return `
-        <tr>
-          <td class="mono">${gpu.node_id || 'local'}</td>
-          <td>${gpu.name}</td>
-          <td>${gpu.memory || 0}</td>
-          <td>
-            <div>${utilization}%</div>
-            <div class="status-bar"><span style="width:${Math.min(utilization, 100)}%"></span></div>
-          </td>
-          <td>${powerWatts.toFixed(1)}W</td>
-          <td>${temperature.toFixed(1)}C</td>
-        </tr>
-      `;
-      }).join('') || '<tr><td colspan="6">No GPU telemetry available.</td></tr>';
-
-      workersTable.innerHTML = (data.workers || []).map(worker => {
-        const runtime = worker.metadata || {};
-        const psCount = Number(runtime.ps_count || 0);
-        const psModels = Array.isArray(runtime.ps_models) ? runtime.ps_models : [];
-        const processors = Array.isArray(runtime.processors) ? runtime.processors : [];
-        const psError = runtime.error ? String(runtime.error) : '';
-        let runtimeLabel = 'idle';
-        let runtimeClass = 'ok';
-        if (psCount > 0 && Number(worker.queue_size || 0) > 0) {
-          runtimeLabel = 'running';
-          runtimeClass = 'warn';
-        } else if (psCount > 0) {
-          runtimeLabel = 'loaded';
-          runtimeClass = 'ok';
-        }
-        const processorsText = processors.length ? processors.join(', ') : '-';
-        const psCell = psError
-          ? `<span class="warn">${psError}</span>`
-          : `${psCount} active${psModels.length ? `<br>${psModels.join(', ')}` : ''}${processors.length ? `<br>${processors.join(', ')}` : ''}`;
-        return `
-        <tr>
-          <td class="mono">${worker.worker_id}</td>
-          <td class="mono">${worker.base_url}</td>
-          <td>${worker.gpu_name} (#${worker.gpu_id})</td>
-          <td>${worker.queue_size}</td>
-          <td>${(worker.models || []).join(', ') || 'dynamic'}</td>
-          <td><span class="${runtimeClass}">${runtimeLabel}</span></td>
-          <td>${processorsText}</td>
-          <td>${psCell}</td>
-          <td>${formatTime(worker.last_heartbeat)}</td>
-          <td class="${statusClass(worker.status)}">${worker.status}</td>
-        </tr>
-      `;
-      }).join('') || '<tr><td colspan="10">No workers registered yet.</td></tr>';
-
-      modelsTable.innerHTML = (data.models_enriched || data.models || []).map(model => {
-        const configured = model.workers_configured || (model.worker_bindings || []).map(b => `${b.node_id}:${b.port}`);
-        const online = model.workers_online || [];
-        const workersDisplay = configured.length
-          ? `${configured.join(', ')} (${online.length}/${configured.length})`
-          : '-';
-        return `
-        <tr>
-          <td>${model.name}</td>
-          <td>${model.provider}</td>
-          <td>${workersDisplay}</td>
-          <td>${(model.capabilities || []).join(', ') || '-'}</td>
-        </tr>
-      `;
-      }).join('') || '<tr><td colspan="4">No models configured.</td></tr>';
+        modelsTable.innerHTML = (data.models_enriched || data.models || []).map(model => {
+          const configured = model.workers_configured || (model.worker_bindings || []).map(b => `${b.node_id}:${b.port}`);
+          const online = model.workers_online || [];
+          const workersDisplay = configured.length
+            ? `${configured.join(', ')} (${online.length}/${configured.length})`
+            : '-';
+          return `
+          <tr>
+            <td>${model.name}</td>
+            <td>${model.provider}</td>
+            <td>${workersDisplay}</td>
+            <td>${(model.capabilities || []).join(', ') || '-'}</td>
+          </tr>
+        `;
+        }).join('') || '<tr><td colspan="4">No models configured.</td></tr>';
+      }
 
       tasksTable.innerHTML = (data.tasks || []).slice(0, 20).map(task => `
         <tr>
@@ -745,56 +754,54 @@
 
       updated.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
 
-      // Render GPU OS
-      const gpuOs = data.gpu_os || {};
-      const devices = gpuOs.devices || [];
-      const scheduler = gpuOs.scheduler || {};
-      gpuOsPanel.innerHTML = devices.length === 0
-        ? '<span class="pill">No GPU devices registered</span>'
-        : `<div class="runtime-grid">${devices.map(d => {
-            const vramPct = d.vram_used_pct || 0;
-            const barColor = vramPct > 80 ? 'var(--bad)' : vramPct > 50 ? 'var(--warn)' : 'var(--good)';
-            return `<div class="runtime-card">
-              <h4>${escapeHtml(d.name)} (${d.device_id})</h4>
-              <div class="stat-row"><span class="label">VRAM</span><span class="value">${d.used_vram_gb} / ${d.total_vram_gb} GB</span></div>
-              <div class="vram-bar"><div class="fill" style="width:${vramPct}%;background:${barColor}"></div></div>
-              <div class="stat-row"><span class="label">Utilization</span><span class="value">${d.utilization}%</span></div>
-              <div class="stat-row"><span class="label">Temp</span><span class="value">${d.temperature}°C</span></div>
-              <div class="stat-row"><span class="label">Models</span><span class="value">${(d.models_loaded || []).join(', ') || 'none'}</span></div>
-              <div class="stat-row"><span class="label">Health</span><span class="value ${d.healthy ? 'ok' : 'bad'}">${d.healthy ? 'healthy' : 'unhealthy'}</span></div>
-            </div>`;
-          }).join('')}
-          <div class="runtime-card">
-            <h4>Scheduler</h4>
-            <div class="stat-row"><span class="label">Max VRAM</span><span class="value">${scheduler.max_vram_gb || 0} GB</span></div>
-            <div class="stat-row"><span class="label">Loaded Models</span><span class="value">${scheduler.loaded_count || 0}</span></div>
-            ${(scheduler.models || []).map(m => `<div class="stat-row"><span class="label">${escapeHtml(m.name)}</span><span class="value">${m.vram_gb} GB, ${m.use_count} uses</span></div>`).join('')}
-          </div>
-        </div>`;
+      if (_isAdmin) {
+        const gpuOs = data.gpu_os || {};
+        const devices = gpuOs.devices || [];
+        const scheduler = gpuOs.scheduler || {};
+        gpuOsPanel.innerHTML = devices.length === 0
+          ? '<span class="pill">No GPU devices registered</span>'
+          : `<div class="runtime-grid">${devices.map(d => {
+              const vramPct = d.vram_used_pct || 0;
+              const barColor = vramPct > 80 ? 'var(--bad)' : vramPct > 50 ? 'var(--warn)' : 'var(--good)';
+              return `<div class="runtime-card">
+                <h4>${escapeHtml(d.name)} (${d.device_id})</h4>
+                <div class="stat-row"><span class="label">VRAM</span><span class="value">${d.used_vram_gb} / ${d.total_vram_gb} GB</span></div>
+                <div class="vram-bar"><div class="fill" style="width:${vramPct}%;background:${barColor}"></div></div>
+                <div class="stat-row"><span class="label">Utilization</span><span class="value">${d.utilization}%</span></div>
+                <div class="stat-row"><span class="label">Temp</span><span class="value">${d.temperature}°C</span></div>
+                <div class="stat-row"><span class="label">Models</span><span class="value">${(d.models_loaded || []).join(', ') || 'none'}</span></div>
+                <div class="stat-row"><span class="label">Health</span><span class="value ${d.healthy ? 'ok' : 'bad'}">${d.healthy ? 'healthy' : 'unhealthy'}</span></div>
+              </div>`;
+            }).join('')}
+            <div class="runtime-card">
+              <h4>Scheduler</h4>
+              <div class="stat-row"><span class="label">Max VRAM</span><span class="value">${scheduler.max_vram_gb || 0} GB</span></div>
+              <div class="stat-row"><span class="label">Loaded Models</span><span class="value">${scheduler.loaded_count || 0}</span></div>
+              ${(scheduler.models || []).map(m => `<div class="stat-row"><span class="label">${escapeHtml(m.name)}</span><span class="value">${m.vram_gb} GB, ${m.use_count} uses</span></div>`).join('')}
+            </div>
+          </div>`;
 
-      // Render Multi-Agent
-      const ma = data.multi_agent || {};
-      multiAgentStats.innerHTML = `<div class="stat-row"><span class="label">Registered Agents</span><span class="value">${(ma.agents || []).length}</span></div>
-        ${(ma.agents || []).map(a => `<div class="stat-row"><span class="label">${escapeHtml(a)}</span></div>`).join('')}
-        ${(ma.agents || []).length === 0 ? '<span class="pill">No agents registered</span>' : ''}`;
+        const ma = data.multi_agent || {};
+        multiAgentStats.innerHTML = `<div class="stat-row"><span class="label">Registered Agents</span><span class="value">${(ma.agents || []).length}</span></div>
+          ${(ma.agents || []).map(a => `<div class="stat-row"><span class="label">${escapeHtml(a)}</span></div>`).join('')}
+          ${(ma.agents || []).length === 0 ? '<span class="pill">No agents registered</span>' : ''}`;
 
-      // Render Security
-      const sec = data.security || {};
-      const auth = sec.api_key_auth || {};
-      securityStats.innerHTML = `<div class="stat-row"><span class="label">API Key Auth</span><span class="value ${auth.enabled ? 'ok' : 'warn'}">${auth.enabled ? 'enabled' : 'disabled'}</span></div>
-        <div class="stat-row"><span class="label">Keys Configured</span><span class="value">${auth.key_count || 0}</span></div>
-        <div class="stat-row"><span class="label">Rate Limit Buckets</span><span class="value">${sec.rate_limiter_buckets || 0}</span></div>
-        <div class="stat-row"><span class="label">Max Text Length</span><span class="value">${(sec.max_text_length || 0).toLocaleString()} chars</span></div>
-        <div class="stat-row"><span class="label">Max Messages</span><span class="value">${sec.max_messages || 0}</span></div>`;
+        const sec = data.security || {};
+        const auth = sec.api_key_auth || {};
+        securityStats.innerHTML = `<div class="stat-row"><span class="label">API Key Auth</span><span class="value ${auth.enabled ? 'ok' : 'warn'}">${auth.enabled ? 'enabled' : 'disabled'}</span></div>
+          <div class="stat-row"><span class="label">Keys Configured</span><span class="value">${auth.key_count || 0}</span></div>
+          <div class="stat-row"><span class="label">Rate Limit Buckets</span><span class="value">${sec.rate_limiter_buckets || 0}</span></div>
+          <div class="stat-row"><span class="label">Max Text Length</span><span class="value">${(sec.max_text_length || 0).toLocaleString()} chars</span></div>
+          <div class="stat-row"><span class="label">Max Messages</span><span class="value">${sec.max_messages || 0}</span></div>`;
 
-      // Render Observability
-      const obs = data.observability || {};
-      const obsMetrics = obs.metrics || {};
-      const counterKeys = Object.keys(obsMetrics).filter(k => k.startsWith('counter:'));
-      const histogramKeys = Object.keys(obsMetrics).filter(k => k.startsWith('histogram:'));
-      observabilityStats.innerHTML = `<div class="stat-row"><span class="label">Counters</span><span class="value">${counterKeys.length}</span></div>
-        <div class="stat-row"><span class="label">Histograms</span><span class="value">${histogramKeys.length}</span></div>
-        ${counterKeys.slice(0, 5).map(k => `<div class="stat-row"><span class="label">${escapeHtml(k.slice(8))}</span><span class="value">${obsMetrics[k]}</span></div>`).join('')}`;
+        const obs = data.observability || {};
+        const obsMetrics = obs.metrics || {};
+        const counterKeys = Object.keys(obsMetrics).filter(k => k.startsWith('counter:'));
+        const histogramKeys = Object.keys(obsMetrics).filter(k => k.startsWith('histogram:'));
+        observabilityStats.innerHTML = `<div class="stat-row"><span class="label">Counters</span><span class="value">${counterKeys.length}</span></div>
+          <div class="stat-row"><span class="label">Histograms</span><span class="value">${histogramKeys.length}</span></div>
+          ${counterKeys.slice(0, 5).map(k => `<div class="stat-row"><span class="label">${escapeHtml(k.slice(8))}</span><span class="value">${obsMetrics[k]}</span></div>`).join('')}`;
+      }
 
       // Token usage summary
       (async () => {
@@ -1220,8 +1227,11 @@
     }
 
     async function addOverride(event) {
-      const model = document.getElementById('override-model').value.trim();
-      const provider = document.getElementById('override-provider').value;
+      const modelEl = document.getElementById('override-model');
+      const providerEl = document.getElementById('override-provider');
+      if (!modelEl || !providerEl) return;
+      const model = modelEl.value.trim();
+      const provider = providerEl.value;
       if (!model) {
         setOperationStatus('Enter a model name before adding an override.', 'bad');
         return;
