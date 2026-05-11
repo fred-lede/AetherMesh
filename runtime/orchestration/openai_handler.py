@@ -217,8 +217,10 @@ class RouterService:
         def wrapped() -> Iterable[dict[str, Any] | str]:
             error = False
             error_code = ""
+            last_chunk = None
             try:
                 for item in adapter.stream(effective_payload):
+                    last_chunk = item
                     yield item
             except ProviderError as exc:
                 error = True
@@ -307,6 +309,17 @@ class RouterService:
                     error=error,
                     error_code=error_code,
                 )
+                if not error and user_id is not None and isinstance(last_chunk, dict):
+                    usage = last_chunk.get("usage") or {}
+                    pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                    ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                    if pt or ct:
+                        self._record_token_usage(
+                            user_id, api_key_id,
+                            input_tokens=pt, output_tokens=ct,
+                            provider=str(state["provider"]),
+                            model=state["payload"].get("model", ""),
+                        )
 
         return wrapped()
 
@@ -506,7 +519,7 @@ class RouterService:
                 error_code=error_code,
             )
 
-    def handle_streaming_responses(self, payload: dict[str, Any]) -> Iterable[str]:
+    def handle_streaming_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[str]:
         from runtime.responses.input_converter import responses_input_to_messages
         from runtime.responses.response_stream import wrap_streaming_chunks, response_stream_encoder
         from runtime.responses.response_runtime import response_runtime
@@ -521,23 +534,42 @@ class RouterService:
         chat_payload["messages"] = messages
         chat_payload.pop("input", None)
         chat_payload.pop("instructions", None)
+        chat_payload.pop("previous_response_id", None)
+        chat_payload.pop("store", None)
         chat_payload.pop("stream", None)
 
         provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+
+        def _with_tracking(raw_chunks):
+            last_chunk = None
+            for chunk in raw_chunks:
+                last_chunk = chunk
+                yield chunk
+            if user_id is not None and isinstance(last_chunk, dict):
+                usage = last_chunk.get("usage") or {}
+                pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                if pt or ct:
+                    model_name = last_chunk.get("model", model)
+                    self._record_token_usage(
+                        user_id, api_key_id,
+                        input_tokens=pt, output_tokens=ct,
+                        provider=provider, model=model_name,
+                    )
 
         if provider == "openai":
             openai_payload = dict(payload)
             openai_payload["stream"] = True
             adapter_instance = self._adapter(provider, worker)
             raw_chunks = adapter_instance.stream(openai_payload)
-            yield from wrap_streaming_chunks(raw_chunks, response_id, model)
+            yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
             return
 
         adapter_instance = self._adapter(provider, worker)
         try:
             raw_chunks = adapter_instance.stream(effective_payload)
-            yield from wrap_streaming_chunks(raw_chunks, response_id, model)
+            yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
         except Exception as exc:
             yield response_stream_encoder.encode({
                 "type": "response.failed",

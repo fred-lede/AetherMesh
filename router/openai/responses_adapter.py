@@ -16,7 +16,7 @@ def create_responses_router(service: Any) -> APIRouter:
         api_key_id = getattr(request.state, "api_key_id", None)
         stream = payload.get("stream", False)
         if stream:
-            generator = service.handle_streaming_responses(payload)
+            generator = service.handle_streaming_responses(payload, user_id=user_id, api_key_id=api_key_id)
             return StreamingResponse(
                 generator,
                 media_type="text/event-stream",
