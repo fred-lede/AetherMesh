@@ -117,12 +117,19 @@ class OllamaAdapter(ProviderAdapter):
                 finish_reason = item.get("done_reason", "stop")
                 if emitted_tool_calls and finish_reason == "stop":
                     finish_reason = "tool_calls"
+                pe = item.get("prompt_eval_count", 0) or 0
+                ec = item.get("eval_count", 0) or 0
                 yield {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
                     "model": model,
                     "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+                    "usage": {
+                        "prompt_tokens": pe,
+                        "completion_tokens": ec,
+                        "total_tokens": pe + ec,
+                    },
                 }
                 yield "[DONE]"
                 return

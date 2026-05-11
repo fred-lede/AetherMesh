@@ -92,12 +92,19 @@ class OllamaCloudAdapter(ProviderAdapter):
 
             item = json.loads(raw_line)
             if item.get("done"):
+                pe = item.get("prompt_eval_count", 0) or 0
+                ec = item.get("eval_count", 0) or 0
                 yield {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
                     "model": model,
                     "choices": [{"index": 0, "delta": {}, "finish_reason": item.get("done_reason", "stop")}],
+                    "usage": {
+                        "prompt_tokens": pe,
+                        "completion_tokens": ec,
+                        "total_tokens": pe + ec,
+                    },
                 }
                 yield "[DONE]"
                 return

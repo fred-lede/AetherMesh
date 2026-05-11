@@ -220,7 +220,8 @@ class RouterService:
             last_chunk = None
             try:
                 for item in adapter.stream(effective_payload):
-                    last_chunk = item
+                    if isinstance(item, dict):
+                        last_chunk = item
                     yield item
             except ProviderError as exc:
                 error = True
@@ -544,7 +545,8 @@ class RouterService:
         def _with_tracking(raw_chunks):
             last_chunk = None
             for chunk in raw_chunks:
-                last_chunk = chunk
+                if isinstance(chunk, dict):
+                    last_chunk = chunk
                 yield chunk
             if user_id is not None and isinstance(last_chunk, dict):
                 usage = last_chunk.get("usage") or {}
