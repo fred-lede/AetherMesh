@@ -38,10 +38,10 @@
 ## Phase 7 — Responses API Native ✅
 - [x] response_runtime.py
 
-## Phase 8 — Provider Capability Registry 🟡
+## Phase 8 — Provider Capability Registry ✅
 - [x] providers/registry.py (Capability enum + entry dataclass)
-- [ ] ProviderCapabilityRegistry class (register/get_providers_for/score_provider)
-- [ ] Extended scoring: GPU pressure, cost, tool requirements
+- [x] ProviderCapabilityRegistry class (register/get_providers_for/score_provider)
+- [x] Extended scoring: GPU pressure, cost, tool requirements
 
 ## Phase 9 — GPU Runtime ✅
 - [x] vram_scheduler.py, model_affinity.py, warm_pool.py
@@ -175,3 +175,4 @@
 | 2026-05-08 | Phase 18 | Service launcher: `python -m runtime.launcher` starts all 8 services in one terminal + boot startup configs + multi-node docs |
 | 2026-05-10 | Phase 19 | Database-backed auth subsystem: SQLAlchemy models + scrypt passwords + JWT + DB API key validation + Dashboard UI for key management |
 | 2026-05-10 | Phase 19 | User management CRUD: `POST /api/auth/login`, `GET/POST /api/users`, `PATCH/DELETE /api/users/{id}`, Dashboard Users UI |
+| 2026-05-11 | Phase 8 | ProviderCapabilityRegistry + extended scoring (GPU pressure, cost, tool) verified complete |
