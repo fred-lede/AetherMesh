@@ -55,7 +55,7 @@ def _record_token_usage(user_id: int | None, api_key_id: int | None, input_token
         finally:
             db.close()
     except Exception:
-        pass
+        logger.exception("Failed to record token usage")
 
 
 def create_messages_routes(app, anthropic_service: AnthropicRouter):

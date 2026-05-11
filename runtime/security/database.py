@@ -41,7 +41,7 @@ class Base(DeclarativeBase):
 
 
 def init_db() -> None:
-    from runtime.security.models import User, ApiKey, Session
+    from runtime.security.models import User, ApiKey, Session, TokenUsage
 
     Base.metadata.create_all(bind=engine)
 
