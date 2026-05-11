@@ -1,6 +1,7 @@
 local_node_id: node-01
 node_hosts:
-  node-01: 127.0.0.1
+  node-01: 192.168.1.200
+  node-p40-01: 192.168.1.123
 control_plane_url: http://127.0.0.1:9200
 router_url: http://127.0.0.1:8001
 metrics_url: http://127.0.0.1:9100
