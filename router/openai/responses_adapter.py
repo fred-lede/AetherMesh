@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import StreamingResponse
 
 
@@ -11,7 +11,9 @@ def create_responses_router(service: Any) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/responses")
-    async def responses(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    async def responses(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        user_id = getattr(request.state, "user_id", None)
+        api_key_id = getattr(request.state, "api_key_id", None)
         stream = payload.get("stream", False)
         if stream:
             generator = service.handle_streaming_responses(payload)
@@ -24,7 +26,7 @@ def create_responses_router(service: Any) -> APIRouter:
                     "X-Accel-Buffering": "no",
                 },
             )
-        return service.handle_responses(payload)
+        return service.handle_responses(payload, user_id=user_id, api_key_id=api_key_id)
 
     @router.get("/v1/responses/{response_id}")
     def get_response(response_id: str) -> dict[str, Any]:

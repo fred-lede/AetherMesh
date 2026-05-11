@@ -26,6 +26,8 @@ from runtime.orchestration.provider_router import (
     provider_for_model,
 )
 from runtime.orchestration.routing_engine import routing_engine
+from runtime.security.auth.token_tracker import record_token_usage
+from runtime.security.database import SessionLocal
 from runtime.tools.builtin.web_search import (
     extract_search_query,
     latest_user_text,
@@ -112,7 +114,7 @@ class RouterService:
         except Exception as exc:
             logger.warning("Auto web search failed: %s", exc)
 
-    def handle_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def handle_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         if self._is_async_requested(prepared_payload):
@@ -124,7 +126,14 @@ class RouterService:
         error = False
         error_code = ""
         try:
-            return adapter.chat(effective_payload)
+            response = adapter.chat(effective_payload)
+            if user_id is not None:
+                usage = response.get("usage") or {}
+                self._record_token_usage(user_id, api_key_id,
+                                         usage.get("prompt_tokens", 0),
+                                         usage.get("completion_tokens", 0),
+                                         provider, effective_payload.get("model", ""))
+            return response
         except ProviderError as exc:
             error = True
             error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
@@ -196,7 +205,7 @@ class RouterService:
                 error_code=error_code,
             )
 
-    def handle_streaming_chat(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
+    def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[dict[str, Any] | str]:
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
@@ -301,7 +310,7 @@ class RouterService:
 
         return wrapped()
 
-    def handle_responses(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def handle_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
         from runtime.responses.response_models import ResponseObject, ResponseStatus
         from runtime.responses.input_converter import responses_input_to_messages
         from runtime.responses.output_converter import chat_completion_to_response, error_response
@@ -381,9 +390,19 @@ class RouterService:
                             item.arguments = oi.get("arguments", "")
                         resp.output.append(item)
                     response_runtime.register(resp)
+                usage_data = result.get("usage", {})
+                self._record_token_usage(user_id, api_key_id,
+                                         usage_data.get("input_tokens", 0),
+                                         usage_data.get("output_tokens", 0),
+                                         provider, model)
                 return result
             else:
                 completion = adapter_instance.chat(effective_payload)
+                usage = completion.get("usage") or {}
+                self._record_token_usage(user_id, api_key_id,
+                                         usage.get("prompt_tokens", 0),
+                                         usage.get("completion_tokens", 0),
+                                         provider, effective_payload.get("model", ""))
                 response = chat_completion_to_response(
                     completion=completion,
                     model=model,
@@ -1025,6 +1044,22 @@ class RouterService:
             "created": int(task.get("created_at", time.time())),
             "poll_url": f"{settings.control_plane_url}/cluster/tasks/{task_id}" if task_id else "",
         }
+
+    def _record_token_usage(self, user_id: int | None, api_key_id: int | None,
+                             input_tokens: int, output_tokens: int,
+                             provider: str, model: str) -> None:
+        if user_id is None:
+            return
+        try:
+            db = SessionLocal()
+            try:
+                record_token_usage(db, user_id=user_id, api_key_id=api_key_id,
+                                   input_tokens=input_tokens, output_tokens=output_tokens,
+                                   provider=provider, model=model)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Failed to record token usage")
 
     def _finalize_request(
         self,

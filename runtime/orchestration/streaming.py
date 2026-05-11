@@ -10,6 +10,8 @@ from metrics.request_metrics import RequestRecord, request_metrics
 from protocols.anthropic.sse_builder import AnthropicSSEBuilder, map_stop_reason
 from runtime.orchestration.anthropic_converter import AnthropicRouter
 from runtime.orchestration.routing_engine import routing_engine
+from runtime.security.auth.token_tracker import record_token_usage
+from runtime.security.database import SessionLocal
 from runtime.tools.tool_normalizer import NormalizedToolCall
 
 logger = logging.getLogger("anthropic_streaming")
@@ -23,6 +25,8 @@ def stream_anthropic_with_metrics(
     request_id: str,
     start_time: float,
     allowed_tool_names: set[str] | None = None,
+    user_id: int | None = None,
+    api_key_id: int | None = None,
 ) -> Iterable[str]:
     total_output_tokens = 0
     last_error = None
@@ -52,6 +56,20 @@ def stream_anthropic_with_metrics(
         ))
         routing_engine.set_provider_latency(provider, latency_ms)
         routing_engine.set_provider_health(provider, last_error is None)
+        if user_id is not None and last_error is None:
+            try:
+                db = SessionLocal()
+                try:
+                    record_token_usage(
+                        db, user_id=user_id, api_key_id=api_key_id,
+                        input_tokens=0,
+                        output_tokens=max(1, total_output_tokens // 4),
+                        provider=provider, model=model,
+                    )
+                finally:
+                    db.close()
+            except Exception:
+                logger.exception("Failed to record streaming token usage")
 
 
 def stream_anthropic(

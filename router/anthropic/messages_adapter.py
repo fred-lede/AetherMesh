@@ -18,6 +18,8 @@ from runtime.intelligence import execution_selector
 from runtime.memory import memory_manager
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.streaming import stream_anthropic_with_metrics
+from runtime.security.auth.token_tracker import record_token_usage
+from runtime.security.database import SessionLocal
 from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
 from runtime.tools.builtin.web_search import (
     append_references_to_stream,
@@ -41,10 +43,26 @@ class ASCIISafeJSONResponse(JSONResponse):
         ).encode("ascii")
 
 
+def _record_token_usage(user_id: int | None, api_key_id: int | None, input_tokens: int, output_tokens: int, provider: str, model: str):
+    if user_id is None:
+        return
+    try:
+        db = SessionLocal()
+        try:
+            record_token_usage(db, user_id=user_id, api_key_id=api_key_id,
+                               input_tokens=input_tokens, output_tokens=output_tokens,
+                               provider=provider, model=model)
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
 def create_messages_routes(app, anthropic_service: AnthropicRouter):
 
     @app.post("/v1/messages")
     def messages(
+        request: Request,
         payload: dict[str, Any] = Body(...),
         api_key: str | None = Header(default=None, alias="x-api-key"),
         anthropic_version: str | None = Header(default=None, alias="anthropic-version"),
@@ -194,6 +212,8 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                 inner = stream_anthropic_with_metrics(
                     anthropic_service, stream_with_first(), model, provider,
                     request_id, start_time, allowed_tool_names=allowed_tool_names,
+                    user_id=getattr(request.state, "user_id", None),
+                    api_key_id=getattr(request.state, "api_key_id", None),
                 )
                 if web_search_results:
                     inner = append_references_to_stream(inner, web_search_results)
@@ -222,6 +242,13 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                     duration_ms=latency_ms,
                     success=True,
                     token_count=dict(usage) if usage else None,
+                )
+                _record_token_usage(
+                    user_id=getattr(request.state, "user_id", None),
+                    api_key_id=getattr(request.state, "api_key_id", None),
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                    provider=provider, model=model,
                 )
                 return ASCIISafeJSONResponse(
                     content=result,
@@ -280,6 +307,13 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                     ))
                     routing_engine.set_provider_latency("ollama", fallback_latency_ms)
                     routing_engine.set_provider_health("ollama", True)
+                    _record_token_usage(
+                        user_id=getattr(request.state, "user_id", None),
+                        api_key_id=getattr(request.state, "api_key_id", None),
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        provider="ollama", model=model,
+                    )
                     result = anthropic_service._to_anthropic_response(response, model, allowed_tool_names=allowed_tool_names)
                     return ASCIISafeJSONResponse(
                         content=result,

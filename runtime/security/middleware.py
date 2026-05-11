@@ -14,21 +14,24 @@ from runtime.security.database import SessionLocal
 logger = logging.getLogger("security.middleware")
 
 
-def _verify_api_key(key: str) -> bool:
+def _verify_api_key(key: str) -> dict | None:
+    """Returns {user_id, api_key_id} for valid keys, or None."""
     env_keys = os.getenv("AIIH_API_KEY", "").strip()
     if env_keys:
         env_list = [k.strip() for k in env_keys.split(",") if k.strip()]
         if key in env_list:
-            return True
+            return {"user_id": None, "api_key_id": None}
     try:
         db = SessionLocal()
         try:
-            result = validate_api_key(db, key)
-            return result is not None
+            key_record = validate_api_key(db, key)
+            if key_record is not None:
+                return {"user_id": key_record.user_id, "api_key_id": key_record.id}
+            return None
         finally:
             db.close()
     except Exception:
-        return False
+        return None
 
 
 def add_security_middleware(
@@ -52,11 +55,14 @@ def add_security_middleware(
                     content={"type": "error", "error": {"type": "authentication_error", "message": "Missing API key"}},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            if not _verify_api_key(api_key):
+            key_info = _verify_api_key(api_key)
+            if not key_info:
                 return JSONResponse(
                     status_code=401,
                     content={"type": "error", "error": {"type": "authentication_error", "message": "Invalid API key"}},
                 )
+            request.state.api_key_id = key_info["api_key_id"]
+            request.state.user_id = key_info["user_id"]
 
         if enable_rate_limit:
             rate_key = api_key or client_ip

@@ -79,8 +79,8 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/v1/chat/completions")
-def chat_completions(payload: dict[str, Any] = Body(...)):
-    return create_chat_completions_route(service)(payload)
+def chat_completions(request: Request, payload: dict[str, Any] = Body(...)):
+    return create_chat_completions_route(service)(request, payload)
 
 
 @app.post("/v1/rerank")

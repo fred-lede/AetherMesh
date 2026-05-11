@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Body
+from fastapi import Body, Request
 from fastapi.responses import StreamingResponse
 
 from router.streaming_router import stream_response
 
 
 def create_chat_completions_route(service: Any):
-    def chat_completions(payload: dict[str, Any] = Body(...)):
+    def chat_completions(request: Request, payload: dict[str, Any] = Body(...)):
+        user_id = getattr(request.state, "user_id", None)
+        api_key_id = getattr(request.state, "api_key_id", None)
         if payload.get("stream"):
-            return stream_response(service.handle_streaming_chat(payload))
-        return service.handle_chat(payload)
+            return stream_response(service.handle_streaming_chat(payload, user_id=user_id, api_key_id=api_key_id))
+        return service.handle_chat(payload, user_id=user_id, api_key_id=api_key_id)
     return chat_completions
