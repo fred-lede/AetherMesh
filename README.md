@@ -480,7 +480,29 @@ See `.env.example` for the full list.
   selects the best available worker by GPU tier (5090 > 4070 > P40), queue depth,
   GPU utilization, and model affinity. Dead or overloaded workers are skipped
   automatically — no manual failover needed.
-- `config/cluster.yaml` — cluster defaults
+- `config/cluster.yaml` — cluster topology and node addressing
+  `node_hosts` maps each `node_id` to its LAN IP address. This must match the
+  IP the worker process uses when registering with the control plane (visible
+  via `curl /cluster/workers`). If the IP in `node_hosts` differs from the
+  worker's registered `base_url`, the routing engine's first-pass worker lookup
+  will fail and fall back to a direct probe — which may also fail if the probe
+  times out. Every node in `worker_bindings` should have an entry here:
+  ```yaml
+  node_hosts:
+    node-01: 192.168.1.200     # IP the worker agent binds to
+    node-p40-01: 192.168.1.123
+  ```
+  `local_workers` defines which Ollama ports run on this machine and their GPU
+  assignment:
+  ```yaml
+  local_workers:
+    - port: 11434
+      gpu_id: 0
+      role: coding
+    - port: 11435
+      gpu_id: 1
+      role: embeddings
+  ```
 - `config/routing_rules.yaml` — model routing rules, gateway-safe `model_aliases`, fallback settings
 - `config/routing_state.yaml` — runtime routing state (auto-generated, gitignored)
 - `config/routing_audit.jsonl` — routing audit log (auto-generated, gitignored)
