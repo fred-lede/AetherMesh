@@ -557,6 +557,31 @@
       border-radius: 3px;
       transition: width 0.4s ease;
     }
+    .dash-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .dash-tab {
+      padding: 7px 18px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      user-select: none;
+    }
+    .dash-tab:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .dash-tab.active {
+      background: rgba(94, 234, 212, 0.1);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
   </style>
 </head>
 <body>
@@ -583,6 +608,17 @@
       </div>
     </section>
 
+    <div class="dash-tabs">
+      <span class="dash-tab active" data-tab="overview" onclick="switchTab('overview')">Overview</span>
+      {% if user_role == 'admin' %}
+      <span class="dash-tab" data-tab="cluster" onclick="switchTab('cluster')">Cluster</span>
+      <span class="dash-tab" data-tab="providers" onclick="switchTab('providers')">Providers</span>
+      {% endif %}
+      <span class="dash-tab" data-tab="charts" onclick="switchTab('charts')">Charts</span>
+      <span class="dash-tab" data-tab="system" onclick="switchTab('system')">System</span>
+    </div>
+
+    <div class="tab-content active" data-tab="overview">
     <section class="health-strip" id="overall-health"></section>
 
     <section class="grid" id="top-metrics"></section>
@@ -601,8 +637,10 @@
       </div>
       <div id="token-usage-summary-dash"></div>
     </section>
+    </div>
 
     {% if user_role == 'admin' %}
+    <div class="tab-content" data-tab="providers">
     <section class="section card" id="providers-section">
       <div class="section-head">
         <h2>Providers & Routing</h2>
@@ -662,8 +700,10 @@
       <div class="subsection-title">Recent Routing Activity</div>
       <div class="table-wrap" style="margin-top: 12px;"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody id="routing-audit-table"></tbody></table></div>
     </section>
+    </div>
     {% endif %}
 
+    <div class="tab-content" data-tab="charts">
     <div class="chart-toolbar">
       <div>
         <div class="subsection-title" style="margin: 0;">Signal Charts</div>
@@ -758,8 +798,10 @@
       </div>
       {% endif %}
     </section>
+    </div>
 
     {% if user_role == 'admin' %}
+    <div class="tab-content" data-tab="cluster">
     <section class="section card">
       <div class="section-head">
         <h2>Cluster Nodes</h2>
@@ -787,8 +829,10 @@
       </div>
       <div class="table-wrap"><table><thead><tr><th>Model</th><th>Provider</th><th>Workers (cfg/online)</th><th>Capabilities</th></tr></thead><tbody id="models-table"></tbody></table></div>
     </section>
+    </div>
     {% endif %}
 
+    <div class="tab-content" data-tab="system">
     <section class="section card">
       <div class="section-head">
         <h2>Task Queue</h2>
@@ -841,10 +885,21 @@
       </div>
     </section>
     {% endif %}
+    </div>
 
   </div>
 
-  <script>window._userRole = '{{ user_role }}';</script>
+  <script>
+    window._userRole = '{{ user_role }}';
+    function switchTab(name) {
+      document.querySelectorAll('.dash-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      if (name === 'charts') {
+        try { setChartGroup(activeChartGroup || 'health'); } catch(e) {}
+        document.querySelectorAll('.chart-card canvas').forEach(c => { try { const ch = Chart.getChart(c); if (ch) ch.resize(); } catch(e) {} });
+      }
+    }
+  </script>
   <script src="/static/dashboard.js"></script>
 </body>
 </html>
