@@ -458,6 +458,7 @@ All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 | `AIIH_REDIS_URL` | — | Redis connection for async queue |
 | `AIIH_NODE_ID` | — | Unique node identity |
 | `AIIH_MAX_WORKER_QUEUE` | — | Max queued tasks per worker |
+| `AIIH_WORKER_ASSIGNMENT_TTL` | `900` | Seconds before unreleased sync worker assignments are reclaimed after router crashes |
 | `AIIH_PROVIDER_COOLDOWN` | — | Seconds before retrying failed provider |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
 | `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
@@ -613,6 +614,11 @@ Task worker (`python -m ai_queue.task_worker`) executes and updates status.
 ### Worker Assignment
 Scheduler picks from healthy workers by: lowest GPU utilization → lowest queue size → random tie-break.
 Workers excluded at GPU utilization ≥ 85% or queue exceeding `AIIH_MAX_WORKER_QUEUE`.
+Sync dispatches carry an `assignment_id`; routers release the same assignment on completion.
+If a router exits mid-request, the control plane reclaims unreleased assignments after
+`AIIH_WORKER_ASSIGNMENT_TTL` seconds so `queue_size` does not remain stuck and cause
+false `worker_queue_full` 429s.
+GPU saturation (utilization ≥ 85%) is reported as worker unavailability instead of queue capacity.
 
 ### Hierarchical Fallback
 - Tier 1 (S-Tier): high-performance GPU (RTX 5090)
@@ -620,6 +626,9 @@ Workers excluded at GPU utilization ≥ 85% or queue exceeding `AIIH_MAX_WORKER_
 - Tier 3 (B-Tier): high-capacity GPU (Tesla P40)
 
 Saturated tiers (GPU ≥ 85%) divert to the next tier.
+OpenAI-compatible sync routing includes local fallback chains for heavy 5090-bound models
+such as `qwen3.6:27b` and `qwen3.6:35b`, allowing requests to fall back to smaller
+models on other available local workers when the primary GPU is busy.
 
 ## Monitoring & Dashboard
 

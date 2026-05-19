@@ -62,6 +62,7 @@ class Settings:
     heartbeat_interval_s: int = field(default_factory=lambda: _env_int("AIIH_HEARTBEAT_INTERVAL", 15))
     stale_after_s: int = field(default_factory=lambda: _env_int("AIIH_STALE_AFTER", 45))
     max_worker_queue_size: int = field(default_factory=lambda: _env_int("AIIH_MAX_WORKER_QUEUE", 8))
+    worker_assignment_ttl_s: int = field(default_factory=lambda: _env_int("AIIH_WORKER_ASSIGNMENT_TTL", 900))
     max_task_retries: int = field(default_factory=lambda: _env_int("AIIH_MAX_TASK_RETRIES", 3))
     worker_degrade_after_errors: int = field(default_factory=lambda: _env_int("AIIH_WORKER_DEGRADE_AFTER_ERRORS", 2))
     worker_degrade_cooldown_s: int = field(default_factory=lambda: _env_int("AIIH_WORKER_DEGRADE_COOLDOWN", 30))

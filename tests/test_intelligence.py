@@ -41,3 +41,25 @@ def test_selector_reranks_preserves_decision() -> None:
     assert result is not None
     assert result.provider == "ollama"
     assert result.score >= 10.0
+
+
+def test_selector_does_not_split_worker_from_routing_decision() -> None:
+    from runtime.orchestration.routing_engine import RoutingDecision, RouteCandidate
+    selector = ExecutionSelector()
+    decision = RoutingDecision(
+        provider="ollama_cloud",
+        model="qwen3-coder:480b",
+        worker=None,
+        score=100.0,
+        candidates=[
+            RouteCandidate(provider="ollama", model="gemma4:26b", score=110.0),
+            RouteCandidate(provider="ollama_cloud", model="qwen3-coder:480b", score=100.0),
+        ],
+        rules_applied=[],
+    )
+
+    result = selector.rerank(decision, model="qwen3-coder:480b")
+
+    assert result.provider == "ollama_cloud"
+    assert result.model == "qwen3-coder:480b"
+    assert result.worker is None

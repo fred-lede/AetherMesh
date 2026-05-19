@@ -47,7 +47,7 @@ class Scheduler:
         )
         if worker is not None:
             assignment_id = str(uuid.uuid4())
-            self.worker_registry.acquire(worker["worker_id"])
+            self.worker_registry.acquire(worker["worker_id"], assignment_id=assignment_id)
             updated = self.worker_registry.get_worker(worker["worker_id"]) or worker
             metrics_store.set_worker_usage(
                 updated["worker_id"],
@@ -68,8 +68,20 @@ class Scheduler:
             return {"status": "queued", "task": task}
 
         if candidates and self.max_worker_queue_size > 0:
+            queue_full = all(
+                int(worker.get("queue_size", 0)) >= self.max_worker_queue_size
+                for worker in candidates
+            )
+            if queue_full:
+                raise SchedulerOverloadedError(
+                    "All matching workers are at queue capacity.",
+                    retry_after_s=3,
+                )
+            gpu_saturated = any(float(worker.get("gpu_utilization", 0)) >= 85 for worker in candidates)
+            if gpu_saturated:
+                raise RuntimeError("All matching workers are currently GPU saturated.")
             raise SchedulerOverloadedError(
-                "All matching workers are at queue capacity.",
+                "All matching workers are temporarily unavailable.",
                 retry_after_s=3,
             )
         raise RuntimeError("No healthy worker available for the requested model.")

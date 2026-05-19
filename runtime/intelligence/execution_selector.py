@@ -76,13 +76,23 @@ class ExecutionSelector:
             ))
 
         adjusted.sort(key=lambda c: c.score, reverse=True)
-        best = adjusted[0]
+        matched = next(
+            (
+                c for c in adjusted
+                if c.provider == decision.provider and c.model == decision.model
+            ),
+            None,
+        )
+        matched_provider = next(
+            (c for c in adjusted if c.provider == decision.provider),
+            None,
+        )
 
         return RoutingDecision(
-            provider=best.provider,
-            model=best.model,
+            provider=decision.provider,
+            model=decision.model,
             worker=decision.worker,
-            score=best.score,
+            score=(matched or matched_provider).score if (matched or matched_provider) else decision.score,
             candidates=adjusted,
             rules_applied=decision.rules_applied + ["execution_selector_rerank"],
         )

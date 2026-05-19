@@ -63,6 +63,22 @@ class WorkerRegistry:
         self._lock = threading.RLock()
 
     def _refresh_state(self, record: WorkerRecord, now: float) -> None:
+        active = record.metadata.get("active_assignments")
+        if isinstance(active, dict):
+            ttl = max(1, int(settings.worker_assignment_ttl_s))
+            live = {
+                str(assignment_id): float(started_at)
+                for assignment_id, started_at in active.items()
+                if now - float(started_at) <= ttl
+            }
+            expired = len(active) - len(live)
+            if expired > 0:
+                record.queue_size = max(0, record.queue_size - expired)
+            if live:
+                record.metadata["active_assignments"] = live
+            else:
+                record.metadata.pop("active_assignments", None)
+
         if record.status == "degraded" and now >= record.degraded_until and record.queue_size == 0:
             record.status = "healthy"
             record.consecutive_errors = 0
@@ -157,13 +173,30 @@ class WorkerRegistry:
             record.last_heartbeat = now
             return record.to_dict()
 
-    def release(self, worker_id: str, success: bool = True) -> dict[str, Any] | None:
+    def release(
+        self,
+        worker_id: str,
+        success: bool = True,
+        assignment_id: str | None = None,
+    ) -> dict[str, Any] | None:
         with self._lock:
             record = self._workers.get(worker_id)
             if record is None:
                 return None
 
             now = time.time()
+            self._refresh_state(record, now)
+            active = record.metadata.get("active_assignments")
+            if isinstance(active, dict) and active:
+                if assignment_id and assignment_id in active:
+                    active.pop(assignment_id, None)
+                else:
+                    oldest = min(active.items(), key=lambda item: float(item[1]))[0]
+                    active.pop(oldest, None)
+                if active:
+                    record.metadata["active_assignments"] = active
+                else:
+                    record.metadata.pop("active_assignments", None)
             record.queue_size = max(0, record.queue_size - 1)
             if success:
                 record.status = "healthy"
@@ -183,7 +216,7 @@ class WorkerRegistry:
             record.last_heartbeat = now
             return record.to_dict()
 
-    def acquire(self, worker_id: str) -> dict[str, Any] | None:
+    def acquire(self, worker_id: str, assignment_id: str | None = None) -> dict[str, Any] | None:
         with self._lock:
             record = self._workers.get(worker_id)
             if record is None:
@@ -191,6 +224,12 @@ class WorkerRegistry:
             now = time.time()
             self._refresh_state(record, now)
             record.queue_size += 1
+            if assignment_id:
+                active = record.metadata.get("active_assignments")
+                if not isinstance(active, dict):
+                    active = {}
+                active[str(assignment_id)] = now
+                record.metadata["active_assignments"] = active
             record.last_heartbeat = now
             return record.to_dict()
 

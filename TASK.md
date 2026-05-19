@@ -159,6 +159,14 @@
 - [x] User CRUD routes: `GET /api/users`, `POST /api/users`, `PATCH /api/users/{id}`, `DELETE /api/users/{id}`
 - [x] Dashboard Users section — list / create / edit (name, role, password) / delete
 
+## Phase 20 — Worker Assignment Resilience ✅ (2026-05-19)
+- [x] Fixed execution selector rerank so it preserves the routing engine's concrete `provider/model/worker` decision instead of producing `ollama` with no worker.
+- [x] Added sync worker assignment IDs and release tracking so router crashes cannot leave `queue_size` inflated indefinitely.
+- [x] Added `AIIH_WORKER_ASSIGNMENT_TTL` to reclaim unreleased assignments after a bounded lease period.
+- [x] Distinguished GPU saturation from queue capacity so saturated workers no longer surface as misleading `worker_queue_full` 429s.
+- [x] Added local fallback chains for `qwen3.6:27b` and `qwen3.6:35b` to route around a busy 5090 when smaller workers are available.
+- [x] Updated launcher `.env` loading to override inherited environment values for deterministic service startup.
+
 ---
 
 ## 執行記錄
@@ -176,3 +184,4 @@
 | 2026-05-10 | Phase 19 | Database-backed auth subsystem: SQLAlchemy models + scrypt passwords + JWT + DB API key validation + Dashboard UI for key management |
 | 2026-05-10 | Phase 19 | User management CRUD: `POST /api/auth/login`, `GET/POST /api/users`, `PATCH/DELETE /api/users/{id}`, Dashboard Users UI |
 | 2026-05-11 | Phase 8 | ProviderCapabilityRegistry + extended scoring (GPU pressure, cost, tool) verified complete |
+| 2026-05-19 | Phase 20 | Worker assignment resilience: leased dispatch/release, stuck queue reclamation, rerank worker preservation, GPU saturation classification, qwen3.6 local fallback |

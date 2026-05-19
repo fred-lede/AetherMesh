@@ -49,6 +49,7 @@ class DispatchRequest(BaseModel):
 
 class WorkerReleaseRequest(BaseModel):
     worker_id: str
+    assignment_id: str | None = None
     success: bool = True
     gpu_utilization: float | None = None
     temperature: float | None = None
@@ -360,7 +361,11 @@ def dispatch_task(request: DispatchRequest) -> dict[str, Any]:
 
 @app.post("/cluster/release")
 def release_worker(request: WorkerReleaseRequest) -> dict[str, Any]:
-    updated = manager.worker_registry.release(request.worker_id, success=request.success)
+    updated = manager.worker_registry.release(
+        request.worker_id,
+        success=request.success,
+        assignment_id=request.assignment_id,
+    )
     if updated is None:
         raise HTTPException(status_code=404, detail="Worker not found.")
     updated = manager.worker_registry.update_worker_runtime(

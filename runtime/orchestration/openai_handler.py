@@ -789,6 +789,8 @@ class RouterService:
     C_FALLBACK_MAP = {
         "gemma4:31b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
         "qwen3.5:27b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
+        "qwen3.6:27b": ["gemma4:e4b", "qwen3.5:9b", "qwen3.5:0.8b"],
+        "qwen3.6:35b": ["gemma4:e4b", "qwen3.5:9b", "qwen3.5:0.8b"],
         "gemma4:26b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
         "gemma3:27b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
         "nemotron-cascade-2:30b": ["gemma3:12b", "qwen3.5:9b", "gemma4:e4b"],
@@ -853,7 +855,10 @@ class RouterService:
                     dispatch = response.json()
                     if dispatch.get("status") == "assigned":
                         payload["model"] = current_model
-                        return provider, dispatch["worker"]
+                        worker = dict(dispatch["worker"])
+                        if dispatch.get("assignment_id"):
+                            worker["assignment_id"] = dispatch["assignment_id"]
+                        return provider, worker
                     else:
                         last_error_resp = response
                 elif response.status_code in {429, 503}:
@@ -1116,9 +1121,13 @@ class RouterService:
             try:
                 worker_id = worker.get("worker_id")
                 if worker_id:
+                    release_payload = {"worker_id": worker_id, "success": not error}
+                    assignment_id = worker.get("assignment_id")
+                    if assignment_id:
+                        release_payload["assignment_id"] = assignment_id
                     get_session().post(
                         f"{settings.control_plane_url}/cluster/release",
-                        json={"worker_id": worker_id, "success": not error},
+                        json=release_payload,
                         timeout=5,
                     )
             except requests.RequestException:
