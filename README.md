@@ -413,6 +413,15 @@ auto-conversion for Ollama, Gemini, NVIDIA NIM, and Ollama Cloud. Supports
 `input`, `instructions`, `tools`, streaming, tool calls, and response management
 (GET/DELETE/PATCH). All provider adapters implement the `responses` capability.
 
+### Embeddings API
+
+`POST /v1/embeddings` routes requests with `input` and no `messages` as the
+`embeddings` capability, so embeddings-only models such as
+`nomic-embed-text-v2-moe:latest` are not treated as chat models or routed through
+chat fallback logic. Ollama and Ollama Cloud embedding adapters normalize the
+common upstream shapes (`embeddings`, legacy `embedding`, and OpenAI-style
+`data[].embedding`) into OpenAI-compatible `data[].embedding` rows.
+
 ### MCP Gateway (`runtime/mcp/`)
 
 Proxies MCP connections with auth, sandboxing, and bridging.

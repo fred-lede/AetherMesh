@@ -167,6 +167,12 @@
 - [x] Added local fallback chains for `qwen3.6:27b` and `qwen3.6:35b` to route around a busy 5090 when smaller workers are available.
 - [x] Updated launcher `.env` loading to override inherited environment values for deterministic service startup.
 
+## Phase 21 — Embeddings Routing Normalization ✅ (2026-05-24)
+- [x] Registered the OpenAI-compatible `POST /v1/embeddings` route in `router/openai_router.py`.
+- [x] Classified OpenAI embedding payloads (`input` without `messages`) as the `embeddings` capability instead of `chat`.
+- [x] Normalized Ollama and Ollama Cloud embedding response shapes: `embeddings`, legacy `embedding`, and OpenAI-style `data[].embedding`.
+- [x] Verified `nomic-embed-text-v2-moe:latest` remains an embeddings-only model path and returns non-empty 768-dimensional vectors through AetherMesh.
+
 ---
 
 ## 執行記錄
@@ -185,3 +191,4 @@
 | 2026-05-10 | Phase 19 | User management CRUD: `POST /api/auth/login`, `GET/POST /api/users`, `PATCH/DELETE /api/users/{id}`, Dashboard Users UI |
 | 2026-05-11 | Phase 8 | ProviderCapabilityRegistry + extended scoring (GPU pressure, cost, tool) verified complete |
 | 2026-05-19 | Phase 20 | Worker assignment resilience: leased dispatch/release, stuck queue reclamation, rerank worker preservation, GPU saturation classification, qwen3.6 local fallback |
+| 2026-05-24 | Phase 21 | Embeddings routing normalization: `/v1/embeddings` route, embeddings capability detection, Ollama response-shape normalization |

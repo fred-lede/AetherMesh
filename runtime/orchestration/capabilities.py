@@ -4,6 +4,9 @@ from typing import Any
 
 
 def required_openai_capabilities(payload: dict[str, Any]) -> set[str]:
+    if "input" in payload and "messages" not in payload:
+        return {"embeddings"}
+
     required = {"chat"}
     if payload.get("tools"):
         required.add("tools")

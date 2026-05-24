@@ -271,10 +271,7 @@ class OllamaAdapter(ProviderAdapter):
         if not response.ok:
             raise ProviderError(response.text)
         data = response.json()
-        embeddings = data.get("embeddings", [])
-        rows = []
-        for index, embedding in enumerate(embeddings):
-            rows.append({"object": "embedding", "index": index, "embedding": embedding})
+        rows = _embedding_rows(data)
         return {"object": "list", "data": rows, "model": payload["model"], "usage": {}}
     def rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -833,3 +830,35 @@ def _safe_json_str(value: Any) -> str:
         return value
     import json
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _embedding_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    openai_rows = data.get("data")
+    if isinstance(openai_rows, list):
+        rows: list[dict[str, Any]] = []
+        for index, item in enumerate(openai_rows):
+            if not isinstance(item, dict):
+                continue
+            embedding = item.get("embedding")
+            if isinstance(embedding, list):
+                rows.append({
+                    "object": "embedding",
+                    "index": int(item.get("index", index)),
+                    "embedding": embedding,
+                })
+        if rows:
+            return rows
+
+    embeddings = data.get("embeddings")
+    if isinstance(embeddings, list):
+        return [
+            {"object": "embedding", "index": index, "embedding": embedding}
+            for index, embedding in enumerate(embeddings)
+            if isinstance(embedding, list)
+        ]
+
+    embedding = data.get("embedding")
+    if isinstance(embedding, list):
+        return [{"object": "embedding", "index": 0, "embedding": embedding}]
+
+    return []

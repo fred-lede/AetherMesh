@@ -88,6 +88,11 @@ def rerank(payload: dict[str, Any] = Body(...)):
     return create_rerank_route(service)(payload)
 
 
+@app.post("/v1/embeddings")
+def embeddings(payload: dict[str, Any] = Body(...)):
+    return create_embeddings_route(service)(payload)
+
+
 @app.get("/v1/models")
 def models() -> dict[str, Any]:
     return create_models_route(service)()
