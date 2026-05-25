@@ -9,7 +9,6 @@ from runtime.responses.output_converter import (
     make_response_start_event,
     make_response_stream_error,
     make_response_completed_event,
-    streaming_chunk_to_response_event,
 )
 
 logger = logging.getLogger("responses.stream")
@@ -39,25 +38,18 @@ def wrap_streaming_chunks(
 
     emitted_done = False
     text_parts: list[str] = []
+    item_id = f"msg_{uuid.uuid4().hex[:16]}"
+    item_started = False
+    content_started = False
 
     for chunk in chunks:
         if isinstance(chunk, str):
             if chunk == "[DONE]":
-                emitted_done = True
                 break
-            if isinstance(chunk, str):
-                try:
-                    chunk_data = json.loads(chunk)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                events = streaming_chunk_to_response_event(chunk_data, response_id, model)
-                for event in events:
-                    _capture_text_delta(event, text_parts)
-                    _attach_completed_output(event, "".join(text_parts))
-                    yield response_stream_encoder.encode(event)
-                    if event.get("type") == "response.completed":
-                        emitted_done = True
-            continue
+            try:
+                chunk = json.loads(chunk)
+            except (json.JSONDecodeError, TypeError):
+                continue
 
         if isinstance(chunk, dict):
             if "error" in chunk:
@@ -67,18 +59,65 @@ def wrap_streaming_chunks(
                 yield response_stream_encoder.encode_done()
                 return
 
-            events = streaming_chunk_to_response_event(chunk, response_id, model)
-            for event in events:
-                _capture_text_delta(event, text_parts)
-                _attach_completed_output(event, "".join(text_parts))
-                yield response_stream_encoder.encode(event)
-                if event.get("type") == "response.completed":
-                    emitted_done = True
+            for content in _chunk_text_deltas(chunk):
+                if content and not item_started:
+                    yield response_stream_encoder.encode(
+                        _make_output_item_added_event(response_id, item_id)
+                    )
+                    item_started = True
+                if content and not content_started:
+                    yield response_stream_encoder.encode(
+                        _make_content_part_added_event(response_id, item_id)
+                    )
+                    content_started = True
+                if content:
+                    text_parts.append(content)
+                    yield response_stream_encoder.encode(
+                        _make_output_text_delta_event(response_id, item_id, content)
+                    )
+
+            if _chunk_finished(chunk):
+                full_text = "".join(text_parts)
+                if content_started:
+                    yield response_stream_encoder.encode(
+                        _make_output_text_done_event(response_id, item_id, full_text)
+                    )
+                    yield response_stream_encoder.encode(
+                        _make_content_part_done_event(response_id, item_id, full_text)
+                    )
+                if item_started:
+                    yield response_stream_encoder.encode(
+                        _make_output_item_done_event(response_id, item_id, full_text)
+                    )
+                yield response_stream_encoder.encode(
+                    make_response_completed_event(
+                        response_id,
+                        model,
+                        usage=_responses_usage(chunk),
+                        output_text=full_text,
+                    )
+                )
+                emitted_done = True
+                break
 
     if not emitted_done:
+        full_text = "".join(text_parts)
+        if content_started:
+            yield response_stream_encoder.encode(
+                _make_output_text_done_event(response_id, item_id, full_text)
+            )
+            yield response_stream_encoder.encode(
+                _make_content_part_done_event(response_id, item_id, full_text)
+            )
+        if item_started:
+            yield response_stream_encoder.encode(
+                _make_output_item_done_event(response_id, item_id, full_text)
+            )
         yield response_stream_encoder.encode(
-            make_response_completed_event(response_id, model, output_text="".join(text_parts))
+            make_response_completed_event(response_id, model, output_text=full_text)
         )
+
+    yield response_stream_encoder.encode_done()
 
 
 def make_function_call_queue_event(
@@ -174,6 +213,144 @@ def make_text_delta_event(
             "response": {"id": response_id},
             "delta": delta,
             "index": index,
+        },
+    }
+
+
+def _chunk_text_deltas(chunk: dict[str, Any]) -> list[str]:
+    deltas: list[str] = []
+    choices = chunk.get("choices", [])
+    if not isinstance(choices, list):
+        return deltas
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if isinstance(delta, dict):
+            content = delta.get("content", "")
+            if content:
+                deltas.append(str(content))
+        message = choice.get("message")
+        if isinstance(message, dict):
+            content = message.get("content", "")
+            if content:
+                deltas.append(str(content))
+    return deltas
+
+
+def _chunk_finished(chunk: dict[str, Any]) -> bool:
+    choices = chunk.get("choices", [])
+    if not isinstance(choices, list):
+        return False
+    return any(
+        isinstance(choice, dict) and bool(choice.get("finish_reason"))
+        for choice in choices
+    )
+
+
+def _responses_usage(chunk: dict[str, Any]) -> dict[str, Any]:
+    usage = chunk.get("usage", {})
+    if not isinstance(usage, dict):
+        usage = {}
+    return {
+        "input_tokens": usage.get("prompt_tokens", usage.get("input_tokens", 0)),
+        "output_tokens": usage.get("completion_tokens", usage.get("output_tokens", 0)),
+        "total_tokens": usage.get("total_tokens", 0),
+    }
+
+
+def _make_output_item_added_event(response_id: str, item_id: str) -> dict[str, Any]:
+    return {
+        "type": "response.output_item.added",
+        "data": {
+            "type": "response.output_item.added",
+            "response": {"id": response_id},
+            "output_index": 0,
+            "item": {
+                "id": item_id,
+                "type": "message",
+                "status": "in_progress",
+                "role": "assistant",
+                "content": [],
+            },
+        },
+    }
+
+
+def _make_content_part_added_event(response_id: str, item_id: str) -> dict[str, Any]:
+    return {
+        "type": "response.content_part.added",
+        "data": {
+            "type": "response.content_part.added",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": 0,
+            "content_index": 0,
+            "part": {"type": "output_text", "text": "", "annotations": []},
+        },
+    }
+
+
+def _make_output_text_delta_event(response_id: str, item_id: str, delta: str) -> dict[str, Any]:
+    return {
+        "type": "response.output_text.delta",
+        "data": {
+            "type": "response.output_text.delta",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": 0,
+            "content_index": 0,
+            "delta": delta,
+        },
+    }
+
+
+def _make_output_text_done_event(response_id: str, item_id: str, text: str) -> dict[str, Any]:
+    return {
+        "type": "response.output_text.done",
+        "data": {
+            "type": "response.output_text.done",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": 0,
+            "content_index": 0,
+            "text": text,
+        },
+    }
+
+
+def _make_content_part_done_event(response_id: str, item_id: str, text: str) -> dict[str, Any]:
+    return {
+        "type": "response.content_part.done",
+        "data": {
+            "type": "response.content_part.done",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": 0,
+            "content_index": 0,
+            "part": {"type": "output_text", "text": text, "annotations": []},
+        },
+    }
+
+
+def _make_output_item_done_event(response_id: str, item_id: str, text: str) -> dict[str, Any]:
+    return {
+        "type": "response.output_item.done",
+        "data": {
+            "type": "response.output_item.done",
+            "response": {"id": response_id},
+            "output_index": 0,
+            "item": {
+                "id": item_id,
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{
+                    "type": "output_text",
+                    "text": text,
+                    "annotations": [],
+                }],
+            },
         },
     }
 

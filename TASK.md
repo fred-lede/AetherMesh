@@ -215,6 +215,7 @@
 | 2026-05-25 | Phase 23c | Responses diagnostics: fallback OpenAI streaming adapter failures to local Ollama and add `AIIH_DEBUG_RESPONSES` trace logging |
 | 2026-05-26 | Phase 23d | OpenAI router env bootstrap: load `.env` before settings for direct uvicorn starts |
 | 2026-05-26 | Phase 23e | Responses role normalization: map `developer` input messages to Ollama-compatible `system` role |
+| 2026-05-26 | Phase 23f | Responses SSE compatibility: emit stateful output item/content part/delta/done events with indexes |
 
 ## Phase 23 - Responses Client Compatibility (2026-05-25)
 - [x] Accept bare Responses content parts such as `input_text` and plain `text` dictionaries as user input.
@@ -226,4 +227,5 @@
 - [x] Load `.env` in `router/openai_router.py` before `settings` is initialized so `AIIH_DEBUG_RESPONSES` works outside the launcher.
 - [x] Normalize Responses `developer` messages to `system` before routing to Ollama-compatible providers.
 - [x] Add `stream.failed` trace logging for Responses SSE provider exceptions.
+- [x] Emit stateful Responses SSE events with stable `item_id`, `output_index`, and `content_index` fields.
 - [x] Added regression coverage for bare input parts and streaming completed output.

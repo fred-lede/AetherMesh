@@ -462,6 +462,25 @@ def test_wrap_streaming_chunks_completed_event_contains_output_text():
     assert output[0]["content"][0]["text"] == "Hello world"
     assert completed["response"]["output_text"] == "Hello world"
 
+    deltas = [
+        json.loads(event.split("data: ", 1)[1])
+        for event in events
+        if event.startswith("event: response.output_text.delta")
+    ]
+    assert deltas[0]["item_id"].startswith("msg_")
+    assert deltas[0]["output_index"] == 0
+    assert deltas[0]["content_index"] == 0
+
+
+def test_wrap_streaming_chunks_emits_done_marker():
+    chunks = [
+        {"choices": [{"delta": {"content": "OK"}, "finish_reason": "stop"}]},
+    ]
+
+    events = list(wrap_streaming_chunks(chunks, response_id="resp_1", model="test-model"))
+
+    assert events[-1] == "event: response.done\ndata: [DONE]\n\n"
+
 
 # ── Unit Tests: Response Model Helpers ──────────────────────────────
 
