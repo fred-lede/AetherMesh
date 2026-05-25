@@ -602,6 +602,7 @@ class RouterService:
 
         provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+        started = time.perf_counter()
         self._trace_responses(
             "stream.route_selected",
             response_id=response_id,
@@ -609,8 +610,9 @@ class RouterService:
             worker=worker,
             effective_payload=effective_payload,
         )
+        outer_state: dict[str, Any] = {"provider": provider, "worker": worker, "payload": effective_payload}
 
-        def _with_tracking(raw_chunks):
+        def _with_tracking(raw_chunks) -> Iterable[dict[str, Any] | str]:
             last_chunk = None
             for chunk in raw_chunks:
                 if isinstance(chunk, dict):
@@ -625,100 +627,28 @@ class RouterService:
                     self._record_token_usage(
                         user_id, api_key_id,
                         input_tokens=pt, output_tokens=ct,
-                        provider=provider, model=model_name,
+                        provider=outer_state["provider"], model=model_name,
                     )
 
-        if provider == "openai":
-            openai_payload = dict(payload)
-            openai_payload["stream"] = True
-            try:
-                adapter_instance = self._adapter(provider, worker)
-                raw_chunks = adapter_instance.stream(openai_payload)
-                yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
-                return
-            except ProviderError as exc:
-                fallback = self._local_ollama_fallback(chat_payload)
-                if fallback is None or not self._should_fallback_provider_error(exc):
-                    self._trace_responses(
-                        "stream.openai_adapter_failed",
-                        response_id=response_id,
-                        error=str(exc),
-                    )
-                    yield response_stream_encoder.encode({
-                        "type": "response.failed",
-                        "data": {
-                            "type": "response.failed",
-                            "response": {
-                                "id": response_id,
-                                "object": "response",
-                                "model": model,
-                                "status": "failed",
-                                "error": {"message": str(exc), "type": "server_error", "code": self._classify_error_text(str(exc))},
-                            },
-                        },
-                    })
-                    yield response_stream_encoder.encode_done()
-                    return
-                effective_payload, worker = fallback
-                provider = "ollama"
-                self._trace_responses(
-                    "stream.openai_fallback",
-                    response_id=response_id,
-                    provider=provider,
-                    worker=worker,
-                    effective_payload=effective_payload,
-                    error=str(exc),
-                )
+        def _finalize(error: bool, error_code: str = "") -> None:
+            err_msg = error_code or ("provider_error" if error else "")
+            self._finalize_request(
+                endpoint="/v1/responses",
+                payload=outer_state["payload"],
+                provider=str(outer_state["provider"]),
+                worker=outer_state["worker"],
+                latency_ms=(time.perf_counter() - started) * 1000,
+                error=error,
+                error_code=err_msg,
+            )
 
-        tools = self._ensure_openai_tools(payload.get("tools") or [])
-        adapter_instance = self._adapter(provider, worker)
-        try:
-            if tools:
-                from runtime.responses.tool_loop import responses_tool_loop
-                from runtime.responses.response_stream import response_stream_encoder
-                loop = responses_tool_loop
-                max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
-                parallel_tool_calls = payload.get("parallel_tool_calls", True)
-                if max_turns != loop._max_turns or parallel_tool_calls != loop._parallel_tool_calls:
-                    from runtime.responses.tool_loop import ResponsesToolLoop, DEFAULT_MAX_TURNS, DEFAULT_TOOL_TIMEOUT_S
-                    loop = ResponsesToolLoop(
-                        max_turns=max_turns,
-                        parallel_tool_calls=parallel_tool_calls,
-                    )
-                yield from loop.run_streaming(
-                    adapter=adapter_instance,
-                    chat_payload=effective_payload,
-                    tools=tools,
-                    instructions=instructions,
-                    response_id=response_id,
-                    model=model,
-                    previous_response_id=previous_response_id,
-                    metadata=metadata,
-                    input_value=input_value,
-                    encoder=response_stream_encoder,
-                )
-                store_flag = bool(payload.get("store", True))
-                if store_flag:
-                    from runtime.responses.response_runtime import response_runtime
-                    final_resp = ResponseObject(
-                        id=response_id,
-                        model=model,
-                        status=ResponseStatus.COMPLETED,
-                        instructions=instructions,
-                        previous_response_id=previous_response_id,
-                        metadata=metadata,
-                    )
-                    response_runtime.register(final_resp)
-            else:
-                raw_chunks = adapter_instance.stream(effective_payload)
-                yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
-        except Exception as exc:
+        def error_yield(exc: Exception, code: str = "server_error") -> Iterable[str]:
             self._trace_responses(
                 "stream.failed",
                 response_id=response_id,
-                provider=provider,
-                worker=worker,
-                effective_payload=effective_payload,
+                provider=outer_state["provider"],
+                worker=outer_state["worker"],
+                effective_payload=outer_state["payload"],
                 error=str(exc),
             )
             yield response_stream_encoder.encode({
@@ -730,11 +660,88 @@ class RouterService:
                         "object": "response",
                         "model": model,
                         "status": "failed",
-                        "error": {"message": str(exc), "type": "server_error", "code": "server_error"},
+                        "error": {"message": str(exc), "type": "server_error", "code": code},
                     },
                 },
             })
             yield response_stream_encoder.encode_done()
+
+        def stream_yield() -> Iterable[str]:
+            stream_error = False
+            try:
+                if outer_state["provider"] == "openai":
+                    openai_payload = dict(payload)
+                    openai_payload["stream"] = True
+                    try:
+                        adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])
+                        raw_chunks = adapter_instance.stream(openai_payload)
+                        yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
+                        return
+                    except ProviderError as exc:
+                        fallback = self._local_ollama_fallback(chat_payload)
+                        if fallback is None or not self._should_fallback_provider_error(exc):
+                            stream_error = True
+                            yield from error_yield(exc, self._classify_error_text(str(exc)))
+                            return
+                        effective_payload, worker = fallback
+                        outer_state["provider"] = "ollama"
+                        outer_state["worker"] = worker
+                        outer_state["payload"] = effective_payload
+                        self._trace_responses(
+                            "stream.openai_fallback",
+                            response_id=response_id,
+                            provider=outer_state["provider"],
+                            worker=outer_state["worker"],
+                            effective_payload=outer_state["payload"],
+                            error=str(exc),
+                        )
+
+                tools = self._ensure_openai_tools(payload.get("tools") or [])
+                adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])
+                if tools:
+                    from runtime.responses.tool_loop import responses_tool_loop
+                    loop = responses_tool_loop
+                    max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
+                    parallel_tool_calls = payload.get("parallel_tool_calls", True)
+                    if max_turns != loop._max_turns or parallel_tool_calls != loop._parallel_tool_calls:
+                        from runtime.responses.tool_loop import ResponsesToolLoop, DEFAULT_MAX_TURNS, DEFAULT_TOOL_TIMEOUT_S
+                        loop = ResponsesToolLoop(
+                            max_turns=max_turns,
+                            parallel_tool_calls=parallel_tool_calls,
+                        )
+                    yield from loop.run_streaming(
+                        adapter=adapter_instance,
+                        chat_payload=outer_state["payload"],
+                        tools=tools,
+                        instructions=instructions,
+                        response_id=response_id,
+                        model=model,
+                        previous_response_id=previous_response_id,
+                        metadata=metadata,
+                        input_value=input_value,
+                        encoder=response_stream_encoder,
+                    )
+                    store_flag = bool(payload.get("store", True))
+                    if store_flag:
+                        final_resp = ResponseObject(
+                            id=response_id,
+                            model=model,
+                            status=ResponseStatus.COMPLETED,
+                            instructions=instructions,
+                            previous_response_id=previous_response_id,
+                            metadata=metadata,
+                        )
+                        response_runtime.register(final_resp)
+                else:
+                    raw_chunks = adapter_instance.stream(outer_state["payload"])
+                    yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
+            except Exception as exc:
+                stream_error = True
+                yield from error_yield(exc)
+            finally:
+                _finalize(stream_error)
+
+        return stream_yield()
 
     def get_response(self, response_id: str) -> dict[str, Any]:
         from runtime.responses.response_runtime import response_runtime
@@ -1425,6 +1432,12 @@ class RouterService:
                     assignment_id = worker.get("assignment_id")
                     if assignment_id:
                         release_payload["assignment_id"] = assignment_id
+                    gpu = worker.get("gpu_utilization")
+                    if gpu is not None:
+                        release_payload["gpu_utilization"] = float(gpu)
+                    temp = worker.get("temperature")
+                    if temp is not None:
+                        release_payload["temperature"] = float(temp)
                     get_session().post(
                         f"{settings.control_plane_url}/cluster/release",
                         json=release_payload,
