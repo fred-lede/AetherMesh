@@ -713,6 +713,14 @@ class RouterService:
                 raw_chunks = adapter_instance.stream(effective_payload)
                 yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
         except Exception as exc:
+            self._trace_responses(
+                "stream.failed",
+                response_id=response_id,
+                provider=provider,
+                worker=worker,
+                effective_payload=effective_payload,
+                error=str(exc),
+            )
             yield response_stream_encoder.encode({
                 "type": "response.failed",
                 "data": {

@@ -77,7 +77,7 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
         return InputItem(
             id=str(item.get("id", f"input_{id(item)}")),
             type=InputItemType.MESSAGE,
-            role=str(item.get("role", "user")),
+            role=_normalize_message_role(item.get("role", "user")),
             content=[content_part],
         )
 
@@ -90,7 +90,7 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
     result = InputItem(
         id=str(item.get("id", f"input_{id(item)}")),
         type=item_type,
-        role=str(item.get("role", "user")),
+        role=_normalize_message_role(item.get("role", "user")),
     )
 
     if item_type == InputItemType.MESSAGE:
@@ -153,6 +153,15 @@ def _input_item_to_messages(item: InputItem) -> list[dict[str, Any]]:
         }]
 
     return [{"role": "user", "content": str(item)}]
+
+
+def _normalize_message_role(role: Any) -> str:
+    raw = str(role or "user").strip().lower()
+    if raw == "developer":
+        return "system"
+    if raw in {"system", "user", "assistant", "tool"}:
+        return raw
+    return "user"
 
 
 def _content_list_to_various(content: Any) -> str | list[dict[str, Any]]:

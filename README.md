@@ -416,7 +416,8 @@ Responses input accepts message objects, strings, and bare content parts such as
 `input_text`; streaming emits OpenAI-compatible `response.output_text.delta`
 events and includes the assembled text in both top-level `output_text` and
 `response.completed.output` for clients that read the final event instead of
-deltas.
+deltas. Responses `developer` messages are normalized to `system` messages for
+Ollama-compatible providers.
 
 ### Embeddings API
 

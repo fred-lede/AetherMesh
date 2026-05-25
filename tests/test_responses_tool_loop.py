@@ -117,6 +117,16 @@ def test_responses_input_to_messages_with_instructions():
     assert messages[1]["role"] == "user"
 
 
+def test_responses_input_maps_developer_role_to_system():
+    messages = responses_input_to_messages([
+        {"type": "message", "role": "developer", "content": "Follow policy."},
+        {"type": "message", "role": "user", "content": "Hello"},
+    ])
+
+    assert messages[0] == {"role": "system", "content": "Follow policy."}
+    assert messages[1] == {"role": "user", "content": "Hello"}
+
+
 def test_responses_input_to_messages_with_function_call_output():
     input_value = [
         {"type": "message", "role": "user", "content": "Question?"},
