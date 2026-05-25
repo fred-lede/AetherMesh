@@ -1282,9 +1282,9 @@ class RouterService:
             else:
                 safe[key] = value
         try:
-            logger.info("responses.trace %s", json.dumps(safe, ensure_ascii=False, default=str))
+            logger.warning("responses.trace %s", json.dumps(safe, ensure_ascii=False, default=str))
         except Exception:
-            logger.info("responses.trace %s", safe)
+            logger.warning("responses.trace %s", safe)
 
     def _summarize_payload(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict):

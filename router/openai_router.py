@@ -3,6 +3,7 @@ from __future__ import annotations
 """OpenAI-compatible API router. Re-exports from router/openai/ adapters."""
 
 from pathlib import Path
+import logging
 from typing import Any
 
 from dotenv import load_dotenv
@@ -25,6 +26,11 @@ from router.openai.rerank_adapter import create_rerank_route
 
 service = RouterService()
 app = FastAPI(title="AetherMesh Router", version="4.0.0")
+
+if settings.debug_responses:
+    logging.getLogger("uvicorn.error").warning(
+        "openai_router.env AIIH_DEBUG_RESPONSES=true"
+    )
 
 add_security_middleware(app, enable_rate_limit=settings.rate_limit_enabled)
 
