@@ -16,15 +16,18 @@ logger = logging.getLogger("responses.stream")
 
 
 class ResponseStreamEncoder:
-    """Encode events as OpenAI Responses API SSE format: `data: {json}\n\n`."""
+    """Encode events as OpenAI Responses API SSE format: `event:\ndata:\n\n`."""
 
     def encode(self, event: dict[str, Any]) -> str:
-        # Extract inner payload if event has nested structure
+        event_type = event.get("type", "event")
         data = event.get("data", event)
-        return f"data: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+        return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
     def encode_done(self) -> str:
-        return "data: [DONE]\n\n"
+        return "event: response.done\ndata: [DONE]\n\n"
+
+
+response_stream_encoder = ResponseStreamEncoder()
 
 
 response_stream_encoder = ResponseStreamEncoder()
