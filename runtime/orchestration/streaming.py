@@ -14,7 +14,7 @@ from runtime.security.auth.token_tracker import record_token_usage
 from runtime.security.database import SessionLocal
 from runtime.tools.tool_normalizer import NormalizedToolCall
 
-logger = logging.getLogger("anthropic_streaming")
+_MAX_PENDING_TOOL_CONTENT = 100000  # chars before flushing as text
 
 
 def stream_anthropic_with_metrics(
@@ -41,6 +41,11 @@ def stream_anthropic_with_metrics(
     except Exception as e:
         logger.warning(f"Upstream stream interrupted for {model}: {type(e).__name__}: {e}")
         last_error = f"Stream interrupted: {e}"
+        try:
+            from protocols.anthropic.sse_builder import AnthropicSSEBuilder
+            yield AnthropicSSEBuilder(model).error(str(last_error))
+        except Exception:
+            pass
     finally:
         latency_ms = (time.time() - start_time) * 1000
         request_metrics.record_request(RequestRecord(
@@ -97,7 +102,10 @@ def stream_anthropic(
                 yield sse.error(str(item["error"]))
                 return
 
-            choice = item.get("choices", [{}])[0]
+            choices = item.get("choices")
+            if not choices:
+                continue
+            choice = choices[0]
             delta = choice.get("delta", {})
             finish_reason = choice.get("finish_reason")
 
@@ -119,8 +127,12 @@ def stream_anthropic(
                     content = None
                     suppress_tool_status_text = True
                 elif pending_text_tool_content or anthropic_service._looks_like_text_tool_use_fragment(str(content)):
-                    pending_text_tool_content = combined_content
-                    content = None
+                    if len(combined_content) > _MAX_PENDING_TOOL_CONTENT:
+                        content = f"{pending_text_tool_content}{content}"
+                        pending_text_tool_content = ""
+                    else:
+                        pending_text_tool_content = combined_content
+                        content = None
 
             if reasoning:
                 yield from sse.emit_thinking_delta(str(reasoning))

@@ -247,14 +247,14 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
-                        error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                        yield {
-                            "error": {
-                                "message": str(fallback_exc),
-                                "type": "provider_error",
-                                "code": error_code,
+                        if last_chunk is None:
+                            yield {
+                                "error": {
+                                    "message": str(fallback_exc),
+                                    "type": "provider_error",
+                                    "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
+                                }
                             }
-                        }
                     return
                 error_type = "rate_limit_error" if getattr(exc, "status_code", None) == 429 else "provider_error"
                 payload = {"message": str(exc), "type": error_type, "code": error_code}
@@ -286,14 +286,14 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
-                        error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                        yield {
-                            "error": {
-                                "message": str(fallback_exc),
-                                "type": "provider_error",
-                                "code": error_code,
+                        if last_chunk is None:
+                            yield {
+                                "error": {
+                                    "message": str(fallback_exc),
+                                    "type": "provider_error",
+                                    "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
+                                }
                             }
-                        }
                     return
                 yield {"error": {"message": str(exc), "type": "provider_timeout", "code": error_code}}
             except requests.RequestException as exc:

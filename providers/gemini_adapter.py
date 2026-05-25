@@ -40,7 +40,7 @@ class GeminiAdapter(ProviderAdapter):
             timeout=settings.request_timeout_s,
         )
         data = response.json()
-        text = self._extract_text(data)
+        text, tool_calls = self._extract_content(data)
         return {
             "id": f"chatcmpl-{uuid.uuid4().hex}",
             "object": "chat.completion",
@@ -49,8 +49,8 @@ class GeminiAdapter(ProviderAdapter):
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": text},
-                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": text, "tool_calls": tool_calls},
+                    "finish_reason": "tool_calls" if tool_calls else "stop",
                 }
             ],
             "usage": {},
@@ -94,27 +94,75 @@ class GeminiAdapter(ProviderAdapter):
         }
 
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
-        completion = self.chat(payload)
-        message = completion["choices"][0]["message"]
-        yield {
-            "id": completion["id"],
-            "object": "chat.completion.chunk",
-            "created": completion["created"],
-            "model": completion["model"],
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": message.get("content", "")},
-                    "finish_reason": None,
-                }
-            ],
+        model = payload["model"]
+        body = {
+            "contents": self._messages_to_contents(payload.get("messages", [])),
+            "tools": self._tools_to_gemini(payload.get("tools", [])),
         }
+        completion_id = f"chatcmpl-{uuid.uuid4().hex}"
+        created = int(time.time())
+
+        response = post_with_retry(
+            get_session(),
+            f"{self.base_url}/models/{model}:streamGenerateContent",
+            params={"key": self.api_key, "alt": "sse"},
+            json=body,
+            timeout=settings.request_timeout_s,
+            stream=True,
+        )
+        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+        finish_reason = "stop"
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line or raw_line.startswith(":"):
+                continue
+            if raw_line.startswith("data: "):
+                raw_line = raw_line[6:]
+            try:
+                data = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            candidates = data.get("candidates", [])
+            if not candidates:
+                continue
+            content_obj = candidates[0].get("content", {})
+            parts = content_obj.get("parts", [])
+            delta: dict[str, Any] = {"role": "assistant"}
+            text_parts: list[str] = []
+            tc_list: list[dict[str, Any]] = []
+            for part in parts:
+                if "text" in part:
+                    text_parts.append(part["text"])
+                if "functionCall" in part:
+                    fc = part["functionCall"]
+                    idx = len(tc_list)
+                    tc_list.append({
+                        "id": f"call_{idx}",
+                        "type": "function",
+                        "function": {
+                            "name": fc.get("name", ""),
+                            "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
+                        },
+                    })
+            if text_parts:
+                delta["content"] = "".join(text_parts)
+            if tc_list:
+                delta["tool_calls"] = tc_list
+            if "content" in delta or "tool_calls" in delta:
+                yield {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                }
+            if tc_list:
+                finish_reason = "tool_calls"
         yield {
-            "id": completion["id"],
+            "id": completion_id,
             "object": "chat.completion.chunk",
-            "created": completion["created"],
-            "model": completion["model"],
-            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
         }
         yield "[DONE]"
 
@@ -220,10 +268,25 @@ class GeminiAdapter(ProviderAdapter):
             )
         return declarations
 
-    def _extract_text(self, data: dict[str, Any]) -> str:
+    def _extract_content(self, data: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
         candidates = data.get("candidates", [])
         if not candidates:
-            return ""
+            return "", []
         parts = candidates[0].get("content", {}).get("parts", [])
-        return "".join(part.get("text", "") for part in parts)
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        for idx, part in enumerate(parts):
+            if "text" in part:
+                text_parts.append(part["text"])
+            if "functionCall" in part:
+                fc = part["functionCall"]
+                tool_calls.append({
+                    "id": f"call_{idx}",
+                    "type": "function",
+                    "function": {
+                        "name": fc.get("name", ""),
+                        "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
+                    },
+                })
+        return "".join(text_parts), tool_calls
 

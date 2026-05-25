@@ -25,6 +25,7 @@ from runtime.responses.response_stream import (
 )
 from runtime.tools.tool_registry import ToolRegistry, ToolDescriptor
 from runtime.tools.tool_result import ToolCall, ToolResult
+from runtime.responses.response_stream import ResponseStreamEncoder
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -522,3 +523,219 @@ def test_response_status_requires_action():
 
 def test_output_item_type_function_call():
     assert OutputItemType.FUNCTION_CALL.value == "function_call"
+
+
+# ── E2E Tests: Streaming Tool Loop ──────────────────────────────────
+
+def test_streaming_tool_loop_no_tools():
+    registry = ToolRegistry()
+    loop = ResponsesToolLoop(registry=registry)
+    adapter = _make_mock_adapter(
+        [_make_completion(content="Hello from stream")],
+    )
+    encoder = ResponseStreamEncoder()
+
+    events = list(loop.run_streaming(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=None,
+        instructions="",
+        response_id="resp_stream_1",
+        model="test-model",
+        input_value="Hi",
+        encoder=encoder,
+    ))
+
+    payloads = _payloads(events)
+    types = [p["type"] for p in payloads]
+    assert "response.created" in types
+    assert "response.completed" in types
+    completed = next(p for p in payloads if p["type"] == "response.completed")
+    assert completed.get("status") == "completed"
+
+
+def test_streaming_tool_loop_one_tool():
+    registry = ToolRegistry()
+    _register_tool(registry, "search", output="search results")
+    loop = ResponsesToolLoop(registry=registry)
+
+    def stream_turn_1(payload):
+        yield {"choices": [{"delta": {"role": "assistant"}, "finish_reason": None}]}
+        yield {
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                                    "function": {"name": "search", "arguments": '{"q": "test"}'}}],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+
+    def stream_turn_2(payload):
+        yield {"choices": [{"delta": {"role": "assistant", "content": "Found: "}, "finish_reason": None}]}
+        yield {"choices": [{"delta": {"content": "search results"}, "finish_reason": "stop"}]}
+        yield "[DONE]"
+
+    adapter = MagicMock()
+    adapter.stream.side_effect = [stream_turn_1({}), stream_turn_2({})]
+    encoder = ResponseStreamEncoder()
+
+    events = list(loop.run_streaming(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=[{"type": "function", "function": {"name": "search", "description": "Search", "parameters": {"type": "object", "properties": {}}}}],
+        instructions="",
+        response_id="resp_stream_2",
+        model="test-model",
+        input_value="Search something",
+        encoder=encoder,
+    ))
+
+    payloads = _payloads(events)
+    types = [p["type"] for p in payloads]
+    assert "response.function_call.queue" in types
+    assert "response.function_call.arguments.delta" in types
+    assert "response.function_call.call" in types
+    assert "response.function_call.output" in types
+    assert "response.completed" in types
+    completed = next(p for p in payloads if p["type"] == "response.completed")
+    assert completed.get("status") == "completed"
+
+
+def test_streaming_tool_loop_empty_choices():
+    """Streaming should not crash on empty choices list."""
+    registry = ToolRegistry()
+    loop = ResponsesToolLoop(registry=registry)
+    adapter = MagicMock()
+    adapter.stream.return_value = iter([
+        {"choices": []},
+        {"choices": [{"delta": {"content": "survived"}, "finish_reason": "stop"}]},
+        "[DONE]",
+    ])
+    encoder = ResponseStreamEncoder()
+
+    events = list(loop.run_streaming(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=None,
+        instructions="",
+        response_id="resp_stream_ec",
+        model="test-model",
+        input_value="Hi",
+        encoder=encoder,
+    ))
+
+    payloads = _payloads(events)
+    completed = next(p for p in payloads if p["type"] == "response.completed")
+    assert completed.get("status") == "completed"
+    assert "survived" in completed.get("output_text", "")
+
+
+def test_tool_loop_empty_choices_run():
+    """Non-streaming should not crash on empty choices list."""
+    loop = ResponsesToolLoop()
+    adapter = MagicMock()
+    adapter.chat.return_value = {"choices": []}
+
+    response = loop.run(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=None,
+        instructions="",
+        response_id="resp_ec",
+        model="test-model",
+        input_value="Hi",
+    )
+
+    assert response.status == ResponseStatus.FAILED
+
+
+def test_tool_loop_run_with_client_tools_cleanup():
+    """run_with_client_tools must unregister temp tools after run."""
+    registry = ToolRegistry()
+    _register_tool(registry, "builtin_tool", output="builtin")
+    loop = ResponsesToolLoop(registry=registry)
+
+    adapter = _make_mock_adapter([
+        _make_completion(
+            content="",
+            tool_calls=[{
+                "id": "call_c1", "type": "function",
+                "function": {"name": "client_tool", "arguments": "{}"},
+            }],
+        ),
+        _make_completion(content="done"),
+    ])
+
+    client_tools = [{
+        "type": "function",
+        "function": {"name": "client_tool", "description": "Client tool", "parameters": {"type": "object", "properties": {}}},
+    }]
+
+    assert registry.resolve("client_tool") is None
+    response, _ = loop.run_with_client_tools(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=client_tools,
+        instructions="",
+        response_id="resp_ct",
+        model="test-model",
+        input_value="Use client tool",
+    )
+    assert response.status == ResponseStatus.COMPLETED
+    assert registry.resolve("client_tool") is None, "client_tool was not unregistered"
+
+
+def test_tool_loop_parallel_tool_calls():
+    """Multiple tool calls in one turn should all execute."""
+    registry = ToolRegistry()
+    _register_tool(registry, "tool_a", output="result_a")
+    _register_tool(registry, "tool_b", output="result_b")
+    loop = ResponsesToolLoop(registry=registry)
+
+    adapter = _make_mock_adapter([
+        _make_completion(
+            content="",
+            tool_calls=[
+                {"id": "c1", "type": "function", "function": {"name": "tool_a", "arguments": "{}"}},
+                {"id": "c2", "type": "function", "function": {"name": "tool_b", "arguments": "{}"}},
+            ],
+        ),
+        _make_completion(content="Both done."),
+    ])
+
+    response = loop.run(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=[],
+        instructions="",
+        response_id="resp_par",
+        model="test-model",
+        input_value="Run both",
+    )
+
+    assert response.status == ResponseStatus.COMPLETED
+    assert "Both done." in response.to_dict().get("output_text", "")
+
+
+def _payloads(events: list[str]) -> list[dict[str, Any]]:
+    payloads = []
+    for event in events:
+        payload = None
+        event_type = ""
+        for line in event.splitlines():
+            if line.startswith("event: "):
+                event_type = line.split(":", 1)[1].strip()
+            if line.startswith("data: "):
+                data = line.split(":", 1)[1].strip()
+                if data == "[DONE]":
+                    continue
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+        if payload is not None:
+            if "type" not in payload and event_type:
+                payload["type"] = event_type
+            payloads.append(payload)
+    return payloads

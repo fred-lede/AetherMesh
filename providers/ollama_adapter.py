@@ -92,13 +92,16 @@ class OllamaAdapter(ProviderAdapter):
         argument_buffers: dict[str, str] = {}
         emitted_tool_calls = False
         pending_text_tool_content = ""
-        buffer_text_when_tools = bool(body.get("tools"))
 
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
                 continue
 
-            item = json.loads(raw_line)
+            try:
+                item = json.loads(raw_line)
+            except json.JSONDecodeError:
+                LOGGER.warning("Ollama non-JSON stream line: %s", raw_line[:200])
+                continue
             if item.get("done"):
                 if pending_text_tool_content:
                     yield {
@@ -147,11 +150,14 @@ class OllamaAdapter(ProviderAdapter):
                     pending_text_tool_content = ""
                     delta["tool_calls"] = text_tool_calls
                 elif (
-                    buffer_text_when_tools
-                    or pending_text_tool_content
+                    pending_text_tool_content
                     or self._looks_like_text_tool_use_fragment(content)
                 ):
-                    pending_text_tool_content = combined_content
+                    if len(combined_content) > 100000:
+                        delta["content"] = combined_content
+                        pending_text_tool_content = ""
+                    else:
+                        pending_text_tool_content = combined_content
                 else:
                     delta["content"] = content
 
