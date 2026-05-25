@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from runtime.responses.output_converter import (
     make_response_start_event,
     make_response_stream_error,
+    make_response_completed_event,
     streaming_chunk_to_response_event,
 )
 
@@ -15,18 +16,15 @@ logger = logging.getLogger("responses.stream")
 
 
 class ResponseStreamEncoder:
+    """Encode events as OpenAI Responses API SSE format: `data: {json}\n\n`."""
+
     def encode(self, event: dict[str, Any]) -> str:
-        event_type = event.get("type", "")
+        # Extract inner payload if event has nested structure
         data = event.get("data", event)
-        lines = [
-            f"event: {event_type}",
-            f"data: {json.dumps(data, ensure_ascii=False, default=str)}",
-            "",
-        ]
-        return "\n".join(lines)
+        return f"data: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
     def encode_done(self) -> str:
-        return "event: response.done\ndata: [DONE]\n\n"
+        return "data: [DONE]\n\n"
 
 
 response_stream_encoder = ResponseStreamEncoder()
@@ -39,9 +37,12 @@ def wrap_streaming_chunks(
 ) -> Iterable[str]:
     yield response_stream_encoder.encode(make_response_start_event(response_id, model))
 
+    emitted_done = False
+
     for chunk in chunks:
         if isinstance(chunk, str):
             if chunk == "[DONE]":
+                emitted_done = True
                 break
             if isinstance(chunk, str):
                 try:
@@ -51,6 +52,8 @@ def wrap_streaming_chunks(
                 events = streaming_chunk_to_response_event(chunk_data, response_id, model)
                 for event in events:
                     yield response_stream_encoder.encode(event)
+                    if event.get("type") == "response.completed":
+                        emitted_done = True
             continue
 
         if isinstance(chunk, dict):
@@ -64,22 +67,11 @@ def wrap_streaming_chunks(
             events = streaming_chunk_to_response_event(chunk, response_id, model)
             for event in events:
                 yield response_stream_encoder.encode(event)
+                if event.get("type") == "response.completed":
+                    emitted_done = True
 
-    yield response_stream_encoder.encode({
-        "type": "response.completed",
-        "data": {
-            "type": "response.completed",
-            "response": {
-                "id": response_id,
-                "object": "response",
-                "model": model,
-                "status": "completed",
-                "output": [],
-                "usage": {},
-            },
-        },
-    })
-    yield response_stream_encoder.encode_done()
+    if not emitted_done:
+        yield response_stream_encoder.encode(make_response_completed_event(response_id, model))
 
 
 def make_function_call_queue_event(

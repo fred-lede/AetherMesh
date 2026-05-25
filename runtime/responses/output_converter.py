@@ -233,3 +233,24 @@ def make_response_stream_error(
             },
         },
     }
+
+
+def make_response_completed_event(
+    response_id: str,
+    model: str,
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "type": "response.completed",
+        "data": {
+            "type": "response.completed",
+            "response": {
+                "id": response_id,
+                "object": "response",
+                "model": model,
+                "status": "completed",
+                "output": [],
+                "usage": usage or {},
+            },
+        },
+    }
