@@ -344,6 +344,12 @@ class RouterService:
         stream = payload.get("stream", False)
 
         messages = responses_input_to_messages(input_value, instructions=instructions)
+        self._trace_responses(
+            "input_converted",
+            response_id=response_id,
+            payload=payload,
+            messages=messages,
+        )
 
         chat_payload = dict(payload)
         chat_payload["messages"] = messages
@@ -354,6 +360,13 @@ class RouterService:
         chat_payload.pop("stream", None)
 
         provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
+        self._trace_responses(
+            "route_selected",
+            response_id=response_id,
+            provider=provider,
+            worker=worker,
+            effective_payload=chat_payload,
+        )
 
         original_payload = dict(payload)
         original_payload.pop("stream", None)
@@ -441,6 +454,12 @@ class RouterService:
                     return response_object.to_dict()
                 else:
                     completion = adapter_instance.chat(effective_payload)
+                    self._trace_responses(
+                        "provider_completion",
+                        response_id=response_id,
+                        provider=provider,
+                        completion=completion,
+                    )
                     usage = completion.get("usage") or {}
                     self._record_token_usage(user_id, api_key_id,
                                              usage.get("prompt_tokens", 0),
@@ -456,6 +475,11 @@ class RouterService:
                     )
                     if store:
                         response_runtime.register(response)
+                    self._trace_responses(
+                        "response_converted",
+                        response_id=response_id,
+                        response=response,
+                    )
                     return response.to_dict()
         except ProviderError as exc:
             error = True
@@ -557,8 +581,16 @@ class RouterService:
         response_id = f"resp_{uuid.uuid4().hex[:24]}"
         model = str(payload.get("model", ""))
         instructions = str(payload.get("instructions", ""))
+        previous_response_id = str(payload.get("previous_response_id", ""))
+        metadata = payload.get("metadata", {})
         input_value = payload.get("input", "")
         messages = responses_input_to_messages(input_value, instructions=instructions)
+        self._trace_responses(
+            "stream.input_converted",
+            response_id=response_id,
+            payload=payload,
+            messages=messages,
+        )
 
         chat_payload = dict(payload)
         chat_payload["messages"] = messages
@@ -570,6 +602,13 @@ class RouterService:
 
         provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+        self._trace_responses(
+            "stream.route_selected",
+            response_id=response_id,
+            provider=provider,
+            worker=worker,
+            effective_payload=effective_payload,
+        )
 
         def _with_tracking(raw_chunks):
             last_chunk = None
@@ -592,10 +631,44 @@ class RouterService:
         if provider == "openai":
             openai_payload = dict(payload)
             openai_payload["stream"] = True
-            adapter_instance = self._adapter(provider, worker)
-            raw_chunks = adapter_instance.stream(openai_payload)
-            yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
-            return
+            try:
+                adapter_instance = self._adapter(provider, worker)
+                raw_chunks = adapter_instance.stream(openai_payload)
+                yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
+                return
+            except ProviderError as exc:
+                fallback = self._local_ollama_fallback(chat_payload)
+                if fallback is None or not self._should_fallback_provider_error(exc):
+                    self._trace_responses(
+                        "stream.openai_adapter_failed",
+                        response_id=response_id,
+                        error=str(exc),
+                    )
+                    yield response_stream_encoder.encode({
+                        "type": "response.failed",
+                        "data": {
+                            "type": "response.failed",
+                            "response": {
+                                "id": response_id,
+                                "object": "response",
+                                "model": model,
+                                "status": "failed",
+                                "error": {"message": str(exc), "type": "server_error", "code": self._classify_error_text(str(exc))},
+                            },
+                        },
+                    })
+                    yield response_stream_encoder.encode_done()
+                    return
+                effective_payload, worker = fallback
+                provider = "ollama"
+                self._trace_responses(
+                    "stream.openai_fallback",
+                    response_id=response_id,
+                    provider=provider,
+                    worker=worker,
+                    effective_payload=effective_payload,
+                    error=str(exc),
+                )
 
         tools = payload.get("tools") or []
         adapter_instance = self._adapter(provider, worker)
@@ -760,12 +833,13 @@ class RouterService:
 
     def _should_fallback_provider_error(self, exc: ProviderError) -> bool:
         status_code = int(getattr(exc, "status_code", None) or 0)
-        code = str(getattr(exc, "code", "") or "")
+        code = str(getattr(exc, "code", "") or "") or self._classify_error_text(str(exc))
         return status_code in {404, 429, 502, 503, 504} or code in {
             "model_not_found",
             "provider_rate_limited",
             "provider_overloaded",
             "provider_timeout",
+            "provider_unconfigured",
         }
 
     def _classify_error_text(self, text: str) -> str:
@@ -780,6 +854,8 @@ class RouterService:
             return "runner_stopped"
         if "connection refused" in lowered or "max retries exceeded" in lowered or "name or service not known" in lowered:
             return "provider_unreachable"
+        if "api_key is not configured" in lowered or "api key is not configured" in lowered:
+            return "provider_unconfigured"
         if "no worker available" in lowered or "no worker was assigned" in lowered:
             return "worker_unavailable"
         return "provider_error"
@@ -1187,6 +1263,118 @@ class RouterService:
         output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
         self._record_token_usage(user_id, api_key_id,
                                  input_tokens, output_tokens, provider, model)
+
+    def _trace_responses(self, stage: str, **data: Any) -> None:
+        if not settings.debug_responses:
+            return
+        safe: dict[str, Any] = {"stage": stage}
+        for key, value in data.items():
+            if key in {"payload", "effective_payload"}:
+                safe[key] = self._summarize_payload(value)
+            elif key == "messages":
+                safe[key] = self._summarize_messages(value)
+            elif key == "worker":
+                safe[key] = self._summarize_worker(value)
+            elif key == "completion":
+                safe[key] = self._summarize_completion(value)
+            elif key == "response":
+                safe[key] = self._summarize_response(value)
+            else:
+                safe[key] = value
+        try:
+            logger.info("responses.trace %s", json.dumps(safe, ensure_ascii=False, default=str))
+        except Exception:
+            logger.info("responses.trace %s", safe)
+
+    def _summarize_payload(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {"type": type(payload).__name__}
+        input_value = payload.get("input")
+        messages = payload.get("messages")
+        return {
+            "model": payload.get("model", ""),
+            "provider": payload.get("provider", ""),
+            "stream": bool(payload.get("stream", False)),
+            "input_type": type(input_value).__name__ if "input" in payload else "",
+            "input_len": self._value_len(input_value) if "input" in payload else 0,
+            "messages": self._summarize_messages(messages),
+            "tools_count": len(payload.get("tools") or []) if isinstance(payload.get("tools"), list) else 0,
+        }
+
+    def _summarize_messages(self, messages: Any) -> list[dict[str, Any]]:
+        if not isinstance(messages, list):
+            return []
+        summary: list[dict[str, Any]] = []
+        for item in messages[:6]:
+            if not isinstance(item, dict):
+                summary.append({"type": type(item).__name__})
+                continue
+            content = item.get("content", "")
+            summary.append({
+                "role": item.get("role", ""),
+                "content_type": type(content).__name__,
+                "content_len": self._value_len(content),
+                "tool_calls": len(item.get("tool_calls") or []) if isinstance(item.get("tool_calls"), list) else 0,
+            })
+        if len(messages) > 6:
+            summary.append({"remaining": len(messages) - 6})
+        return summary
+
+    def _summarize_worker(self, worker: Any) -> dict[str, Any]:
+        if not isinstance(worker, dict):
+            return {}
+        return {
+            "worker_id": worker.get("worker_id", ""),
+            "base_url": worker.get("base_url", ""),
+            "assignment_id": worker.get("assignment_id", ""),
+        }
+
+    def _summarize_completion(self, completion: Any) -> dict[str, Any]:
+        if not isinstance(completion, dict):
+            return {"type": type(completion).__name__}
+        choices = completion.get("choices")
+        message: dict[str, Any] = {}
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            raw_message = choices[0].get("message")
+            message = raw_message if isinstance(raw_message, dict) else {}
+        content = message.get("content", "")
+        return {
+            "model": completion.get("model", ""),
+            "choices": len(choices) if isinstance(choices, list) else 0,
+            "content_len": self._value_len(content),
+            "tool_calls": len(message.get("tool_calls") or []) if isinstance(message.get("tool_calls"), list) else 0,
+            "finish_reason": choices[0].get("finish_reason", "") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else "",
+        }
+
+    def _summarize_response(self, response: Any) -> dict[str, Any]:
+        if hasattr(response, "to_dict"):
+            response = response.to_dict()
+        if not isinstance(response, dict):
+            return {"type": type(response).__name__}
+        return {
+            "id": response.get("id", ""),
+            "model": response.get("model", ""),
+            "status": response.get("status", ""),
+            "output_count": len(response.get("output") or []) if isinstance(response.get("output"), list) else 0,
+            "output_text_len": self._value_len(response.get("output_text", "")),
+        }
+
+    def _value_len(self, value: Any) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, str):
+            return len(value)
+        if isinstance(value, list):
+            total = 0
+            for item in value:
+                if isinstance(item, dict):
+                    total += self._value_len(item.get("text", item.get("content", "")))
+                else:
+                    total += self._value_len(item)
+            return total
+        if isinstance(value, dict):
+            return self._value_len(value.get("text", value.get("content", "")))
+        return len(str(value))
 
     def _finalize_request(
         self,

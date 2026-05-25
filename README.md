@@ -474,6 +474,7 @@ All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 | `AIIH_MAX_WORKER_QUEUE` | — | Max queued tasks per worker |
 | `AIIH_WORKER_ASSIGNMENT_TTL` | `900` | Seconds before unreleased sync worker assignments are reclaimed after router crashes |
 | `AIIH_PROVIDER_COOLDOWN` | — | Seconds before retrying failed provider |
+| `AIIH_DEBUG_RESPONSES` | `false` | Emit compact `/v1/responses` conversion traces to `logs/openai_router.log` |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
 | `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
 | `AIIH_ADMIN_EMAIL` | — | Admin email for first-run bootstrap (creates initial admin) |

@@ -72,6 +72,7 @@ class Settings:
     dashboard_auth_username: str = field(default_factory=lambda: os.getenv("AIIH_DASHBOARD_AUTH_USERNAME", "admin"))
     dashboard_auth_password: str = field(default_factory=lambda: os.getenv("AIIH_DASHBOARD_AUTH_PASSWORD", ""))
     debug_tool_calls: bool = field(default_factory=lambda: _env_bool("AIIH_DEBUG_TOOL_CALLS", "false"))
+    debug_responses: bool = field(default_factory=lambda: _env_bool("AIIH_DEBUG_RESPONSES", "false"))
     server_tool_mode: str = field(default_factory=lambda: os.getenv("AIIH_SERVER_TOOL_MODE", "reject").strip().lower())
     web_server_tools_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_WEB_SERVER_TOOLS_ENABLED", "false"))
     web_tools_auto_search: bool = field(default_factory=lambda: _env_bool("AIIH_WEB_TOOLS_AUTO_SEARCH", "false"))
