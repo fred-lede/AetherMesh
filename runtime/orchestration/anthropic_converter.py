@@ -126,6 +126,12 @@ class AnthropicRouter:
         if tool_choice:
             openai_payload["tool_choice"] = self._anthropic_tool_choice_to_openai(tool_choice)
 
+        metadata = payload.get("metadata")
+        if isinstance(metadata, dict):
+            user_id = metadata.get("user_id")
+            if user_id:
+                openai_payload["user"] = user_id
+
         return openai_payload
 
     def _anthropic_block_to_openai(self, block: Any) -> dict[str, Any] | None:
@@ -183,6 +189,8 @@ class AnthropicRouter:
             return {"type": "required"}
         if ttype == "tool":
             return {"type": "function", "function": {"name": tool_choice.get("name", "")}}
+        if ttype == "none":
+            return {"type": "none"}
         return {"type": "auto"}
 
     def _to_anthropic_response(
@@ -196,9 +204,12 @@ class AnthropicRouter:
         content = message.get("content", "") or ""
         normalized_tool_calls = self.tool_call_normalizer.from_openai_tool_calls(message.get("tool_calls"))
         if isinstance(content, str):
-            text_tool_calls = self.tool_call_normalizer.from_text(content)
-            if text_tool_calls:
-                normalized_tool_calls = self.tool_call_normalizer.dedupe(normalized_tool_calls + text_tool_calls)
+            thinking_text = message.get("reasoning") or message.get("reasoning_content")
+            combined_calls = self.tool_call_normalizer.from_content_with_thinking(
+                content, thinking_text, allowed_tool_names=allowed_tool_names
+            )
+            if combined_calls:
+                normalized_tool_calls = self.tool_call_normalizer.dedupe(normalized_tool_calls + combined_calls)
                 content = ""
 
         content_blocks: list[dict[str, Any]] = []
@@ -476,170 +487,6 @@ class AnthropicRouter:
             "function_call": "tool_use",
         }
         return mapping.get(finish_reason, "end_turn")
-
-    def _openai_chunk_to_anthropic_events(
-        self,
-        chunk: dict[str, Any],
-        model: str,
-    ) -> list[tuple[str, dict[str, Any]]]:
-        events: list[tuple[str, dict[str, Any]]] = []
-        choice = chunk.get("choices", [{}])[0]
-        delta = choice.get("delta", {})
-        finish_reason = choice.get("finish_reason")
-
-        if delta.get("role") == "assistant":
-            events.append(
-                (
-                    "message_start",
-                    {
-                        "type": "message_start",
-                        "message": {
-                            "id": f"msg_{uuid.uuid4().hex[:24]}",
-                            "type": "message",
-                            "role": "assistant",
-                            "content": [],
-                            "model": model,
-                            "stop_reason": None,
-                            "stop_sequence": None,
-                            "usage": {"input_tokens": 0, "output_tokens": 0},
-                        },
-                    },
-                )
-            )
-
-        reasoning = delta.get("reasoning") or delta.get("reasoning_content")
-        if reasoning:
-            events.append(
-                (
-                    "content_block_start",
-                    {
-                        "type": "content_block_start",
-                        "index": 0,
-                        "content_block": {"type": "thinking", "thinking": "", "signature": ""},
-                    },
-                )
-            )
-            events.append(
-                (
-                    "content_block_delta",
-                    {
-                        "type": "content_block_delta",
-                        "index": 0,
-                        "delta": {"type": "thinking_delta", "thinking": str(reasoning)},
-                    },
-                )
-            )
-
-        content = delta.get("content")
-        if content:
-            if not any(e[0] == "content_block_start" for e in events):
-                events.append(
-                    (
-                        "content_block_start",
-                        {
-                            "type": "content_block_start",
-                            "index": 0,
-                            "content_block": {"type": "text", "text": ""},
-                        },
-                    )
-                )
-            events.append(
-                (
-                    "content_block_delta",
-                    {
-                        "type": "content_block_delta",
-                        "index": 0,
-                        "delta": {"type": "text_delta", "text": content},
-                    },
-                )
-            )
-
-        tool_calls = delta.get("tool_calls")
-        if tool_calls and isinstance(tool_calls, list):
-            for idx, tc in enumerate(tool_calls):
-                if isinstance(tc, dict):
-                    fn = tc.get("function", {})
-                    call_id = tc.get("id", f"toolu_{uuid.uuid4().hex[:24]}")
-                    tool_index = idx + 1
-
-                    if fn.get("name"):
-                        events.append(
-                            (
-                                "content_block_start",
-                                {
-                                    "type": "content_block_start",
-                                    "index": tool_index,
-                                    "content_block": {
-                                        "type": "tool_use",
-                                        "id": call_id,
-                                        "name": fn["name"],
-                                        "input": {},
-                                    },
-                                },
-                            )
-                        )
-                    if fn.get("arguments"):
-                        events.append(
-                            (
-                                "content_block_delta",
-                                {
-                                    "type": "content_block_delta",
-                                    "index": tool_index,
-                                    "delta": {
-                                        "type": "input_json_delta",
-                                        "partial_json": fn["arguments"],
-                                    },
-                                },
-                            )
-                        )
-
-        if finish_reason:
-            stop_reason = self._openai_finish_to_stop_reason(finish_reason)
-            usage = chunk.get("usage") or {}
-            output_tokens = usage.get("completion_tokens", 0)
-
-            events.append(
-                (
-                    "message_delta",
-                    {
-                        "type": "message_delta",
-                        "delta": {"stop_reason": stop_reason, "stop_sequence": None},
-                        "usage": {
-                            "output_tokens": int(output_tokens) if output_tokens else 0,
-                        },
-                    },
-                )
-            )
-
-            if not any(e[0] == "content_block_start" for e in events):
-                events.append(
-                    (
-                        "content_block_start",
-                        {
-                            "type": "content_block_start",
-                            "index": 0,
-                            "content_block": {"type": "text", "text": ""},
-                        },
-                    )
-                )
-            max_index = 0
-            for e in events:
-                if e[0] == "content_block_start":
-                    max_index = max(max_index, e[1].get("index", 0))
-            events.append(
-                (
-                    "content_block_stop",
-                    {"type": "content_block_stop", "index": max_index},
-                )
-            )
-            events.append(
-                (
-                    "message_stop",
-                    {"type": "message_stop"},
-                )
-            )
-
-        return events
 
     def _resolve_provider(self, model: str) -> tuple[str, dict[str, Any] | None]:
         return resolve_provider(model, self.registry)
