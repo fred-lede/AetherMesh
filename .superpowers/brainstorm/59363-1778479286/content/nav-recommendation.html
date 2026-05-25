@@ -1,0 +1,43 @@
+<h2>推薦：Hybrid 方案</h2>
+<p class="subtitle">Dashboard 分頁化 + 獨立管理頁面</p>
+
+<div class="section">
+  <div style="background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)">
+      <span style="background:var(--accent);color:var(--bg);padding:6px 14px;border-radius:8px;font-weight:700;font-size:0.85rem">Overview</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">Cluster</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">Providers</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">Charts</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">System</span>
+      <span style="flex:1"></span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">API Keys</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">Users</span>
+      <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:8px;font-weight:500;font-size:0.85rem;color:var(--muted)">Profile</span>
+    </div>
+    <p style="margin:0"><strong>Nav bar：</strong>Dashboard tab（active 亮色）| API Keys | Users | Profile</p>
+    <p style="margin:4px 0 0;color:var(--muted)">跟現在一樣但 Dashboard 自己多了分頁籤</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Token Usage 安排</h3>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px;background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:10px;padding:14px">
+      <div style="color:var(--accent);font-weight:700;font-size:0.85rem;text-transform:uppercase">Overview Tab</div>
+      <p style="margin:8px 0 0">摘要卡片：Total Tokens + Requests（目前樣子）</p>
+    </div>
+    <div style="flex:1;min-width:200px;background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:10px;padding:14px">
+      <div style="color:var(--accent);font-weight:700;font-size:0.85rem;text-transform:uppercase">Profile Page</div>
+      <p style="margin:8px 0 0">完整歷史 + 每日長條圖（保留現有）</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>為什麼這樣比較專業</h3>
+  <ul style="color:var(--muted);line-height:1.6">
+    <li><strong>關注點分離</strong> — Dashboard 監控、管理頁面設定，各司其職</li>
+    <li><strong>業界慣例</strong> — Grafana、Datadog、AWS Console 都是這種模式</li>
+    <li><strong>非 admin 不受影響</strong> — 一般使用者看不到 API Keys / Users 頁面</li>
+  </ul>
+</div>

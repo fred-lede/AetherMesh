@@ -1,0 +1,277 @@
+<style>
+:root {
+  --bg:       #07111a;
+  --panel:    rgba(11, 24, 38, 0.88);
+  --panel-2:  rgba(17, 34, 52, 0.95);
+  --line:     rgba(150, 210, 255, 0.18);
+  --text:     #e8f3fb;
+  --muted:    #9fb6c8;
+  --accent:   #5eead4;
+  --accent-2: #60a5fa;
+  --warn:     #f59e0b;
+  --bad:      #f87171;
+  --good:     #34d399;
+}
+body {
+  margin: 0; padding: 24px 28px;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  background: radial-gradient(circle at top left, rgba(96,165,250,0.28), transparent 35%),
+              radial-gradient(circle at top right, rgba(94,234,212,0.18), transparent 32%),
+              linear-gradient(180deg, #04070b 0%, #07111a 35%, #03060a 100%);
+  color: var(--text); min-height: 100vh;
+}
+.tab-bar {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px; margin-bottom: 24px;
+}
+.tab {
+  padding: 7px 18px; border-radius: 8px;
+  font-size: 0.88rem; font-weight: 500;
+  color: var(--muted); cursor: default;
+}
+.tab:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.tab.active { background: rgba(94,234,212,0.1); color: var(--accent); font-weight: 600; }
+.section-label {
+  font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px;
+}
+
+/* Sub-tabs inside Cluster */
+.sub-tabs {
+  display: flex; gap: 4px; margin-bottom: 18px;
+}
+.sub-tab {
+  padding: 5px 14px; border-radius: 6px;
+  font-size: 0.8rem; color: var(--muted); cursor: default;
+  border: 1px solid transparent;
+}
+.sub-tab:hover { background: rgba(255,255,255,0.03); }
+.sub-tab.active {
+  background: rgba(96,165,250,0.08);
+  border-color: rgba(96,165,250,0.25);
+  color: var(--accent-2);
+}
+
+/* Table */
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th {
+  text-align: left; padding: 10px 12px;
+  font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(150,210,255,0.08);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+
+.panel-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+  margin-bottom: 18px;
+}
+
+.badge {
+  display: inline-block; padding: 2px 10px;
+  border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+}
+.badge.ok { background: rgba(52,211,153,0.12); color: var(--good); }
+.badge.warn { background: rgba(245,158,11,0.14); color: var(--warn); }
+.badge.bad { background: rgba(248,113,113,0.12); color: var(--bad); }
+.badge.info { background: rgba(96,165,250,0.12); color: var(--accent-2); }
+
+.progress-bg {
+  width: 100%; height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+}
+.progress-fill.warn { background: var(--warn); }
+.progress-fill.bad { background: var(--bad); }
+
+/* Two-col for GPU OS cards */
+.card-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.inner-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+.mono { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 0.82rem; }
+</style>
+
+<!-- Tabs -->
+<div class="tab-bar">
+  <span class="tab">Overview</span>
+  <span class="tab active">Cluster</span>
+  <span class="tab">Providers</span>
+  <span class="tab">Charts</span>
+  <span class="tab">System</span>
+</div>
+
+<!-- Sub-tabs -->
+<div class="sub-tabs">
+  <span class="sub-tab active">Nodes</span>
+  <span class="sub-tab">GPUs</span>
+  <span class="sub-tab">Workers</span>
+  <span class="sub-tab">Models</span>
+  <span class="sub-tab">GPU OS</span>
+</div>
+
+<!-- Nodes Table -->
+<div class="panel-card">
+  <div class="section-label" style="margin-bottom:12px">Cluster Nodes</div>
+  <table>
+    <tr>
+      <th>Node</th><th>Status</th><th>IP</th><th>Port</th><th>GPUs</th><th>Workers</th><th>VRAM Total</th><th>Uptime</th>
+    </tr>
+    <tr>
+      <td><strong>node-01</strong></td>
+      <td><span class="badge ok">online</span></td>
+      <td class="mono">192.168.1.200</td>
+      <td class="mono">:8001</td>
+      <td>2</td>
+      <td>2</td>
+      <td>48 GB</td>
+      <td>12d 7h</td>
+    </tr>
+    <tr>
+      <td><strong>node-p40-01</strong></td>
+      <td><span class="badge ok">online</span></td>
+      <td class="mono">192.168.1.123</td>
+      <td class="mono">:8002</td>
+      <td>1</td>
+      <td>2</td>
+      <td>24 GB</td>
+      <td>8d 3h</td>
+    </tr>
+  </table>
+</div>
+
+<!-- GPU + Workers side-by-side -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px">
+  <!-- GPUs -->
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">GPU Usage</div>
+    <table>
+      <tr><th>GPU</th><th>Node</th><th>Mem</th><th>Util</th><th>Power</th><th>Temp</th></tr>
+      <tr>
+        <td class="mono">GPU-0 (A4000)</td>
+        <td>node-01</td>
+        <td>12/16 GB <div class="progress-bg" style="width:80px;display:inline-block;vertical-align:middle;margin-left:6px"><div class="progress-fill warn" style="width:75%"></div></div></td>
+        <td>68%</td>
+        <td>110W</td>
+        <td>72°C</td>
+      </tr>
+      <tr>
+        <td class="mono">GPU-1 (A4000)</td>
+        <td>node-01</td>
+        <td>4/16 GB <div class="progress-bg" style="width:80px;display:inline-block;vertical-align:middle;margin-left:6px"><div class="progress-fill" style="width:25%"></div></div></td>
+        <td>32%</td>
+        <td>65W</td>
+        <td>58°C</td>
+      </tr>
+      <tr>
+        <td class="mono">GPU-0 (P40)</td>
+        <td>node-p40-01</td>
+        <td>18/24 GB <div class="progress-bg" style="width:80px;display:inline-block;vertical-align:middle;margin-left:6px"><div class="progress-fill" style="width:75%"></div></div></td>
+        <td>91%</td>
+        <td>220W</td>
+        <td>81°C</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Workers -->
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">Workers</div>
+    <table>
+      <tr><th>Worker</th><th>Node</th><th>Model</th><th>Status</th><th>Requests</th></tr>
+      <tr><td class="mono">worker-01</td><td>node-01</td><td>llama3:70b</td><td><span class="badge ok">running</span></td><td>487</td></tr>
+      <tr><td class="mono">worker-02</td><td>node-01</td><td>mistral:7b</td><td><span class="badge ok">running</span></td><td>342</td></tr>
+      <tr><td class="mono">worker-03</td><td>node-p40-01</td><td>qwen2.5:32b</td><td><span class="badge ok">running</span></td><td>218</td></tr>
+      <tr><td class="mono">worker-04</td><td>node-p40-01</td><td>codellama:34b</td><td><span class="badge ok">running</span></td><td>200</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Model Registry -->
+<div class="panel-card">
+  <div class="section-label" style="margin-bottom:12px">Model Registry</div>
+  <table>
+    <tr><th>Model</th><th>Provider</th><th>Worker</th><th>VRAM</th><th>Status</th></tr>
+    <tr><td>llama3:70b</td><td>ollama</td><td class="mono">worker-01</td><td>16 GB</td><td><span class="badge ok">loaded</span></td></tr>
+    <tr><td>mistral:7b</td><td>ollama</td><td class="mono">worker-02</td><td>4 GB</td><td><span class="badge ok">loaded</span></td></tr>
+    <tr><td>qwen2.5:32b</td><td>ollama</td><td class="mono">worker-03</td><td>18 GB</td><td><span class="badge ok">loaded</span></td></tr>
+    <tr><td>codellama:34b</td><td>ollama</td><td class="mono">worker-04</td><td>20 GB</td><td><span class="badge ok">loaded</span></td></tr>
+    <tr><td>gpt-4o</td><td>openai</td><td>—</td><td>—</td><td><span class="badge info">external</span></td></tr>
+    <tr><td>claude-3-opus</td><td>anthropic</td><td>—</td><td>—</td><td><span class="badge info">external</span></td></tr>
+  </table>
+</div>
+
+<!-- GPU OS: Device Pool + Scheduler -->
+<div class="card-grid-2">
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">GPU OS — Device Pool</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Total Devices</div>
+        <div style="font-size:1.4rem;font-weight:700">3</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Available</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--good)">2</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Reserved</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--warn)">1</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Fragments</div>
+        <div style="font-size:1.4rem;font-weight:700">6</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:0.78rem;color:var(--muted)">Next available: <span class="mono" style="color:var(--accent-2)">GPU-1</span> (est. 45s)</div>
+  </div>
+
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">GPU OS — Scheduler</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Queue</div>
+        <div style="font-size:1.4rem;font-weight:700">0</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Running</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--good)">2</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Scheduling</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--accent)">binpack</div>
+      </div>
+      <div class="inner-card" style="flex:1;min-width:120px">
+        <div style="color:var(--muted);font-size:0.68rem;text-transform:uppercase">Policy</div>
+        <div style="font-size:1.4rem;font-weight:700">best-fit</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:0.78rem;color:var(--muted)">Avg wait time: <span style="color:var(--good)">12ms</span></div>
+  </div>
+</div>

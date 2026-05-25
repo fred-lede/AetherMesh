@@ -1,0 +1,273 @@
+<style>
+:root {
+  --bg: #07111a; --panel: rgba(11,24,38,0.88); --panel-2: rgba(17,34,52,0.95);
+  --line: rgba(150,210,255,0.18); --text: #e8f3fb; --muted: #9fb6c8;
+  --accent: #5eead4; --accent-2: #60a5fa; --warn: #f59e0b; --bad: #f87171; --good: #34d399;
+}
+body {
+  margin:0; padding:24px 28px;
+  font-family:"Segoe UI","Trebuchet MS",sans-serif;
+  background:radial-gradient(circle at top left,rgba(96,165,250,0.28),transparent 35%),
+             radial-gradient(circle at top right,rgba(94,234,212,0.18),transparent 32%),
+             linear-gradient(180deg,#04070b 0%,#07111a 35%,#03060a 100%);
+  color:var(--text); min-height:100vh;
+}
+.tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:24px; }
+.tab { padding:7px 18px; border-radius:8px; font-size:0.88rem; font-weight:500; color:var(--muted); cursor:default; }
+.tab:hover { background:rgba(255,255,255,0.04); color:var(--text); }
+.tab.active { background:rgba(94,234,212,0.1); color:var(--accent); font-weight:600; }
+
+/* Chart toolbar */
+.chart-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.chart-tabs {
+  display:inline-flex; gap:6px; padding:4px;
+  border:1px solid var(--line); border-radius:10px;
+  background:rgba(255,255,255,0.04);
+}
+.chart-tab {
+  border:none; border-radius:7px; padding:7px 11px;
+  color:var(--muted); background:transparent; cursor:default;
+  font-size:0.8rem; font-weight:700;
+}
+.chart-tab.active { color:var(--bg); background:var(--accent); }
+
+/* Chart card grid */
+.charts-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:14px; margin-bottom:20px; }
+.chart-card {
+  background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  padding:18px; backdrop-filter:blur(10px); box-shadow:0 16px 40px rgba(0,0,0,0.22);
+}
+.chart-card h3 { margin:0 0 12px; font-size:0.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+.chart-container { position:relative; height:180px; }
+.chart-card[hidden] { display:none; }
+.chart-card.dim { opacity:0.3; }
+
+/* Mock chart placeholders */
+.mock-chart {
+  width:100%; height:100%; border-radius:8px;
+  display:flex; align-items:flex-end; gap:3px; padding:0 4px;
+}
+.mock-bar {
+  flex:1; border-radius:2px 2px 0 0;
+  background:linear-gradient(to top, rgba(94,234,212,0.3), rgba(94,234,212,0.7));
+  min-height:4px;
+  transition:height 0.3s;
+}
+.mock-bar.blue { background:linear-gradient(to top, rgba(96,165,250,0.3), rgba(96,165,250,0.7)); }
+</style>
+
+<!-- Tabs -->
+<div class="tab-bar">
+  <span class="tab">Overview</span>
+  <span class="tab">Cluster</span>
+  <span class="tab">Providers</span>
+  <span class="tab active">Charts</span>
+  <span class="tab">System</span>
+</div>
+
+<!-- Chart toolbar -->
+<div class="chart-toolbar">
+  <div>
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px">Signal Charts</div>
+    <div style="font-size:0.78rem;color:var(--muted)">Tab groups filter visible charts</div>
+  </div>
+  <div class="chart-tabs">
+    <span class="chart-tab active">Health</span>
+    <span class="chart-tab">Traffic</span>
+    <span class="chart-tab">Hardware</span>
+  </div>
+</div>
+
+<!-- Charts Grid -- Health group shown, Traffic/Hardware dimmed -->
+<div class="charts-row">
+  <div class="chart-card">
+    <h3>Latency Trend (5m)</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar" style="height:45%"></div>
+        <div class="mock-bar" style="height:62%"></div>
+        <div class="mock-bar" style="height:38%"></div>
+        <div class="mock-bar" style="height:71%"></div>
+        <div class="mock-bar" style="height:55%"></div>
+        <div class="mock-bar" style="height:48%"></div>
+        <div class="mock-bar" style="height:80%"></div>
+        <div class="mock-bar" style="height:42%"></div>
+        <div class="mock-bar" style="height:35%"></div>
+        <div class="mock-bar" style="height:58%"></div>
+        <div class="mock-bar" style="height:65%"></div>
+        <div class="mock-bar" style="height:40%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Latency Distribution</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:30%"></div>
+        <div class="mock-bar blue" style="height:55%"></div>
+        <div class="mock-bar blue" style="height:90%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:25%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>Request Rate (5m)</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar" style="height:30%"></div>
+        <div class="mock-bar" style="height:55%"></div>
+        <div class="mock-bar" style="height:90%"></div>
+        <div class="mock-bar" style="height:70%"></div>
+        <div class="mock-bar" style="height:40%"></div>
+        <div class="mock-bar" style="height:25%"></div>
+        <div class="mock-bar" style="height:60%"></div>
+        <div class="mock-bar" style="height:85%"></div>
+        <div class="mock-bar" style="height:45%"></div>
+        <div class="mock-bar" style="height:35%"></div>
+        <div class="mock-bar" style="height:75%"></div>
+        <div class="mock-bar" style="height:50%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Tokens/sec</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:50%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:85%"></div>
+        <div class="mock-bar blue" style="height:60%"></div>
+        <div class="mock-bar blue" style="height:35%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Time to First Token</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:65%"></div>
+        <div class="mock-bar blue" style="height:80%"></div>
+        <div class="mock-bar blue" style="height:45%"></div>
+        <div class="mock-bar blue" style="height:55%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>Error Rate (5m)</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar" style="height:8%"></div>
+        <div class="mock-bar" style="height:12%"></div>
+        <div class="mock-bar" style="height:6%"></div>
+        <div class="mock-bar" style="height:15%"></div>
+        <div class="mock-bar" style="height:9%"></div>
+        <div class="mock-bar" style="height:4%"></div>
+        <div class="mock-bar" style="height:10%"></div>
+        <div class="mock-bar" style="height:7%"></div>
+        <div class="mock-bar" style="height:14%"></div>
+        <div class="mock-bar" style="height:5%"></div>
+        <div class="mock-bar" style="height:11%"></div>
+        <div class="mock-bar" style="height:6%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>Worker Load</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar" style="height:55%"></div>
+        <div class="mock-bar" style="height:70%"></div>
+        <div class="mock-bar" style="height:45%"></div>
+        <div class="mock-bar" style="height:85%"></div>
+        <div class="mock-bar" style="height:60%"></div>
+        <div class="mock-bar" style="height:40%"></div>
+        <div class="mock-bar" style="height:75%"></div>
+        <div class="mock-bar" style="height:50%"></div>
+        <div class="mock-bar" style="height:65%"></div>
+        <div class="mock-bar" style="height:35%"></div>
+        <div class="mock-bar" style="height:80%"></div>
+        <div class="mock-bar" style="height:55%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Model Usage</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:90%"></div>
+        <div class="mock-bar blue" style="height:60%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:30%"></div>
+        <div class="mock-bar blue" style="height:55%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card">
+    <h3>GPU Utilization (5m)</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar" style="height:45%"></div>
+        <div class="mock-bar" style="height:72%"></div>
+        <div class="mock-bar" style="height:58%"></div>
+        <div class="mock-bar" style="height:88%"></div>
+        <div class="mock-bar" style="height:65%"></div>
+        <div class="mock-bar" style="height:42%"></div>
+        <div class="mock-bar" style="height:78%"></div>
+        <div class="mock-bar" style="height:55%"></div>
+        <div class="mock-bar" style="height:92%"></div>
+        <div class="mock-bar" style="height:60%"></div>
+        <div class="mock-bar" style="height:48%"></div>
+        <div class="mock-bar" style="height:70%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>GPU Memory</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:60%"></div>
+        <div class="mock-bar blue" style="height:75%"></div>
+        <div class="mock-bar blue" style="height:45%"></div>
+        <div class="mock-bar blue" style="height:80%"></div>
+        <div class="mock-bar blue" style="height:55%"></div>
+        <div class="mock-bar blue" style="height:65%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Power Draw</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:50%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:85%"></div>
+        <div class="mock-bar blue" style="height:60%"></div>
+        <div class="mock-bar blue" style="height:45%"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-card dim">
+    <h3>Temperature</h3>
+    <div class="chart-container">
+      <div class="mock-chart">
+        <div class="mock-bar blue" style="height:35%"></div>
+        <div class="mock-bar blue" style="height:55%"></div>
+        <div class="mock-bar blue" style="height:70%"></div>
+        <div class="mock-bar blue" style="height:40%"></div>
+        <div class="mock-bar blue" style="height:60%"></div>
+        <div class="mock-bar blue" style="height:80%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:4px;font-size:0.78rem;color:var(--muted)">
+  ● Health tab active — Traffic &amp; Hardware charts shown dimmed until switched
+</div>

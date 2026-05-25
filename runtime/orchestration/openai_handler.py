@@ -424,7 +424,7 @@ class RouterService:
                                          provider, model)
                 return result
             else:
-                tools = payload.get("tools") or []
+                tools = self._ensure_openai_tools(payload.get("tools") or [])
                 max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
                 parallel_tool_calls = payload.get("parallel_tool_calls", True)
 
@@ -670,7 +670,7 @@ class RouterService:
                     error=str(exc),
                 )
 
-        tools = payload.get("tools") or []
+        tools = self._ensure_openai_tools(payload.get("tools") or [])
         adapter_instance = self._adapter(provider, worker)
         try:
             if tools:
@@ -1065,14 +1065,30 @@ class RouterService:
     def _apply_generation_defaults(self, payload: dict[str, Any]) -> dict[str, Any]:
         return payload
 
-    def _normalize_payload_for_provider(self, payload: dict[str, Any], provider: str) -> dict[str, Any]:
-        if provider != "ollama":
-            return payload
+    @staticmethod
+    def _ensure_openai_tools(tools: Any) -> Any:
+        if not isinstance(tools, list):
+            return tools
+        normalized: list[dict[str, Any]] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                normalized.append(tool)
+                continue
+            if tool.get("type") == "function" and "function" not in tool and "name" in tool:
+                fn_def = {k: v for k, v in tool.items() if k != "type"}
+                normalized.append({"type": "function", "function": fn_def})
+            else:
+                normalized.append(tool)
+        return normalized
 
+    def _normalize_payload_for_provider(self, payload: dict[str, Any], provider: str) -> dict[str, Any]:
         normalized = dict(payload)
-        messages = self._extract_messages_from_payload(normalized)
-        if messages is not None:
-            normalized["messages"] = [self._normalize_ollama_message(message) for message in messages]
+        if "tools" in normalized:
+            normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
+        if provider == "ollama":
+            messages = self._extract_messages_from_payload(normalized)
+            if messages is not None:
+                normalized["messages"] = [self._normalize_ollama_message(message) for message in messages]
         return normalized
 
     def _extract_messages_from_payload(self, payload: dict[str, Any]) -> list[dict[str, Any]] | None:

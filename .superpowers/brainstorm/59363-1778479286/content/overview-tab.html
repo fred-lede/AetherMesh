@@ -1,0 +1,255 @@
+<style>
+:root {
+  --bg:       #07111a;
+  --panel:    rgba(11, 24, 38, 0.88);
+  --panel-2:  rgba(17, 34, 52, 0.95);
+  --line:     rgba(150, 210, 255, 0.18);
+  --text:     #e8f3fb;
+  --muted:    #9fb6c8;
+  --accent:   #5eead4;
+  --accent-2: #60a5fa;
+  --warn:     #f59e0b;
+  --bad:      #f87171;
+  --good:     #34d399;
+}
+
+body {
+  margin: 0;
+  padding: 24px 28px;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.28), transparent 35%),
+    radial-gradient(circle at top right, rgba(94, 234, 212, 0.18), transparent 32%),
+    linear-gradient(180deg, #04070b 0%, #07111a 35%, #03060a 100%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* Tabs */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+.tab {
+  padding: 7px 18px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: default;
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.tab.active {
+  background: rgba(94, 234, 212, 0.1);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Section title */
+.section-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* Health Strip */
+.health-strip {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  background: var(--panel);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+}
+.health-item {
+  flex: 1;
+  padding: 16px 18px;
+  border-right: 1px solid var(--line);
+  text-align: center;
+}
+.health-item:last-child { border-right: none; }
+.health-item .label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.health-item .value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.health-item .value.good { color: var(--good); }
+.health-item .value.warn { color: var(--warn); }
+.health-item .value.bad  { color: var(--bad); }
+
+/* Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+}
+.metric-card .label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.metric-card .value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.metric-card .sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Bottom two columns */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.panel-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+}
+
+/* Alerts */
+.alert-pill {
+  display: inline-block;
+  background: rgba(52, 211, 153, 0.1);
+  color: var(--good);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+/* Token Usage */
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--line);
+}
+.token-row:last-child { border-bottom: none; }
+.token-row .key { color: var(--muted); }
+.token-row .val { font-weight: 500; }
+.view-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--accent-2);
+  text-decoration: none;
+}
+.view-link:hover { text-decoration: underline; }
+</style>
+
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <span class="tab active">Overview</span>
+  <span class="tab">Cluster</span>
+  <span class="tab">Providers</span>
+  <span class="tab">Charts</span>
+  <span class="tab">System</span>
+</div>
+
+<!-- Health Strip -->
+<div class="health-strip">
+  <div class="health-item">
+    <div class="label">Cluster</div>
+    <div class="value good">healthy</div>
+  </div>
+  <div class="health-item">
+    <div class="label">GPUs</div>
+    <div class="value">3 / 3</div>
+  </div>
+  <div class="health-item">
+    <div class="label">Workers</div>
+    <div class="value">4 / 4</div>
+  </div>
+  <div class="health-item">
+    <div class="label">Queue</div>
+    <div class="value">0</div>
+  </div>
+  <div class="health-item">
+    <div class="label">Errors (5m)</div>
+    <div class="value good">0%</div>
+  </div>
+  <div class="health-item">
+    <div class="label">Avg Latency</div>
+    <div class="value">142ms</div>
+  </div>
+</div>
+
+<div style="margin-top: 24px">
+  <div class="section-label">Top Metrics</div>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="label">Requests</div>
+      <div class="value">1,247</div>
+      <div class="sub">avg 142ms · p95 420ms</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Tokens</div>
+      <div class="value">2.4M</div>
+      <div class="sub">in / out 合計</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Models</div>
+      <div class="value">24</div>
+      <div class="sub">across 4 workers</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Uptime</div>
+      <div class="value">12d 7h</div>
+      <div class="sub">control plane</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom -->
+<div class="bottom-grid">
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">Alerts</div>
+    <div class="alert-pill">all systems nominal</div>
+  </div>
+  <div class="panel-card">
+    <div class="section-label" style="margin-bottom:12px">Token Usage</div>
+    <div class="token-row">
+      <span class="key">Total Tokens</span>
+      <span class="val">2,456,789</span>
+    </div>
+    <div class="token-row">
+      <span class="key">Requests</span>
+      <span class="val">1,247</span>
+    </div>
+    <a class="view-link" href="/profile">View full usage →</a>
+  </div>
+</div>
