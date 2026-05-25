@@ -93,6 +93,7 @@ class Settings:
     ssl_keyfile: str = field(default_factory=lambda: os.getenv("AIIH_SSL_KEYFILE", "").strip())
     local_worker_ports: list[int] = field(default_factory=lambda: [11434, 11435, 11436, 11437])
     config_dir: Path = field(default_factory=_detect_config_dir)
+    responses_max_turns: int = field(default_factory=lambda: _env_int("AIIH_RESPONSES_MAX_TURNS", 16))
 
     @property
     def tls_enabled(self) -> bool:

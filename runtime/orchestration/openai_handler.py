@@ -1236,7 +1236,7 @@ class RouterService:
         }
 
     def _resolve_max_turns(self) -> int:
-        return int(settings.get("RESPONSES_MAX_TURNS", 16))
+        return settings.responses_max_turns
 
     def _record_token_usage(self, user_id: int | None, api_key_id: int | None,
                              input_tokens: int, output_tokens: int,
