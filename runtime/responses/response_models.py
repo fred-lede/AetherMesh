@@ -12,18 +12,26 @@ class ResponseStatus(Enum):
     IN_PROGRESS = "in_progress"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REQUIRES_ACTION = "requires_action"
+
+
+class FunctionCallStatus(Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED_AND_RETRIED = "cancelled_and_retried"
 
 
 class InputItemType(Enum):
     MESSAGE = "message"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+    FUNCTION_CALL_OUTPUT = "function_call_output"
     FILE = "file"
 
 
 class OutputItemType(Enum):
     MESSAGE = "message"
-    TOOL_CALL = "tool_call"
+    FUNCTION_CALL = "function_call"
     REASONING = "reasoning"
 
 
@@ -77,6 +85,7 @@ class OutputItem:
     output: str = ""
     is_error: bool = False
     status: str = "completed"
+    call_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -87,13 +96,23 @@ class OutputItem:
         if self.type == OutputItemType.MESSAGE:
             d["role"] = self.role
             d["content"] = [p.to_dict() for p in self.content]
-        elif self.type == OutputItemType.TOOL_CALL:
-            d["tool_call_id"] = self.tool_call_id
-            d["tool_name"] = self.tool_name
+        elif self.type == OutputItemType.FUNCTION_CALL:
+            d["call_id"] = self.call_id or self.tool_call_id
+            d["name"] = self.tool_name
+            d["parsed_arguments"] = self._parse_arguments()
             d["arguments"] = self.arguments
         elif self.type == OutputItemType.REASONING:
             d["content"] = [p.to_dict() for p in self.content]
         return d
+
+    def _parse_arguments(self) -> Any:
+        import json
+        if not self.arguments:
+            return {}
+        try:
+            return json.loads(self.arguments)
+        except (json.JSONDecodeError, TypeError):
+            return self.arguments
 
 
 @dataclass
@@ -122,8 +141,9 @@ class InputItem:
             d["tool_call_id"] = self.tool_call_id
             d["tool_name"] = self.tool_name
             d["arguments"] = self.arguments
-        elif self.type == InputItemType.TOOL_RESULT:
-            d["tool_call_id"] = self.tool_call_id
+        elif self.type in (InputItemType.TOOL_RESULT, InputItemType.FUNCTION_CALL_OUTPUT):
+            d["type"] = "function_call_output"
+            d["call_id"] = self.tool_call_id
             d["output"] = self.output
             d["is_error"] = self.is_error
         elif self.type == InputItemType.FILE:
@@ -186,8 +206,37 @@ def make_tool_call_output(
     arguments: str,
 ) -> OutputItem:
     return OutputItem(
-        type=OutputItemType.TOOL_CALL,
+        type=OutputItemType.FUNCTION_CALL,
+        call_id=tool_call_id,
         tool_call_id=tool_call_id,
         tool_name=tool_name,
         arguments=arguments,
+    )
+
+
+def make_function_call_output(
+    call_id: str,
+    name: str,
+    arguments: str,
+    status: str = "completed",
+) -> OutputItem:
+    return OutputItem(
+        type=OutputItemType.FUNCTION_CALL,
+        call_id=call_id,
+        tool_name=name,
+        arguments=arguments,
+        status=status,
+    )
+
+
+def make_function_call_output_item(
+    call_id: str,
+    output: str,
+    is_error: bool = False,
+) -> InputItem:
+    return InputItem(
+        type=InputItemType.FUNCTION_CALL_OUTPUT,
+        tool_call_id=call_id,
+        output=output,
+        is_error=is_error,
     )

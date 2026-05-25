@@ -24,6 +24,7 @@ def chat_completion_to_response(
     instructions: str = "",
     previous_response_id: str = "",
     metadata: dict[str, Any] | None = None,
+    include: list[str] | None = None,
 ) -> ResponseObject:
     resp = ResponseObject(
         id=response_id or f"resp_{uuid.uuid4().hex[:24]}",
@@ -41,14 +42,20 @@ def chat_completion_to_response(
         total_tokens=usage_data.get("total_tokens", 0),
     )
 
+    include_set = set(include or [])
+
     choices = completion.get("choices", [])
     for choice in choices:
         message = choice.get("message", {})
         content = str(message.get("content") or "")
         tool_calls = message.get("tool_calls") or []
+        reasoning = message.get("reasoning")
 
-        output_items = _message_to_output_items(content, tool_calls)
+        output_items = _message_to_output_items(content, tool_calls, reasoning=reasoning)
         resp.output.extend(output_items)
+
+        if "reasoning" in include_set and reasoning:
+            resp.output.append(_make_reasoning_output(str(reasoning)))
 
     return resp
 
@@ -56,11 +63,15 @@ def chat_completion_to_response(
 def _message_to_output_items(
     content: str,
     tool_calls: list[dict[str, Any]] | None = None,
+    reasoning: Any = None,
 ) -> list[OutputItem]:
     items: list[OutputItem] = []
 
     if content:
         items.append(make_text_output(content))
+
+    if reasoning:
+        items.append(_make_reasoning_output(str(reasoning)))
 
     if tool_calls:
         for tc in tool_calls:
@@ -72,6 +83,13 @@ def _message_to_output_items(
             ))
 
     return items
+
+
+def _make_reasoning_output(text: str) -> OutputItem:
+    return OutputItem(
+        type=OutputItemType.REASONING,
+        content=[ContentPart(type=ContentPartType.REASONING, text=text)],
+    )
 
 
 def error_response(

@@ -411,23 +411,52 @@ class RouterService:
                                          provider, model)
                 return result
             else:
-                completion = adapter_instance.chat(effective_payload)
-                usage = completion.get("usage") or {}
-                self._record_token_usage(user_id, api_key_id,
-                                         usage.get("prompt_tokens", 0),
-                                         usage.get("completion_tokens", 0),
-                                         provider, effective_payload.get("model", ""))
-                response = chat_completion_to_response(
-                    completion=completion,
-                    model=model,
-                    response_id=response_id,
-                    instructions=instructions,
-                    previous_response_id=previous_response_id,
-                    metadata=metadata,
-                )
-                if store:
-                    response_runtime.register(response)
-                return response.to_dict()
+                tools = payload.get("tools") or []
+                max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
+                parallel_tool_calls = payload.get("parallel_tool_calls", True)
+
+                if tools and provider != "openai":
+                    from runtime.responses.tool_loop import responses_tool_loop
+                    loop = responses_tool_loop
+                    if max_turns != loop._max_turns or parallel_tool_calls != loop._parallel_tool_calls:
+                        loop = responses_tool_loop.__class__(
+                            max_turns=max_turns,
+                            parallel_tool_calls=parallel_tool_calls,
+                        )
+                    response_object = loop.run(
+                        adapter=adapter_instance,
+                        chat_payload=effective_payload,
+                        tools=tools,
+                        instructions=instructions,
+                        response_id=response_id,
+                        model=model,
+                        previous_response_id=previous_response_id,
+                        metadata=metadata,
+                        input_value=input_value,
+                    )
+                    self._record_response_usage(user_id, api_key_id,
+                                                response_object, provider, model)
+                    if store:
+                        response_runtime.register(response_object)
+                    return response_object.to_dict()
+                else:
+                    completion = adapter_instance.chat(effective_payload)
+                    usage = completion.get("usage") or {}
+                    self._record_token_usage(user_id, api_key_id,
+                                             usage.get("prompt_tokens", 0),
+                                             usage.get("completion_tokens", 0),
+                                             provider, effective_payload.get("model", ""))
+                    response = chat_completion_to_response(
+                        completion=completion,
+                        model=model,
+                        response_id=response_id,
+                        instructions=instructions,
+                        previous_response_id=previous_response_id,
+                        metadata=metadata,
+                    )
+                    if store:
+                        response_runtime.register(response)
+                    return response.to_dict()
         except ProviderError as exc:
             error = True
             error_code = getattr(exc, "code", "") or self._classify_error_text(str(exc))
@@ -568,10 +597,48 @@ class RouterService:
             yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
             return
 
+        tools = payload.get("tools") or []
         adapter_instance = self._adapter(provider, worker)
         try:
-            raw_chunks = adapter_instance.stream(effective_payload)
-            yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
+            if tools:
+                from runtime.responses.tool_loop import responses_tool_loop
+                from runtime.responses.response_stream import response_stream_encoder
+                loop = responses_tool_loop
+                max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
+                parallel_tool_calls = payload.get("parallel_tool_calls", True)
+                if max_turns != loop._max_turns or parallel_tool_calls != loop._parallel_tool_calls:
+                    from runtime.responses.tool_loop import ResponsesToolLoop, DEFAULT_MAX_TURNS, DEFAULT_TOOL_TIMEOUT_S
+                    loop = ResponsesToolLoop(
+                        max_turns=max_turns,
+                        parallel_tool_calls=parallel_tool_calls,
+                    )
+                yield from loop.run_streaming(
+                    adapter=adapter_instance,
+                    chat_payload=effective_payload,
+                    tools=tools,
+                    instructions=instructions,
+                    response_id=response_id,
+                    model=model,
+                    previous_response_id=previous_response_id,
+                    metadata=metadata,
+                    input_value=input_value,
+                    encoder=response_stream_encoder,
+                )
+                store_flag = bool(payload.get("store", True))
+                if store_flag:
+                    from runtime.responses.response_runtime import response_runtime
+                    final_resp = ResponseObject(
+                        id=response_id,
+                        model=model,
+                        status=ResponseStatus.COMPLETED,
+                        instructions=instructions,
+                        previous_response_id=previous_response_id,
+                        metadata=metadata,
+                    )
+                    response_runtime.register(final_resp)
+            else:
+                raw_chunks = adapter_instance.stream(effective_payload)
+                yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
         except Exception as exc:
             yield response_stream_encoder.encode({
                 "type": "response.failed",
@@ -1084,6 +1151,9 @@ class RouterService:
             "poll_url": f"{settings.control_plane_url}/cluster/tasks/{task_id}" if task_id else "",
         }
 
+    def _resolve_max_turns(self) -> int:
+        return int(settings.get("RESPONSES_MAX_TURNS", 16))
+
     def _record_token_usage(self, user_id: int | None, api_key_id: int | None,
                              input_tokens: int, output_tokens: int,
                              provider: str, model: str) -> None:
@@ -1099,6 +1169,24 @@ class RouterService:
                 db.close()
         except Exception:
             logger.exception("Failed to record token usage")
+
+    def _record_response_usage(
+        self,
+        user_id: int | None,
+        api_key_id: int | None,
+        response: Any,
+        provider: str,
+        model: str,
+    ) -> None:
+        if user_id is None:
+            return
+        usage = getattr(response, "usage", None)
+        if not usage:
+            return
+        input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+        self._record_token_usage(user_id, api_key_id,
+                                 input_tokens, output_tokens, provider, model)
 
     def _finalize_request(
         self,

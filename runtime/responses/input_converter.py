@@ -8,6 +8,8 @@ from runtime.responses.response_models import InputItem, InputItemType
 def responses_input_to_messages(
     input_value: Any,
     instructions: str = "",
+    max_tokens: int | None = None,
+    truncation: str = "auto",
 ) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
 
@@ -24,14 +26,47 @@ def responses_input_to_messages(
         return messages
 
     if isinstance(input_value, list):
-        for item_data in input_value:
-            if isinstance(item_data, str):
-                messages.append({"role": "user", "content": item_data})
-            elif isinstance(item_data, dict):
-                item = _parse_input_item(item_data)
-                messages.extend(_input_item_to_messages(item))
+        if truncation == "auto":
+            messages = _truncate_input_list(input_value, max_tokens=max_tokens)
+        else:
+            for item_data in input_value:
+                if isinstance(item_data, str):
+                    messages.append({"role": "user", "content": item_data})
+                elif isinstance(item_data, dict):
+                    item = _parse_input_item(item_data)
+                    messages.extend(_input_item_to_messages(item))
 
     return messages
+
+
+def _truncate_input_list(
+    items: list[Any],
+    max_tokens: int | None = None,
+    min_turns_to_keep: int = 4,
+) -> list[dict[str, Any]]:
+    """Truncate old messages to stay within a reasonable token budget.
+
+    When `truncation: "auto"`, we drop the oldest user/assistant exchanges while
+    preserving the last `min_turns_to_keep` turns + system prompt.
+    """
+    parsed: list[dict[str, Any]] = []
+    for item_data in items:
+        if isinstance(item_data, str):
+            parsed.append({"role": "user", "content": item_data})
+        elif isinstance(item_data, dict):
+            item = _parse_input_item(item_data)
+            parsed.extend(_input_item_to_messages(item))
+
+    system_msgs = [m for m in parsed if m.get("role") == "system"]
+    non_system = [m for m in parsed if m.get("role") != "system"]
+
+    if len(non_system) <= 2 * min_turns_to_keep:
+        return parsed
+
+    keep_from = len(non_system) - 2 * min_turns_to_keep
+    if keep_from < 0:
+        keep_from = 0
+    return system_msgs + non_system[keep_from:]
 
 
 def _parse_input_item(item: dict[str, Any]) -> InputItem:
@@ -61,8 +96,8 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
         result.tool_name = str(item.get("tool_name", ""))
         result.arguments = _stringify_arguments(item.get("arguments", "{}"))
 
-    elif item_type == InputItemType.TOOL_RESULT:
-        result.tool_call_id = str(item.get("tool_call_id", ""))
+    elif item_type in (InputItemType.TOOL_RESULT, InputItemType.FUNCTION_CALL_OUTPUT):
+        result.tool_call_id = str(item.get("tool_call_id", item.get("call_id", "")))
         result.output = str(item.get("output", ""))
         result.is_error = bool(item.get("is_error", False))
 
@@ -91,7 +126,7 @@ def _input_item_to_messages(item: InputItem) -> list[dict[str, Any]]:
             }],
         }]
 
-    if item.type == InputItemType.TOOL_RESULT:
+    if item.type in (InputItemType.TOOL_RESULT, InputItemType.FUNCTION_CALL_OUTPUT):
         return [{
             "role": "tool",
             "tool_call_id": item.tool_call_id,

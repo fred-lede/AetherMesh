@@ -173,6 +173,23 @@
 - [x] Normalized Ollama and Ollama Cloud embedding response shapes: `embeddings`, legacy `embedding`, and OpenAI-style `data[].embedding`.
 - [x] Verified `nomic-embed-text-v2-moe:latest` remains an embeddings-only model path and returns non-empty 768-dimensional vectors through AetherMesh.
 
+## Phase 22 — Responses API Multi-Turn Tool Loop 🟡 (2026-05-24)
+### 已完成
+- [x] 建立計畫文件 `RESPONSES_TOOL_LOOP_PLAN.md`
+- [x] `response_models.py` — 加 `REQUIRES_ACTION` status, `FunctionCallStatus`, `FUNCTION_CALL_OUTPUT` input type, `FUNCTION_CALL` output type
+- [x] `make_function_call_output()` / `make_function_call_output_item()` helpers
+- [x] `input_converter.py` — 更新 `_parse_input_item` / `_input_item_to_messages` 支援 `function_call_output`
+- [x] `tool_loop.py` — `ResponsesToolLoop` 核心實作 (sync + streaming), 最大 16 輪, tool 執行 + 回注 messages
+- [x] `openai_handler.py` — `handle_responses()` 加 tool loop 分支 (provider != "openai" 時啟用)
+- [x] `openai_handler.py` — `handle_streaming_responses()` 加 streaming tool loop 分支
+- [x] `openai_handler.py` — 加 `_resolve_max_turns()` / `_record_response_usage()` helpers
+- [x] `__init__.py` — 更新 export 清單
+- [x] 全部檔案 `py_compile` 語法驗證通過
+- [x] 全部 import 驗證通過
+
+### 待完成
+- [ ] 端對端測試驗證 `/v1/responses` with tools → tool execution → completed
+
 ---
 
 ## 執行記錄
@@ -192,3 +209,4 @@
 | 2026-05-11 | Phase 8 | ProviderCapabilityRegistry + extended scoring (GPU pressure, cost, tool) verified complete |
 | 2026-05-19 | Phase 20 | Worker assignment resilience: leased dispatch/release, stuck queue reclamation, rerank worker preservation, GPU saturation classification, qwen3.6 local fallback |
 | 2026-05-24 | Phase 21 | Embeddings routing normalization: `/v1/embeddings` route, embeddings capability detection, Ollama response-shape normalization |
+| 2026-05-24 | Phase 22 | Responses API Multi-Turn Tool Loop: `ResponsesToolLoop` sync+streaming, tool execution + message reinjection, RouterService integration |
