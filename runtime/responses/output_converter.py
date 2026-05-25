@@ -185,6 +185,7 @@ def streaming_chunk_to_response_event(
                             "output_tokens": usage.get("completion_tokens", 0),
                             "total_tokens": usage.get("total_tokens", 0),
                         },
+                        "output_text": "",
                     },
                 },
             })
@@ -253,6 +254,7 @@ def make_response_completed_event(
                 "model": model,
                 "status": "completed",
                 "output": _response_output_from_text(output_text),
+                "output_text": output_text,
                 "usage": usage or {},
             },
         },

@@ -204,6 +204,7 @@ def _attach_completed_output(event: dict[str, Any], text: str) -> None:
         str(response.get("model") or ""),
         output_text=text,
     )["data"]["response"]["output"]
+    response["output_text"] = text
 
 
 def make_output_item_added_event(

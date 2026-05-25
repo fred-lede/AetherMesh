@@ -192,6 +192,7 @@ def test_tool_loop_returns_completed_without_tools():
     assert response.status == ResponseStatus.COMPLETED
     assert len(response.output) == 1
     assert response.output[0].type == OutputItemType.MESSAGE
+    assert response.to_dict()["output_text"] == "Final answer"
 
 
 def test_tool_loop_executes_one_tool_call():
@@ -449,6 +450,7 @@ def test_wrap_streaming_chunks_completed_event_contains_output_text():
 
     output = completed["response"]["output"]
     assert output[0]["content"][0]["text"] == "Hello world"
+    assert completed["response"]["output_text"] == "Hello world"
 
 
 # ── Unit Tests: Response Model Helpers ──────────────────────────────

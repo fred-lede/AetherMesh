@@ -211,9 +211,11 @@
 | 2026-05-24 | Phase 21 | Embeddings routing normalization: `/v1/embeddings` route, embeddings capability detection, Ollama response-shape normalization |
 | 2026-05-24 | Phase 22 | Responses API Multi-Turn Tool Loop: `ResponsesToolLoop` sync+streaming, tool execution + message reinjection, RouterService integration |
 | 2026-05-25 | Phase 23 | Responses client compatibility: `input_text` input normalization, `response.output_text.delta` streaming, completed output assembly |
+| 2026-05-25 | Phase 23b | Responses client display compatibility: expose assembled assistant text as top-level `output_text` |
 
 ## Phase 23 - Responses Client Compatibility (2026-05-25)
 - [x] Accept bare Responses content parts such as `input_text` and plain `text` dictionaries as user input.
 - [x] Emit Responses streaming text as `response.output_text.delta` for OpenAI-compatible clients.
 - [x] Include assembled assistant text in `response.completed.output` so clients that render only the final event do not show blank replies.
+- [x] Expose assembled assistant text as top-level `output_text` for Cherry Studio / ChatBox style Responses renderers.
 - [x] Added regression coverage for bare input parts and streaming completed output.

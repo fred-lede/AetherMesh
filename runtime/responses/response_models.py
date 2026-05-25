@@ -175,6 +175,7 @@ class ResponseObject:
             "model": self.model,
             "status": self.status.value,
             "output": [item.to_dict() for item in self.output],
+            "output_text": self.output_text(),
             "usage": self.usage.to_dict(),
         }
         if self.instructions:
@@ -186,6 +187,16 @@ class ResponseObject:
         if self.metadata:
             d["metadata"] = self.metadata
         return d
+
+    def output_text(self) -> str:
+        text_parts: list[str] = []
+        for item in self.output:
+            if item.type != OutputItemType.MESSAGE:
+                continue
+            for part in item.content:
+                if part.type == ContentPartType.OUTPUT_TEXT and part.text:
+                    text_parts.append(part.text)
+        return "".join(text_parts)
 
 
 def make_text_output(text: str, role: str = "assistant") -> OutputItem:

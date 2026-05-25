@@ -76,6 +76,7 @@ class OllamaAdapter(ProviderAdapter):
             "model": completion["model"],
             "status": "completed",
             "output": output,
+            "output_text": content,
             "usage": completion.get("usage", {}),
         }
 
