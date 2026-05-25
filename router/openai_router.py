@@ -2,10 +2,14 @@ from __future__ import annotations
 
 """OpenAI-compatible API router. Re-exports from router/openai/ adapters."""
 
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 from config.settings import settings
 from runtime.orchestration.openai_handler import RouterService

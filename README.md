@@ -487,7 +487,9 @@ All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 | `NVIDIA_NIM_API_KEY` | — | NVIDIA NIM API key |
 | `OLLAMA_CLOUD_API_KEY` | — | Ollama Cloud API key |
 
-See `.env.example` for the full list.
+See `.env.example` for the full list. The OpenAI router loads `.env` before
+initializing settings, so direct uvicorn starts and launcher-managed starts use
+the same debug and provider variables.
 
 ### Config Files
 
