@@ -32,6 +32,19 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
 
 
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    for prefix, hinted_provider in ROUTE_PREFIXES.items():
+        if model.startswith(prefix):
+            stripped = model[len(prefix):]
+            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
+                return hinted_provider, None
+            for item in registry.get("models", []):
+                if item.get("name") == stripped:
+                    bindings = item.get("worker_bindings", [])
+                    for b in bindings:
+                        base_url = settings.worker_base_url(b)
+                        if base_url:
+                            return "ollama", {"base_url": base_url}
+            return "ollama", None
     clean_model = settings.resolve_model_alias(model)
     for item in registry.get("models", []):
         if item.get("name") in (model, clean_model):
@@ -56,7 +69,20 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
     return "ollama", None
 
 
+ROUTE_PREFIXES = {
+    "ollama_cloud/": "ollama_cloud",
+    "nvidia_nim/": "nvidia_nim",
+    "anthropic/": "ollama",
+    "ollama/": "ollama",
+    "openai/": "openai",
+    "gemini/": "gemini",
+}
+
+
 def provider_for_model(model: str, registry: dict[str, Any]) -> str:
+    for prefix, provider in ROUTE_PREFIXES.items():
+        if model.startswith(prefix):
+            return provider
     model = settings.resolve_model_alias(model)
     for item in registry.get("models", []):
         if item.get("name") == model:

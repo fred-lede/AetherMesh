@@ -351,9 +351,7 @@ class OllamaAdapter(ProviderAdapter):
         if "tools" in payload:
             body["tools"] = self._tools_for_ollama(payload["tools"])
 
-        # Ollama accepts tools, but many versions reject OpenAI/Anthropic
-        # tool_choice shapes such as {"type": "auto"} or {"type": "required"}.
-        for key in ("format", "keep_alive", "think"):
+        for key in ("format", "keep_alive", "think", "tool_choice"):
             if key in payload:
                 body[key] = payload[key]
         return body

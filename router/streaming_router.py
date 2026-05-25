@@ -10,7 +10,7 @@ def format_sse_event(item: dict[str, Any] | str) -> str:
     if isinstance(item, str):
         payload = item
     else:
-        payload = json.dumps(item, ensure_ascii=True)
+        payload = json.dumps(item, ensure_ascii=False)
     return f"data: {payload}\n\n"
 
 
