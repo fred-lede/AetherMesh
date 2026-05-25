@@ -30,9 +30,6 @@ class ResponseStreamEncoder:
 response_stream_encoder = ResponseStreamEncoder()
 
 
-response_stream_encoder = ResponseStreamEncoder()
-
-
 def wrap_streaming_chunks(
     chunks: Iterable[dict[str, Any] | str],
     response_id: str,
@@ -41,6 +38,7 @@ def wrap_streaming_chunks(
     yield response_stream_encoder.encode(make_response_start_event(response_id, model))
 
     emitted_done = False
+    text_parts: list[str] = []
 
     for chunk in chunks:
         if isinstance(chunk, str):
@@ -54,6 +52,8 @@ def wrap_streaming_chunks(
                     continue
                 events = streaming_chunk_to_response_event(chunk_data, response_id, model)
                 for event in events:
+                    _capture_text_delta(event, text_parts)
+                    _attach_completed_output(event, "".join(text_parts))
                     yield response_stream_encoder.encode(event)
                     if event.get("type") == "response.completed":
                         emitted_done = True
@@ -69,12 +69,16 @@ def wrap_streaming_chunks(
 
             events = streaming_chunk_to_response_event(chunk, response_id, model)
             for event in events:
+                _capture_text_delta(event, text_parts)
+                _attach_completed_output(event, "".join(text_parts))
                 yield response_stream_encoder.encode(event)
                 if event.get("type") == "response.completed":
                     emitted_done = True
 
     if not emitted_done:
-        yield response_stream_encoder.encode(make_response_completed_event(response_id, model))
+        yield response_stream_encoder.encode(
+            make_response_completed_event(response_id, model, output_text="".join(text_parts))
+        )
 
 
 def make_function_call_queue_event(
@@ -164,14 +168,42 @@ def make_text_delta_event(
     index: int = 0,
 ) -> dict[str, Any]:
     return {
-        "type": "response.text.delta",
+        "type": "response.output_text.delta",
         "data": {
-            "type": "response.text.delta",
+            "type": "response.output_text.delta",
             "response": {"id": response_id},
             "delta": delta,
             "index": index,
         },
     }
+
+
+def _capture_text_delta(event: dict[str, Any], text_parts: list[str]) -> None:
+    if event.get("type") not in {"response.output_text.delta", "response.text.delta"}:
+        return
+    data = event.get("data", {})
+    if isinstance(data, dict):
+        delta = data.get("delta", "")
+        if delta:
+            text_parts.append(str(delta))
+
+
+def _attach_completed_output(event: dict[str, Any], text: str) -> None:
+    if event.get("type") != "response.completed" or not text:
+        return
+    data = event.get("data", {})
+    if not isinstance(data, dict):
+        return
+    response = data.get("response")
+    if not isinstance(response, dict):
+        return
+    if response.get("output"):
+        return
+    response["output"] = make_response_completed_event(
+        str(response.get("id") or ""),
+        str(response.get("model") or ""),
+        output_text=text,
+    )["data"]["response"]["output"]
 
 
 def make_output_item_added_event(

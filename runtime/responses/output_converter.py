@@ -127,6 +127,7 @@ def streaming_chunk_to_response_event(
                 "type": "response.output_item.added",
                 "data": {
                     "type": "response.output_item.added",
+                    "response": {"id": response_id},
                     "item": {"id": f"item_{uuid.uuid4().hex[:16]}", "type": "message", "role": "assistant", "content": []},
                 },
             })
@@ -134,16 +135,17 @@ def streaming_chunk_to_response_event(
                 "type": "response.content_part.added",
                 "data": {
                     "type": "response.content_part.added",
+                    "response": {"id": response_id},
                     "part": {"type": "output_text", "text": ""},
                 },
             })
             events.append({
-                "type": "response.text.delta",
-                "data": {"type": "response.text.delta", "delta": content, "index": 0},
+                "type": "response.output_text.delta",
+                "data": {"type": "response.output_text.delta", "response": {"id": response_id}, "delta": content, "index": 0},
             })
             events.append({
-                "type": "response.text.done",
-                "data": {"type": "response.text.done", "text": content, "index": 0},
+                "type": "response.output_text.done",
+                "data": {"type": "response.output_text.done", "response": {"id": response_id}, "text": content, "index": 0},
             })
 
         tool_calls = delta.get("tool_calls", [])
@@ -239,6 +241,7 @@ def make_response_completed_event(
     response_id: str,
     model: str,
     usage: dict[str, Any] | None = None,
+    output_text: str = "",
 ) -> dict[str, Any]:
     return {
         "type": "response.completed",
@@ -249,8 +252,24 @@ def make_response_completed_event(
                 "object": "response",
                 "model": model,
                 "status": "completed",
-                "output": [],
+                "output": _response_output_from_text(output_text),
                 "usage": usage or {},
             },
         },
     }
+
+
+def _response_output_from_text(text: str) -> list[dict[str, Any]]:
+    if not text:
+        return []
+    return [{
+        "id": f"item_{uuid.uuid4().hex[:16]}",
+        "type": "message",
+        "status": "completed",
+        "role": "assistant",
+        "content": [{
+            "type": "output_text",
+            "text": text,
+            "annotations": [],
+        }],
+    }]

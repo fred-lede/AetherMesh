@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from unittest.mock import MagicMock, patch, PropertyMock
@@ -20,6 +21,7 @@ from runtime.responses.response_stream import (
     make_function_call_output_event,
     make_output_item_added_event,
     make_text_delta_event,
+    wrap_streaming_chunks,
 )
 from runtime.tools.tool_registry import ToolRegistry, ToolDescriptor
 from runtime.tools.tool_result import ToolCall, ToolResult
@@ -152,6 +154,20 @@ def test_responses_input_truncation_disabled_preserves_all():
         truncation="disabled",
     )
     assert len(messages) == 20
+
+
+def test_responses_input_accepts_bare_input_text_part():
+    messages = responses_input_to_messages([
+        {"type": "input_text", "text": "Hello from Responses"},
+    ])
+
+    assert messages == [{"role": "user", "content": "Hello from Responses"}]
+
+
+def test_responses_input_accepts_bare_text_dict():
+    messages = responses_input_to_messages({"text": "Plain text block"})
+
+    assert messages == [{"role": "user", "content": "Plain text block"}]
 
 
 # ── Unit Tests: Tool Loop Core ───────────────────────────────────────
@@ -414,8 +430,25 @@ def test_make_output_item_added_event():
 
 def test_make_text_delta_event():
     event = make_text_delta_event(response_id="resp_1", delta="Hello")
-    assert event["type"] == "response.text.delta"
+    assert event["type"] == "response.output_text.delta"
     assert event["data"]["delta"] == "Hello"
+
+
+def test_wrap_streaming_chunks_completed_event_contains_output_text():
+    chunks = [
+        {"choices": [{"delta": {"content": "Hello "}, "finish_reason": None}]},
+        {"choices": [{"delta": {"content": "world"}, "finish_reason": "stop"}]},
+    ]
+
+    events = list(wrap_streaming_chunks(chunks, response_id="resp_1", model="test-model"))
+    completed = [
+        json.loads(event.split("data: ", 1)[1])
+        for event in events
+        if event.startswith("event: response.completed")
+    ][0]
+
+    output = completed["response"]["output"]
+    assert output[0]["content"][0]["text"] == "Hello world"
 
 
 # ── Unit Tests: Response Model Helpers ──────────────────────────────

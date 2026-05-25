@@ -70,6 +70,17 @@ def _truncate_input_list(
 
 
 def _parse_input_item(item: dict[str, Any]) -> InputItem:
+    if _is_bare_content_part(item):
+        content_part = dict(item)
+        if "text" in content_part and "type" not in content_part:
+            content_part["type"] = "text"
+        return InputItem(
+            id=str(item.get("id", f"input_{id(item)}")),
+            type=InputItemType.MESSAGE,
+            role=str(item.get("role", "user")),
+            content=[content_part],
+        )
+
     item_type_str = str(item.get("type", "message"))
     try:
         item_type = InputItemType(item_type_str)
@@ -88,6 +99,8 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
             result.content = [{"type": "text", "text": content}]
         elif isinstance(content, list):
             result.content = content
+        elif "text" in item:
+            result.content = [{"type": "text", "text": str(item.get("text", ""))}]
         else:
             result.content = [{"type": "text", "text": str(content)}]
 
@@ -147,9 +160,27 @@ def _content_list_to_various(content: Any) -> str | list[dict[str, Any]]:
         return content
     if not isinstance(content, list):
         return str(content)
-    if len(content) == 1 and content[0].get("type") == "text":
+    if len(content) == 1 and content[0].get("type") in {"text", "input_text", "output_text"}:
         return str(content[0].get("text", ""))
     return content
+
+
+def _is_bare_content_part(item: dict[str, Any]) -> bool:
+    item_type = str(item.get("type", "")).lower()
+    if item_type in {
+        "text",
+        "input_text",
+        "output_text",
+        "image_url",
+        "input_image",
+        "image",
+        "input_file",
+        "file",
+        "input_audio",
+        "audio",
+    }:
+        return "content" not in item
+    return "text" in item and "content" not in item and "role" not in item
 
 
 def _stringify_arguments(args: Any) -> str:

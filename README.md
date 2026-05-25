@@ -412,6 +412,10 @@ Full OpenAI Responses API (`/v1/responses`) — native passthrough for OpenAI,
 auto-conversion for Ollama, Gemini, NVIDIA NIM, and Ollama Cloud. Supports
 `input`, `instructions`, `tools`, streaming, tool calls, and response management
 (GET/DELETE/PATCH). All provider adapters implement the `responses` capability.
+Responses input accepts message objects, strings, and bare content parts such as
+`input_text`; streaming emits OpenAI-compatible `response.output_text.delta`
+events and includes the assembled text in `response.completed.output` for
+clients that read the final event instead of deltas.
 
 ### Embeddings API
 

@@ -211,7 +211,7 @@ class ResponsesToolLoop:
         - response.function_call.output
         - response.output_item.added
         - response.content_part.added
-        - response.text.delta
+        - response.output_text.delta
         - response.completed
         """
         messages = self._build_messages(input_value, instructions)
@@ -265,9 +265,9 @@ class ResponsesToolLoop:
 
                     if content:
                         yield encoder.encode({
-                            "type": "response.text.delta",
+                            "type": "response.output_text.delta",
                             "data": {
-                                "type": "response.text.delta",
+                                "type": "response.output_text.delta",
                                 "response": {"id": response_id},
                                 "delta": content,
                             },
