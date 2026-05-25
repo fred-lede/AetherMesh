@@ -83,68 +83,74 @@ class ResponsesToolLoop:
         messages = self._build_messages(input_value, instructions)
         payload = dict(chat_payload)
         payload["messages"] = messages
+        temp_tool_ids: list[str] = []
         if tools:
             payload["tools"] = tools
+            temp_tool_ids = self._register_temp_tools(tools)
 
         usage_accum = self._accumulate_usage()
 
-        for turn in range(1, self._max_turns + 1):
-            logger.debug("Tool loop turn %d/%d", turn, self._max_turns)
-            try:
-                completion = adapter.chat(payload)
-            except Exception as exc:
-                return self._make_error_response(
-                    response_id, model, str(exc),
-                    f"provider_error_turn_{turn}",
-                    instructions, previous_response_id, metadata,
-                )
+        try:
+            for turn in range(1, self._max_turns + 1):
+                logger.debug("Tool loop turn %d/%d", turn, self._max_turns)
+                try:
+                    completion = adapter.chat(payload)
+                except Exception as exc:
+                    return self._make_error_response(
+                        response_id, model, str(exc),
+                        f"provider_error_turn_{turn}",
+                        instructions, previous_response_id, metadata,
+                    )
 
-            usage_data = completion.get("usage", {})
-            usage_accum.add(usage_data)
+                usage_data = completion.get("usage", {})
+                usage_accum.add(usage_data)
 
-            message = completion.get("choices", [{}])[0].get("message", {})
-            content = str(message.get("content") or "")
-            tool_calls = message.get("tool_calls") or []
+                message = completion.get("choices", [{}])[0].get("message", {})
+                content = str(message.get("content") or "")
+                tool_calls = message.get("tool_calls") or []
 
-            if not tool_calls:
-                resp = chat_completion_to_response(
-                    completion, model, response_id,
-                    instructions, previous_response_id, metadata,
-                )
-                resp.status = ResponseStatus.COMPLETED
-                resp.id = response_id
-                resp.usage = ResponseUsage(**usage_accum.to_dict())
-                return resp
+                if not tool_calls:
+                    resp = chat_completion_to_response(
+                        completion, model, response_id,
+                        instructions, previous_response_id, metadata,
+                    )
+                    resp.status = ResponseStatus.COMPLETED
+                    resp.id = response_id
+                    resp.usage = ResponseUsage(**usage_accum.to_dict())
+                    return resp
 
-            logger.debug(
-                "Turn %d: got %d tool_calls",
-                turn, len(tool_calls),
-            )
-
-            messages.append({
-                "role": "assistant",
-                "content": content or None,
-                "tool_calls": tool_calls,
-            })
-
-            tool_results = self._execute_tool_calls(tool_calls)
-
-            for tr in tool_results:
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tr.call.id,
-                    "content": tr.output,
-                })
                 logger.debug(
-                    "Tool %s (%s) → %d chars, error=%s",
-                    tr.call.name, tr.call.id, len(str(tr.output)), tr.is_error,
+                    "Turn %d: got %d tool_calls",
+                    turn, len(tool_calls),
                 )
 
-        logger.warning("Tool loop exceeded %d turns, returning partial", self._max_turns)
-        return self._build_partial_response(
-            response_id, model, messages, usage_accum,
-            instructions, previous_response_id, metadata,
-        )
+                messages.append({
+                    "role": "assistant",
+                    "content": content or None,
+                    "tool_calls": tool_calls,
+                })
+
+                tool_results = self._execute_tool_calls(tool_calls)
+
+                for tr in tool_results:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr.call.id,
+                        "content": tr.output,
+                    })
+                    logger.debug(
+                        "Tool %s (%s) → %d chars, error=%s",
+                        tr.call.name, tr.call.id, len(str(tr.output)), tr.is_error,
+                    )
+
+            logger.warning("Tool loop exceeded %d turns, returning partial", self._max_turns)
+            return self._build_partial_response(
+                response_id, model, messages, usage_accum,
+                instructions, previous_response_id, metadata,
+            )
+        finally:
+            for tid in temp_tool_ids:
+                self._registry.unregister(tid)
 
     def run_with_client_tools(
         self,
@@ -205,20 +211,26 @@ class ResponsesToolLoop:
 
         OpenAI Responses API streaming events:
         - response.created
-        - response.in_progress
-        - response.function_call.queue
-        - response.function_call.call
-        - response.function_call.output
         - response.output_item.added
         - response.content_part.added
         - response.output_text.delta
+        - response.output_text.done
+        - response.content_part.done
+        - response.output_item.done
+        - response.function_call.queue
+        - response.function_call.arguments.delta
+        - response.function_call.call
+        - response.function_call.output
+        - response.in_progress
         - response.completed
         """
         messages = self._build_messages(input_value, instructions)
         payload = dict(chat_payload)
         payload["messages"] = messages
+        temp_tool_ids: list[str] = []
         if tools:
             payload["tools"] = tools
+            temp_tool_ids = self._register_temp_tools(tools)
 
         yield encoder.encode({
             "type": "response.created",
@@ -232,6 +244,8 @@ class ResponsesToolLoop:
                 },
             },
         })
+
+        text_content: list[str] = []
 
         for turn in range(1, self._max_turns + 1):
             logger.debug("Streaming tool loop turn %d/%d", turn, self._max_turns)
@@ -248,7 +262,34 @@ class ResponsesToolLoop:
                 },
             })
 
-            tool_call_outputs: list[dict[str, Any]] = []
+            yield encoder.encode({
+                "type": "response.output_item.added",
+                "data": {
+                    "type": "response.output_item.added",
+                    "response": {"id": response_id},
+                    "output_index": turn - 1,
+                    "item": {
+                        "id": f"item_{uuid.uuid4().hex[:16]}",
+                        "type": "message",
+                        "status": "in_progress",
+                        "role": "assistant",
+                        "content": [],
+                    },
+                },
+            })
+
+            accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+            turn_text_parts: list[str] = []
+
+            yield encoder.encode({
+                "type": "response.content_part.added",
+                "data": {
+                    "type": "response.content_part.added",
+                    "response": {"id": response_id},
+                    "content_index": 0,
+                    "part": {"type": "output_text", "text": ""},
+                },
+            })
 
             for chunk in adapter.stream(payload):
                 if isinstance(chunk, str):
@@ -264,6 +305,7 @@ class ResponsesToolLoop:
                     finish_reason = choice.get("finish_reason")
 
                     if content:
+                        turn_text_parts.append(content)
                         yield encoder.encode({
                             "type": "response.output_text.delta",
                             "data": {
@@ -275,8 +317,23 @@ class ResponsesToolLoop:
 
                     if tc and isinstance(tc, list):
                         for tool_call in tc:
-                            if "id" not in tool_call_outputs:
-                                self._queue_function_call(encoder, response_id, tool_call)
+                            idx = tool_call.get("index", 0)
+                            if idx not in accumulated_tool_calls:
+                                accumulated_tool_calls[idx] = {}
+                                yield from self._queue_function_call(encoder, response_id, tool_call)
+                            existing = accumulated_tool_calls[idx]
+                            for key, value in tool_call.items():
+                                if key == "index":
+                                    continue
+                                if key == "function":
+                                    func = existing.get("function", {})
+                                    for fk, fv in (value or {}).items():
+                                        func[fk] = func.get(fk, "") + (fv or "")
+                                    existing["function"] = func
+                                elif key == "id":
+                                    existing["id"] = existing.get("id", "") + (value or "")
+                                else:
+                                    existing[key] = existing.get(key, "") + (value or "")
                             fn = tool_call.get("function", {})
                             partial_args = fn.get("arguments", "")
                             if partial_args:
@@ -292,42 +349,85 @@ class ResponsesToolLoop:
                     if finish_reason:
                         break
 
-            final_completion = self._assemble_completion_from_stream(
-                adapter, payload, response_id, model,
-            )
-            if final_completion is None:
-                break
-
-            message = final_completion.get("choices", [{}])[0].get("message", {})
-            tool_calls = message.get("tool_calls") or []
-
-            if not tool_calls:
-                response = chat_completion_to_response(
-                    final_completion, model, response_id,
-                    instructions, previous_response_id, metadata,
-                )
-                response.status = ResponseStatus.COMPLETED
-                yield encoder.encode({
-                    "type": "response.completed",
-                    "data": response.to_dict(),
-                })
-                yield encoder.encode_done()
-                return
+            turn_text = "".join(turn_text_parts)
+            text_content.append(turn_text)
 
             yield encoder.encode({
-                "type": "response.in_progress",
+                "type": "response.output_text.done",
                 "data": {
-                    "type": "response.in_progress",
-                    "response": {
-                        "id": response_id,
-                        "object": "response",
-                        "model": model,
-                        "status": "in_progress",
-                    },
+                    "type": "response.output_text.done",
+                    "response": {"id": response_id},
+                    "text": turn_text,
                 },
             })
 
-            for tc in tool_calls:
+            yield encoder.encode({
+                "type": "response.content_part.done",
+                "data": {
+                    "type": "response.content_part.done",
+                    "response": {"id": response_id},
+                },
+            })
+
+            tool_calls_list: list[dict[str, Any]] = []
+            for idx in sorted(accumulated_tool_calls.keys()):
+                tc_data = accumulated_tool_calls[idx]
+                tc_call: dict[str, Any] = {
+                    "id": tc_data.get("id", f"call_{uuid.uuid4().hex[:16]}"),
+                    "type": "function",
+                    "function": {
+                        "name": tc_data.get("function", {}).get("name", ""),
+                        "arguments": tc_data.get("function", {}).get("arguments", "{}"),
+                    },
+                }
+                tool_calls_list.append(tc_call)
+
+            if not tool_calls_list:
+                completed_text = "\n".join(text_content)
+                yield encoder.encode({
+                    "type": "response.output_item.done",
+                    "data": {
+                        "type": "response.output_item.done",
+                        "response": {"id": response_id},
+                        "output_index": turn - 1,
+                        "item": {
+                            "id": f"item_{uuid.uuid4().hex[:16]}",
+                            "type": "message",
+                            "status": "completed",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": completed_text}],
+                        },
+                    },
+                })
+                resp = ResponseObject(
+                    id=response_id,
+                    model=model,
+                    status=ResponseStatus.COMPLETED,
+                    instructions=instructions,
+                    previous_response_id=previous_response_id,
+                    metadata=metadata or {},
+                )
+                if completed_text:
+                    resp.output.append(make_text_output(completed_text))
+                yield encoder.encode({
+                    "type": "response.completed",
+                    "data": resp.to_dict(),
+                })
+                yield encoder.encode_done()
+                for tid in temp_tool_ids:
+                    self._registry.unregister(tid)
+                return
+
+            yield encoder.encode({
+                "type": "response.output_item.done",
+                "data": {
+                    "type": "response.output_item.done",
+                    "response": {"id": response_id},
+                    "output_index": turn - 1,
+                },
+            })
+
+            for tc in tool_calls_list:
                 fn = tc.get("function", {})
                 yield encoder.encode({
                     "type": "response.function_call.call",
@@ -345,7 +445,7 @@ class ResponsesToolLoop:
                     },
                 })
 
-            tool_results = self._execute_tool_calls(tool_calls)
+            tool_results = self._execute_tool_calls(tool_calls_list)
 
             for tr in tool_results:
                 yield encoder.encode({
@@ -360,8 +460,8 @@ class ResponsesToolLoop:
 
             messages.append({
                 "role": "assistant",
-                "content": message.get("content", ""),
-                "tool_calls": tool_calls,
+                "content": turn_text or None,
+                "tool_calls": tool_calls_list,
             })
             for tr in tool_results:
                 messages.append({
@@ -385,6 +485,8 @@ class ResponsesToolLoop:
             },
         })
         yield encoder.encode_done()
+        for tid in temp_tool_ids:
+            self._registry.unregister(tid)
 
     # --- Private helpers ---
 
@@ -531,17 +633,17 @@ class ResponsesToolLoop:
         encoder: Any,
         response_id: str,
         tool_call: dict[str, Any],
-    ) -> None:
+    ) -> Iterable[str]:
         fn = tool_call.get("function", {})
-        encoder.encode({
+        yield encoder.encode({
             "type": "response.function_call.queue",
             "data": {
                 "type": "response.function_call.queue",
                 "response": {"id": response_id},
                 "item": {
-                    "id": tool_call.get("id", ""),
+                    "id": tool_call.get("id", "") or f"call_{uuid.uuid4().hex[:16]}",
                     "type": "function_call",
-                    "call_id": tool_call.get("id", ""),
+                    "call_id": tool_call.get("id", "") or f"call_{uuid.uuid4().hex[:16]}",
                     "name": fn.get("name", ""),
                     "arguments": fn.get("arguments", ""),
                     "status": "in_progress",
