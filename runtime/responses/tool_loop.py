@@ -298,7 +298,27 @@ class ResponsesToolLoop:
                     },
                 })
 
-                for chunk in adapter.stream(payload):
+                try:
+                    _chunk_source = adapter.stream(payload)
+                except (OSError, ConnectionError, TimeoutError) as stream_exc:
+                    logger.error("Streaming tool loop adapter.stream() failed: %s", stream_exc)
+                    yield encoder.encode({
+                        "type": "response.failed",
+                        "data": {
+                            "type": "response.failed",
+                            "response": {
+                                "id": response_id,
+                                "object": "response",
+                                "model": model,
+                                "status": "failed",
+                                "error": {"message": str(stream_exc), "type": "server_error", "code": "provider_error"},
+                            },
+                        },
+                    })
+                    yield encoder.encode_done()
+                    return
+
+                for chunk in _chunk_source:
                     if isinstance(chunk, str):
                         if chunk == "[DONE]":
                             break

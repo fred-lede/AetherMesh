@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Callable
@@ -16,6 +17,42 @@ from runtime.tools.tool_result import ToolCall, ToolResult
 logger = logging.getLogger("sandbox.manager")
 
 
+class _NullSandbox(PlatformSandbox):
+    def execute(
+        self,
+        command: list[str],
+        profile: SandboxProfile,
+        stdin: str | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> SandboxResult:
+        logger.warning("No sandbox implementation for platform %s — executing without isolation", sys.platform)
+        import subprocess
+        start = time.monotonic()
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=profile.timeout_sec,
+                cwd=cwd,
+                env=env,
+                input=stdin,
+            )
+            duration = (time.monotonic() - start) * 1000
+            return SandboxResult(
+                output=(result.stdout + result.stderr)[:100_000],
+                return_code=result.returncode,
+                duration_ms=duration,
+            )
+        except subprocess.TimeoutExpired:
+            duration = (time.monotonic() - start) * 1000
+            return SandboxResult(output="", return_code=-1, duration_ms=duration, timed_out=True)
+        except Exception as e:
+            duration = (time.monotonic() - start) * 1000
+            return SandboxResult(output=str(e), return_code=-1, duration_ms=duration)
+
+
 class SandboxManager:
     def __init__(
         self,
@@ -24,9 +61,11 @@ class SandboxManager:
         if sys.platform == "linux":
             from runtime.security.sandbox.linux_sandbox import LinuxSandbox
             self._platform: PlatformSandbox = LinuxSandbox()
-        else:
+        elif sys.platform == "darwin":
             from runtime.security.sandbox.mac_sandbox import MacSandbox
             self._platform = MacSandbox()
+        else:
+            self._platform = _NullSandbox()
         self._profiles = profiles or builtin_profiles()
 
     def execute(

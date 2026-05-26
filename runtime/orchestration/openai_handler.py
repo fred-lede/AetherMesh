@@ -934,7 +934,8 @@ class RouterService:
                             max_turns=max_turns,
                             parallel_tool_calls=parallel_tool_calls,
                         )
-                    yield from loop.run_streaming(
+                    completed_response_data: list[dict[str, Any]] = []
+                    for sse_event in loop.run_streaming(
                         adapter=adapter_instance,
                         chat_payload=outer_state["payload"],
                         tools=tools,
@@ -945,17 +946,54 @@ class RouterService:
                         metadata=metadata,
                         input_value=input_value,
                         encoder=response_stream_encoder,
-                    )
+                    ):
+                        yield sse_event
+                        if sse_event.startswith("event: response.completed"):
+                            import json
+                            data_line = sse_event.split("data: ", 1)[-1].rstrip()
+                            try:
+                                completed_response_data.append(json.loads(data_line))
+                            except (json.JSONDecodeError, ValueError):
+                                pass
                     store_flag = bool(payload.get("store", True))
-                    if store_flag:
+                    if store_flag and completed_response_data:
+                        resp_data = completed_response_data[-1].get("response", {})
+                        from runtime.responses.output_converter import chat_completion_to_response
                         final_resp = ResponseObject(
-                            id=response_id,
-                            model=model,
+                            id=resp_data.get("id", response_id),
+                            model=resp_data.get("model", model),
                             status=ResponseStatus.COMPLETED,
                             instructions=instructions,
                             previous_response_id=previous_response_id,
                             metadata=metadata,
                         )
+                        from runtime.responses.response_models import ResponseUsage
+                        usage_data = resp_data.get("usage", {})
+                        final_resp.usage = ResponseUsage(
+                            input_tokens=usage_data.get("input_tokens", 0),
+                            output_tokens=usage_data.get("output_tokens", 0),
+                            total_tokens=usage_data.get("total_tokens", 0),
+                        )
+                        for out_item in resp_data.get("output", []):
+                            from runtime.responses.response_models import OutputItem, OutputItemType, ContentPart, ContentPartType
+                            oi_type = OutputItemType.MESSAGE if out_item.get("type", "message") == "message" else OutputItemType.FUNCTION_CALL
+                            item = OutputItem(
+                                id=out_item.get("id", f"item_{uuid.uuid4().hex[:16]}"),
+                                type=oi_type,
+                                role=out_item.get("role", "assistant"),
+                            )
+                            if oi_type == OutputItemType.FUNCTION_CALL:
+                                item.call_id = out_item.get("call_id", "")
+                                item.tool_name = out_item.get("name", "")
+                                item.arguments = out_item.get("arguments", "")
+                            else:
+                                for cp in out_item.get("content", []):
+                                    cp_type = ContentPartType.OUTPUT_TEXT if cp.get("type") == "output_text" else ContentPartType.REFUSAL
+                                    item.content.append(ContentPart(
+                                        type=cp_type,
+                                        text=cp.get("text", cp.get("refusal", "")),
+                                    ))
+                            final_resp.output.append(item)
                         response_runtime.register(final_resp)
                 else:
                     raw_chunks = adapter_instance.stream(outer_state["payload"])

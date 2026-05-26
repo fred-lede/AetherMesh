@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 import os
-import resource
 import shutil
 import subprocess
 import tempfile
 import time
+
+try:
+    import resource
+except ImportError:
+    resource = None  # type: ignore[assignment]
 
 from runtime.security.sandbox.platform import PlatformSandbox, SandboxResult
 from runtime.security.sandbox.profile import SandboxProfile
@@ -63,6 +67,8 @@ class LinuxSandbox(PlatformSandbox):
             self._cleanup_scratch(scratch)
 
     def _apply_linux_limits(self, profile: SandboxProfile) -> None:
+        if resource is None:
+            return
         resource.setrlimit(
             resource.RLIMIT_CPU,
             (int(profile.max_cpu_time_sec), int(profile.max_cpu_time_sec)),

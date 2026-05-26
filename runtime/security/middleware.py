@@ -65,14 +65,14 @@ def add_security_middleware(
             if not api_key:
                 return JSONResponse(
                     status_code=401,
-                    content={"type": "error", "error": {"type": "authentication_error", "message": "Missing API key"}},
+                    content={"error": {"type": "authentication_error", "message": "Missing API key"}},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             key_info = _verify_api_key(api_key)
             if not key_info:
                 return JSONResponse(
                     status_code=401,
-                    content={"type": "error", "error": {"type": "authentication_error", "message": "Invalid API key"}},
+                    content={"error": {"type": "authentication_error", "message": "Invalid API key"}},
                 )
             request.state.api_key_id = key_info["api_key_id"]
             request.state.user_id = key_info["user_id"]
@@ -82,7 +82,7 @@ def add_security_middleware(
             if not rate_limiter.check(rate_key):
                 return JSONResponse(
                     status_code=429,
-                    content={"type": "error", "error": {"type": "rate_limit_error", "message": "Too many requests"}},
+                    content={"error": {"type": "rate_limit_error", "message": "Too many requests"}},
                     headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
                 )
 
