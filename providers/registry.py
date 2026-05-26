@@ -20,6 +20,7 @@ class Capability(str, Enum):
     MCP = "mcp"
     WEB_SEARCH = "web_search"
     STREAMING = "streaming"
+    DOCUMENTS = "documents"
 
 
 CAPABILITY_ALIASES: dict[str, Capability] = {
@@ -42,6 +43,10 @@ CAPABILITY_ALIASES: dict[str, Capability] = {
     "web_search": Capability.WEB_SEARCH,
     "stream": Capability.STREAMING,
     "streaming": Capability.STREAMING,
+    "documents": Capability.DOCUMENTS,
+    "document": Capability.DOCUMENTS,
+    "file": Capability.DOCUMENTS,
+    "files": Capability.DOCUMENTS,
 }
 
 

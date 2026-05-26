@@ -59,6 +59,8 @@ def _add_part_capability(required: set[str], part: dict[str, Any]) -> None:
         _add_tool_result_nested_capabilities(required, part.get("content"))
     elif part_type == "thinking":
         required.add("thinking")
+    elif part_type in {"file", "file_id", "input_file", "document"}:
+        required.add("documents")
 
 
 def _add_tool_result_nested_capabilities(required: set[str], content: Any) -> None:
