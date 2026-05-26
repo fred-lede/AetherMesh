@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Any
 
+from runtime.security.sandbox.manager import SandboxManager
 from runtime.tools.tool_registry import ToolRegistry, tool_registry as default_registry
 from runtime.tools.tool_result import ToolCall, ToolResult
 
@@ -12,8 +13,13 @@ logger = logging.getLogger("tool_executor")
 
 
 class ToolExecutor:
-    def __init__(self, registry: ToolRegistry | None = None) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry | None = None,
+        sandbox_manager: SandboxManager | None = None,
+    ) -> None:
         self._registry = registry or default_registry
+        self._sandbox_manager = sandbox_manager
 
     def execute(self, call: ToolCall, timeout_s: int = 30) -> ToolResult:
         descriptor = self._registry.resolve(call.name)
@@ -30,6 +36,9 @@ class ToolExecutor:
                 is_error=True,
             )
 
+        if self._sandbox_manager:
+            return self._sandbox_manager.execute(call.name, descriptor.handler, call)
+
         start = time.monotonic()
         try:
             result = descriptor.handler(call)
@@ -39,8 +48,6 @@ class ToolExecutor:
                 except RuntimeError:
                     loop = None
                 if loop and loop.is_running():
-                    import asyncio.tasks
-
                     result = asyncio.run_coroutine_threadsafe(result, loop).result(timeout=timeout_s)
                 else:
                     result = asyncio.run(result)
@@ -68,6 +75,9 @@ class ToolExecutor:
                 output=f"Tool '{call.name}' has no handler registered",
                 is_error=True,
             )
+
+        if self._sandbox_manager:
+            return self._sandbox_manager.execute(call.name, descriptor.handler, call)
 
         start = time.monotonic()
         try:

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from runtime.security.sandbox.mac_sandbox import MacSandbox
+from runtime.security.sandbox.manager import SandboxManager
 from runtime.security.sandbox.platform import PlatformSandbox, SandboxResult
 from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles, default_profile
 from runtime.tools.tool_result import ToolCall, ToolResult
@@ -149,3 +150,148 @@ def test_linux_sandbox_timeout():
 
 
 # ── Task 5: SandboxManager ──────────────────────────────────────────────
+
+def test_sandbox_manager_init_default():
+    manager = SandboxManager()
+    assert manager._profiles is not None
+    assert "python" in manager._profiles
+    assert "shell" in manager._profiles
+
+
+def test_sandbox_manager_passthrough_when_disabled():
+    manager = SandboxManager(profiles={
+        "python": SandboxProfile(enabled=False),
+    })
+    handler = MagicMock(return_value=ToolResult(
+        call=ToolCall(id="1", name="python", arguments={}),
+        output="direct output",
+    ))
+    call = ToolCall(id="1", name="python", arguments={"code": "print(1)"})
+    result = manager.execute("python", handler, call)
+    assert result.output == "direct output"
+    handler.assert_called_once_with(call)
+
+
+def test_sandbox_manager_policy_isolation():
+    manager = SandboxManager(profiles={
+        "filesystem": SandboxProfile(sandbox_type="policy", allowed_paths=["/tmp/workspace"]),
+    })
+    call = ToolCall(id="1", name="filesystem", arguments={"path": "/etc/passwd"})
+    handler = MagicMock()
+    result = manager.execute("filesystem", handler, call)
+    assert result.is_error is True
+    assert "Path not allowed" in result.output
+
+
+def test_sandbox_manager_policy_allows_valid_path():
+    manager = SandboxManager(profiles={
+        "filesystem": SandboxProfile(
+            sandbox_type="policy",
+            allowed_paths=[tempfile.gettempdir()],
+        ),
+    })
+    handler = MagicMock(return_value=ToolResult(
+        call=ToolCall(id="1", name="filesystem", arguments={}),
+        output="valid content",
+    ))
+    call = ToolCall(id="1", name="filesystem", arguments={"path": tempfile.gettempdir() + "/test.txt"})
+    result = manager.execute("filesystem", handler, call)
+    assert result.is_error is False
+    assert result.output == "valid content"
+
+
+def test_sandbox_manager_process_isolation():
+    mock_platform = MagicMock()
+    mock_platform.execute.return_value = SandboxResult(output="42", return_code=0, duration_ms=5.0)
+
+    manager = SandboxManager(profiles={
+        "python": SandboxProfile(sandbox_type="process", allow_network=False),
+    })
+    manager._platform = mock_platform
+
+    call = ToolCall(id="1", name="python", arguments={"code": "print(42)"})
+    handler = MagicMock()
+    result = manager.execute("python", handler, call)
+    assert result.output == "42"
+    assert result.is_error is False
+    mock_platform.execute.assert_called_once()
+    handler.assert_not_called()
+
+
+def test_sandbox_manager_fallback_to_default_profile():
+    manager = SandboxManager(profiles={})
+    call = ToolCall(id="1", name="unknown_tool", arguments={"code": "x"})
+    handler = MagicMock()
+    result = manager.execute("unknown_tool", handler, call)
+    # falls through to default profile with process isolation, but unknown_tool
+    # has no process handler, so returns error
+    assert result.is_error is True
+    assert "No process handler" in result.output
+    handler.assert_not_called()
+
+
+# ── Task 6: ToolExecutor integration ────────────────────────────────────
+
+def test_tool_executor_with_sandbox():
+    from runtime.tools.tool_executor import ToolExecutor
+    from runtime.tools.tool_registry import ToolRegistry, ToolDescriptor
+
+    sandbox = MagicMock()
+    sandbox.execute.return_value = ToolResult(
+        call=ToolCall(id="1", name="python", arguments={}),
+        output="sandboxed output",
+    )
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDescriptor(
+            name="python",
+            description="Run Python code",
+            input_schema={"type": "object", "properties": {"code": {"type": "string"}}},
+            handler=lambda c: ToolResult(call=c, output="unsandboxed"),
+        ),
+    )
+
+    executor = ToolExecutor(registry=registry, sandbox_manager=sandbox)
+    call = ToolCall(id="1", name="python", arguments={"code": "print(1)"})
+    result = executor.execute(call)
+
+    assert result.output == "sandboxed output"
+    sandbox.execute.assert_called_once()
+
+
+def test_tool_executor_without_sandbox():
+    from runtime.tools.tool_executor import ToolExecutor
+    from runtime.tools.tool_registry import ToolRegistry, ToolDescriptor
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDescriptor(
+            name="python",
+            description="Run Python code",
+            input_schema={"type": "object", "properties": {"code": {"type": "string"}}},
+            handler=lambda c: ToolResult(call=c, output="direct output"),
+        ),
+    )
+    executor = ToolExecutor(registry=registry, sandbox_manager=None)
+    call = ToolCall(id="1", name="python", arguments={"code": "print(1)"})
+    result = executor.execute(call)
+    assert result.output == "direct output"
+
+
+def test_tool_executor_unknown_tool():
+    from runtime.tools.tool_executor import ToolExecutor
+
+    executor = ToolExecutor(sandbox_manager=MagicMock())
+    call = ToolCall(id="1", name="nonexistent", arguments={})
+    result = executor.execute(call)
+    assert result.is_error is True
+    assert "not found" in result.output
+
+
+# ── Task 7: Settings integration ────────────────────────────────────────
+
+def test_settings_has_sandbox_profiles():
+    from config.settings import settings
+    assert hasattr(settings, "sandbox_profiles")
+    assert isinstance(settings.sandbox_profiles, dict)

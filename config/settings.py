@@ -94,6 +94,7 @@ class Settings:
     local_worker_ports: list[int] = field(default_factory=lambda: [11434, 11435, 11436, 11437])
     config_dir: Path = field(default_factory=_detect_config_dir)
     responses_max_turns: int = field(default_factory=lambda: _env_int("AIIH_RESPONSES_MAX_TURNS", 16))
+    sandbox_profiles: dict[str, Any] = field(default_factory=dict)
 
     @property
     def tls_enabled(self) -> bool:
@@ -233,6 +234,40 @@ class Settings:
     def local_node_ip(self) -> str | None:
         configured = os.getenv("AIIH_NODE_IP", "").strip()
         return configured or None
+
+    def sandbox_manager(self) -> Any:
+        from runtime.security.sandbox.manager import SandboxManager
+        from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles
+
+        profiles = builtin_profiles()
+        for tool_name, overrides in self.sandbox_profiles.items():
+            if not isinstance(overrides, dict):
+                continue
+            if tool_name in profiles:
+                existing = profiles[tool_name]
+                profiles[tool_name] = SandboxProfile(
+                    enabled=overrides.get("enabled", existing.enabled),
+                    sandbox_type=overrides.get("sandbox_type", existing.sandbox_type),
+                    allow_network=overrides.get("allow_network", existing.allow_network),
+                    max_cpu_time_sec=overrides.get("max_cpu_time_sec", existing.max_cpu_time_sec),
+                    max_memory_bytes=overrides.get("max_memory_bytes", existing.max_memory_bytes),
+                    allowed_paths=overrides.get("allowed_paths", existing.allowed_paths),
+                    allowed_domains=overrides.get("allowed_domains", existing.allowed_domains),
+                    timeout_sec=overrides.get("timeout_sec", existing.timeout_sec),
+                )
+            else:
+                profiles[tool_name] = SandboxProfile(
+                    enabled=overrides.get("enabled", True),
+                    sandbox_type=overrides.get("sandbox_type", "process"),
+                    allow_network=overrides.get("allow_network", False),
+                    max_cpu_time_sec=overrides.get("max_cpu_time_sec", 30.0),
+                    max_memory_bytes=overrides.get("max_memory_bytes", 524288000),
+                    allowed_paths=overrides.get("allowed_paths", None),
+                    allowed_domains=overrides.get("allowed_domains", None),
+                    timeout_sec=overrides.get("timeout_sec", 30),
+                )
+
+        return SandboxManager(profiles=profiles)
 
 
 settings = Settings()
