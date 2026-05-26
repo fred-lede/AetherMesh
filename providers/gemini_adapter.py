@@ -258,14 +258,39 @@ class GeminiAdapter(ProviderAdapter):
             role = "model" if message.get("role") == "assistant" else "user"
             parts = []
             content = message.get("content", "")
+            images_from_field: list[str] = list(message.get("images") or [])
             if isinstance(content, list):
                 for item in content:
                     if isinstance(item, dict) and item.get("type") == "text":
                         parts.append({"text": item.get("text", "")})
+                    elif isinstance(item, dict) and item.get("type") == "image_url":
+                        gemini_part = self._image_url_to_gemini_inline(item)
+                        if gemini_part:
+                            parts.append(gemini_part)
             else:
                 parts.append({"text": str(content)})
+            for img_data in images_from_field:
+                parts.append({"inline_data": {"mime_type": "image/png", "data": img_data}})
             contents.append({"role": role, "parts": parts or [{"text": ""}]})
         return contents
+
+    @staticmethod
+    def _image_url_to_gemini_inline(part: dict[str, Any]) -> dict[str, Any] | None:
+        image_url = part.get("image_url")
+        if not isinstance(image_url, dict):
+            return None
+        url = str(image_url.get("url", ""))
+        if not url:
+            return None
+        mime_type = "image/png"
+        data = url
+        if url.startswith("data:"):
+            header, _, data = url.partition(",")
+            if ";" in header:
+                mime_type = header.split(":", 1)[1].split(";", 1)[0]
+            if not data:
+                return None
+        return {"inline_data": {"mime_type": mime_type, "data": data}}
 
     def _tools_to_gemini(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         declarations = []
