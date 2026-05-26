@@ -157,6 +157,34 @@ def test_memory_wiring_chat(monkeypatch) -> None:
     assert records[-1]["success"] is False
 
 
+def test_memory_wiring_streaming(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    records: list[dict] = []
+    monkeypatch.setattr(
+        "runtime.orchestration.openai_handler.memory_manager.episodic.record",
+        lambda **kw: records.append(kw),
+    )
+    from runtime.orchestration.openai_handler import RouterService
+    service = RouterService()
+    service.registry = {
+        "models": [
+            {
+                "name": "gpt-4o",
+                "provider": "openai",
+                "capabilities": ["chat"],
+            }
+        ]
+    }
+    try:
+        result = list(service.handle_streaming_chat(
+            {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}], "stream": True}
+        ))
+    except Exception:
+        pass
+    assert len(records) > 0, "memory_manager.episodic.record was never called in streaming path"
+    assert records[-1]["success"] is False
+
+
 def test_execution_plan_wraps_graph() -> None:
     g = ExecutionGraph()
     g.add_node(ExecutionNode(id="a", node_type=NodeType.LLM_CALL))

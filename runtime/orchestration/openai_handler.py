@@ -329,6 +329,13 @@ class RouterService:
                 retry_after = getattr(exc, "retry_after", None)
                 if retry_after:
                     payload["retry_after"] = retry_after
+                memory_manager.episodic.record(
+                    model=state["payload"].get("model", ""),
+                    provider=str(state["provider"]),
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    success=False,
+                    error=str(exc)[:200],
+                )
                 yield {"error": payload}
             except requests.Timeout as exc:
                 error = True
@@ -370,10 +377,24 @@ class RouterService:
                                 }
                             }
                     return
+                memory_manager.episodic.record(
+                    model=state["payload"].get("model", ""),
+                    provider=str(state["provider"]),
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    success=False,
+                    error=str(exc)[:200],
+                )
                 yield {"error": {"message": str(exc), "type": "provider_timeout", "code": error_code}}
             except requests.RequestException as exc:
                 error = True
                 error_code = "provider_unreachable"
+                memory_manager.episodic.record(
+                    model=state["payload"].get("model", ""),
+                    provider=str(state["provider"]),
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    success=False,
+                    error=str(exc)[:200],
+                )
                 yield {"error": {"message": str(exc), "type": "provider_unreachable", "code": error_code}}
             finally:
                 self._finalize_request(
