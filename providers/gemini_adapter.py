@@ -40,7 +40,11 @@ class GeminiAdapter(ProviderAdapter):
             timeout=settings.request_timeout_s,
         )
         data = response.json()
+        return self._to_chat_completion(data, model)
+
+    def _to_chat_completion(self, data: dict[str, Any], model: str) -> dict[str, Any]:
         text, tool_calls = self._extract_content(data)
+        um = data.get("usageMetadata") or {}
         return {
             "id": f"chatcmpl-{uuid.uuid4().hex}",
             "object": "chat.completion",
@@ -53,7 +57,11 @@ class GeminiAdapter(ProviderAdapter):
                     "finish_reason": "tool_calls" if tool_calls else "stop",
                 }
             ],
-            "usage": {},
+            "usage": {
+                "prompt_tokens": um.get("promptTokenCount", 0),
+                "completion_tokens": um.get("candidatesTokenCount", 0),
+                "total_tokens": um.get("totalTokenCount", 0),
+            },
         }
 
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
