@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """OpenAI-compatible API router. Re-exports from router/openai/ adapters."""
 
+import asyncio
 from pathlib import Path
 import logging
 from typing import Any
@@ -23,6 +24,9 @@ from router.openai.models_adapter import create_models_route
 from router.openai.embeddings_adapter import create_embeddings_route
 from router.openai.rerank_adapter import create_rerank_route
 from router.files_router import router as files_router
+from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
+
+logger = logging.getLogger("openai_router")
 
 
 service = RouterService()
@@ -34,6 +38,29 @@ if settings.debug_responses:
     )
 
 add_security_middleware(app, enable_rate_limit=settings.rate_limit_enabled)
+
+_cleanup_task: asyncio.Task | None = None
+
+
+@app.on_event("startup")
+async def _startup_file_cleanup() -> None:
+    global _cleanup_task
+    ensure_cleanup_dir()
+    mgr = get_file_cleanup_manager()
+    _cleanup_task = asyncio.create_task(mgr.background_cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def _shutdown_file_cleanup() -> None:
+    global _cleanup_task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None
+
 
 app.include_router(gpu_router)
 app.include_router(agent_router)
