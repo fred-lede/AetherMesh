@@ -131,6 +131,32 @@ def test_planner_simple_graph() -> None:
     assert list(g.nodes.values())[0].node_type == NodeType.LLM_CALL
 
 
+def test_memory_wiring_chat(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    records: list[dict] = []
+    monkeypatch.setattr(
+        "runtime.orchestration.openai_handler.memory_manager.episodic.record",
+        lambda **kw: records.append(kw),
+    )
+    from runtime.orchestration.openai_handler import RouterService
+    service = RouterService()
+    service.registry = {
+        "models": [
+            {
+                "name": "gpt-4o",
+                "provider": "openai",
+                "capabilities": ["chat"],
+            }
+        ]
+    }
+    try:
+        service.handle_chat({"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]})
+    except Exception:
+        pass
+    assert len(records) > 0, "memory_manager.episodic.record was never called"
+    assert records[-1]["success"] is False
+
+
 def test_execution_plan_wraps_graph() -> None:
     g = ExecutionGraph()
     g.add_node(ExecutionNode(id="a", node_type=NodeType.LLM_CALL))
