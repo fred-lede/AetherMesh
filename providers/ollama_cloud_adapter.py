@@ -244,7 +244,7 @@ class OllamaCloudAdapter(ProviderAdapter):
     def _message_for_ollama_cloud(self, message: dict[str, Any]) -> dict[str, Any]:
         normalized: dict[str, Any] = {"role": str(message.get("role", "user"))}
         content = message.get("content", "")
-        images: list[str] = []
+        images: list[str] = list(message.get("images") or [])
 
         if isinstance(content, list):
             text_parts: list[str] = []
