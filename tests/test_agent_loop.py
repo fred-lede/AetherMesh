@@ -61,7 +61,7 @@ def test_tool_call_handler():
     assert result.node_results["n1"]["result"] == "mock tool output"
 
 
-def test_conditional_skip():
+def test_conditional_returns_false():
     loop = AgentLoop()
     loop.executor.register_handler("conditional", _make_false_handler())
     loop.executor.register_handler("llm_call", _make_text_handler("should not run"))
@@ -73,8 +73,8 @@ def test_conditional_skip():
     graph.add_node(worker)
 
     result = asyncio.run(loop.executor.execute(graph))
-    # CONDITIONAL returns False; GraphExecutor doesn't auto-skip dependents
-    # This test verifies the handler returns False correctly
+    # GraphExecutor doesn't auto-skip dependents on condition false.
+    # This test verifies the handler returns False correctly.
     assert result.node_results["c1"] is False
 
 
