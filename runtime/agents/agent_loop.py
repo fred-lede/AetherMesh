@@ -11,7 +11,7 @@ from runtime.agents.agent_step import AgentStep
 from runtime.memory.memory_manager import memory_manager
 from runtime.multi_agent.coordinator import coordinator
 from runtime.orchestration.execution_plan import ExecutionPlan
-from runtime.orchestration.graph import ExecutionNode, NodeType
+from runtime.orchestration.graph import ExecutionNode
 from runtime.orchestration.graph_executor import GraphExecutor
 from runtime.orchestration.planner import Planner
 from runtime.orchestration.retry_policy import RetryPolicy
