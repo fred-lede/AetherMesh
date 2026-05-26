@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from runtime.security.sandbox.mac_sandbox import MacSandbox
 from runtime.security.sandbox.platform import PlatformSandbox, SandboxResult
 from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles, default_profile
 from runtime.tools.tool_result import ToolCall, ToolResult
@@ -75,3 +76,43 @@ def test_sandbox_result_defaults():
 def test_platform_sandbox_is_abstract():
     with pytest.raises(TypeError):
         PlatformSandbox()  # type: ignore
+
+
+# ── Task 3: MacSandbox ──────────────────────────────────────────────────
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS-specific")
+def test_mac_sandbox_execute_simple():
+    sandbox = MacSandbox()
+    profile = SandboxProfile()
+    result = sandbox.execute(["echo", "hello"], profile)
+    assert result.return_code == 0
+    assert "hello" in result.output
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS-specific")
+def test_mac_sandbox_timeout():
+    sandbox = MacSandbox()
+    profile = SandboxProfile(timeout_sec=1)
+    result = sandbox.execute(["sleep", "5"], profile)
+    assert result.timed_out is True
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS-specific")
+def test_mac_sandbox_resource_limits():
+    sandbox = MacSandbox()
+    profile = SandboxProfile(max_cpu_time_sec=60, max_memory_bytes=104857600)
+    result = sandbox.execute(
+        ["python3", "-c", "import resource; print(resource.getrlimit(resource.RLIMIT_CPU)[0])"],
+        profile,
+    )
+    assert result.return_code == 0
+    assert "60" in result.output
+
+
+def test_mac_sandbox_scratch_cleanup():
+    import os
+    sandbox = MacSandbox()
+    scratch = sandbox._create_scratch_dir()
+    assert os.path.isdir(scratch)
+    sandbox._cleanup_scratch(scratch)
+    assert not os.path.exists(scratch)
