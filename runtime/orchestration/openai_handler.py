@@ -34,7 +34,38 @@ from runtime.tools.builtin.web_search import (
     latest_user_text,
     run_web_search,
 )
-from runtime.tools.content_blocks import content_part_to_text_and_images, normalize_image_ref
+from runtime.tools.content_blocks import content_part_to_text_and_images, normalize_image_ref, resolve_file_blocks
+from runtime.tools.file_cleanup import get_file_cleanup_manager
+
+
+def _resolve_file_ids_in_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    file_ids: list[str] = []
+    messages = payload.get("messages", [])
+    if not isinstance(messages, list):
+        return payload, file_ids
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        new_content: list[dict[str, Any]] = []
+        for block in content:
+            if not isinstance(block, dict):
+                new_content.append(block)
+                continue
+            if block.get("type") == "file" and "file_id" in block:
+                fid = block["file_id"]
+                file_ids.append(fid)
+                resolved = resolve_file_blocks([fid], "generic")
+                new_content.extend(resolved)
+            elif block.get("type") == "file_id":
+                fid = block["file_id"]
+                file_ids.append(fid)
+                resolved = resolve_file_blocks([fid], "generic")
+                new_content.extend(resolved)
+            else:
+                new_content.append(block)
+        msg["content"] = new_content
+    return payload, file_ids
 
 
 class RouterService:
@@ -118,6 +149,13 @@ class RouterService:
     def handle_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
+        prepared_payload, file_ids = _resolve_file_ids_in_payload(prepared_payload)
+        request_id = f"req_{uuid.uuid4().hex[:24]}"
+        if file_ids:
+            cleanup_mgr = get_file_cleanup_manager()
+            cleanup_mgr.set_current_request(request_id)
+            for fid in file_ids:
+                cleanup_mgr.track_current(fid)
         if self._is_async_requested(prepared_payload):
             return self._enqueue_async_task("/v1/chat/completions", prepared_payload)
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
@@ -281,11 +319,19 @@ class RouterService:
                 error=error,
                 error_code=error_code,
             )
-
+            if file_ids:
+                get_file_cleanup_manager().cleanup_request(request_id)
 
     def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[dict[str, Any] | str]:
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
+        prepared_payload, file_ids = _resolve_file_ids_in_payload(prepared_payload)
+        request_id = f"req_{uuid.uuid4().hex[:24]}"
+        if file_ids:
+            cleanup_mgr = get_file_cleanup_manager()
+            cleanup_mgr.set_current_request(request_id)
+            for fid in file_ids:
+                cleanup_mgr.track_current(fid)
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
         adapter = self._adapter(provider, worker)
@@ -433,6 +479,8 @@ class RouterService:
                     error=error,
                     error_code=error_code,
                 )
+                if file_ids:
+                    get_file_cleanup_manager().cleanup_request(request_id)
                 if not error:
                     pt = 0
                     ct = 0
