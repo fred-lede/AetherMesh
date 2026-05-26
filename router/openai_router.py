@@ -22,6 +22,7 @@ from router.openai.responses_adapter import create_responses_router
 from router.openai.models_adapter import create_models_route
 from router.openai.embeddings_adapter import create_embeddings_route
 from router.openai.rerank_adapter import create_rerank_route
+from router.files_router import router as files_router
 
 
 service = RouterService()
@@ -36,6 +37,7 @@ add_security_middleware(app, enable_rate_limit=settings.rate_limit_enabled)
 
 app.include_router(gpu_router)
 app.include_router(agent_router)
+app.include_router(files_router)
 app.include_router(create_responses_router(service))
 
 
