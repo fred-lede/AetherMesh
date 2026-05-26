@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Iterable
 
 from fastapi import Body, Header, HTTPException, Request
@@ -21,6 +22,8 @@ from runtime.orchestration.streaming import stream_anthropic_with_metrics
 from runtime.security.auth.token_tracker import record_token_usage
 from runtime.security.database import SessionLocal
 from runtime.security.tool_policy import evaluate_server_tool_policy, listed_server_tools
+from runtime.tools.content_blocks import resolve_file_blocks
+from runtime.tools.file_cleanup import get_file_cleanup_manager
 from runtime.tools.builtin.web_search import (
     append_references_to_stream,
     extract_search_query,
@@ -58,6 +61,29 @@ def _record_token_usage(user_id: int | None, api_key_id: int | None, input_token
         logger.exception("Failed to record token usage")
 
 
+def _resolve_file_content_blocks(
+    payload: dict[str, Any],
+    upload_dir: Path | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    file_ids: list[str] = []
+    messages = payload.get("messages", [])
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        new_content: list[dict[str, Any]] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "file_id":
+                fid = block["file_id"]
+                file_ids.append(fid)
+                resolved = resolve_file_blocks([fid], "generic", upload_dir)
+                new_content.extend(resolved)
+            else:
+                new_content.append(block)
+        msg["content"] = new_content
+    return payload, file_ids
+
+
 def create_messages_routes(app, anthropic_service: AnthropicRouter):
 
     @app.post("/v1/messages")
@@ -76,6 +102,8 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
         is_streaming = payload.get("stream", False)
         start_time = time.time()
         allowed_tool_names = anthropic_service._request_tool_names(payload)
+
+        payload, file_ids = _resolve_file_content_blocks(payload)
 
         openai_payload = anthropic_service._to_openai_payload(payload)
         openai_payload["model"] = anthropic_service._strip_model_prefix(model)
@@ -120,6 +148,12 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             "yes" if worker else "no", routing_decision.score,
         )
 
+        if file_ids:
+            cleanup_mgr = get_file_cleanup_manager()
+            cleanup_mgr.set_current_request(request_id)
+            for fid in file_ids:
+                cleanup_mgr.track_current(fid)
+
         web_search_results: list[dict[str, str]] | None = None
         if settings.web_tools_auto_search and not listed_server_tools(payload):
             query = extract_search_query(latest_user_text(payload))
@@ -153,6 +187,8 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                 request_id=request_id, model=model, provider="aiih_web_tools",
                 endpoint="/v1/messages", streaming=True, latency_ms=0,
             ))
+            if file_ids:
+                get_file_cleanup_manager().cleanup_request(request_id)
             return StreamingResponse(
                 stream_web_server_tool_response(
                     payload, model=model, timeout_s=settings.web_tool_timeout_s,
@@ -307,21 +343,21 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                     ))
                     routing_engine.set_provider_latency("ollama", fallback_latency_ms)
                     routing_engine.set_provider_health("ollama", True)
-            _record_token_usage(
-                user_id=getattr(request.state, "user_id", None),
-                api_key_id=getattr(request.state, "api_key_id", None),
-                input_tokens=usage.get("prompt_tokens", 0),
-                output_tokens=usage.get("completion_tokens", 0),
-                provider="ollama", model=model,
-            )
-            memory_manager.episodic.record(
-                session_id=request_id,
-                model=model,
-                provider="ollama",
-                duration_ms=fallback_latency_ms,
-                success=True,
-                token_count=dict(usage) if usage else None,
-            )
+                    _record_token_usage(
+                        user_id=getattr(request.state, "user_id", None),
+                        api_key_id=getattr(request.state, "api_key_id", None),
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        provider="ollama", model=model,
+                    )
+                    memory_manager.episodic.record(
+                        session_id=request_id,
+                        model=model,
+                        provider="ollama",
+                        duration_ms=fallback_latency_ms,
+                        success=True,
+                        token_count=dict(usage) if usage else None,
+                    )
                     result = anthropic_service._to_anthropic_response(response, model, allowed_tool_names=allowed_tool_names)
                     return ASCIISafeJSONResponse(
                         content=result,
@@ -347,3 +383,6 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
             routing_engine.set_provider_latency(provider, latency_ms)
             routing_engine.set_provider_failure(provider, code="api_error", message=str(exc))
             raise HTTPException(status_code=500, detail={"type": "api_error", "message": str(exc)})
+        finally:
+            if file_ids:
+                get_file_cleanup_manager().cleanup_request(request_id)
