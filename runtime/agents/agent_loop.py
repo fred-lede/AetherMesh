@@ -65,9 +65,77 @@ class AgentLoop:
 
 
 def _make_llm_handler():
+    from runtime.intelligence.execution_selector import execution_selector
+    from runtime.orchestration.routing_engine import routing_engine
+
     async def handler(node: ExecutionNode) -> Any:
-        return {"text": "LLM handler not yet wired", "provider": "", "model": ""}
+        prompt = node.config.get("prompt", "")
+        model = node.config.get("model", "default")
+        has_tools = bool(node.config.get("tools", False))
+
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+
+        routing_decision = routing_engine.route(
+            model=model,
+            required_capabilities=["chat"],
+        )
+        reranked = execution_selector.rerank(
+            routing_decision,
+            model=model,
+            required_capabilities=["chat"],
+            has_tools=has_tools,
+        )
+
+        provider = reranked.provider
+        worker = reranked.worker
+
+        adapter = _adapter_for_provider(provider, worker)
+        if adapter is None:
+            return {"error": f"No adapter for {provider}/{model}", "text": ""}
+
+        try:
+            response = await asyncio.to_thread(adapter.chat, payload)
+            text = _extract_text_from_chat(response)
+            return {"text": text, "provider": provider, "model": model}
+        except Exception as exc:
+            logger.error("LLM handler failed for %s/%s: %s", provider, model, exc)
+            return {"error": str(exc), "text": ""}
+
     return handler
+
+
+def _adapter_for_provider(provider: str, worker: dict[str, Any] | None = None) -> Any:
+    from providers.ollama_adapter import OllamaAdapter
+    from providers.openai_adapter import OpenAIAdapter
+    from providers.gemini_adapter import GeminiAdapter
+    from providers.nvidia_nim_adapter import NvidiaNimAdapter
+    from providers.ollama_cloud_adapter import OllamaCloudAdapter
+
+    adapters = {
+        "ollama": OllamaAdapter,
+        "openai": OpenAIAdapter,
+        "gemini": GeminiAdapter,
+        "nvidia_nim": NvidiaNimAdapter,
+        "ollama_cloud": OllamaCloudAdapter,
+    }
+    cls = adapters.get(provider)
+    if cls is None:
+        return None
+    return cls(worker=worker) if worker else cls()
+
+
+def _extract_text_from_chat(response: dict[str, Any]) -> str:
+    choices = response.get("choices", [])
+    if not choices:
+        return ""
+    choice = choices[0]
+    message = choice.get("message", {})
+    content = message.get("content", "")
+    return str(content) if content else ""
 
 
 def _make_tool_handler():
