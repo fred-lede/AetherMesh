@@ -202,7 +202,7 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                         first_item = "[DONE]"
                     except ProviderError as fallback_exc:
                         logger.error("Local streaming fallback failed for model=%s: %s", fallback_model, fallback_exc)
-                        raise exc
+                        raise fallback_exc
 
                 def stream_with_first() -> Iterable[dict[str, Any] | str]:
                     yield first_item

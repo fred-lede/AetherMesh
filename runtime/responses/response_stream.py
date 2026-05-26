@@ -41,6 +41,7 @@ def wrap_streaming_chunks(
     item_id = f"msg_{uuid.uuid4().hex[:16]}"
     item_started = False
     content_started = False
+    last_chunk: dict[str, Any] | None = None
 
     for chunk in chunks:
         if isinstance(chunk, str):
@@ -58,6 +59,8 @@ def wrap_streaming_chunks(
                 )
                 yield response_stream_encoder.encode_done()
                 return
+
+            last_chunk = chunk
 
             for content in _chunk_text_deltas(chunk):
                 if content and not item_started:
@@ -114,7 +117,11 @@ def wrap_streaming_chunks(
                 _make_output_item_done_event(response_id, item_id, full_text)
             )
         yield response_stream_encoder.encode(
-            make_response_completed_event(response_id, model, output_text=full_text)
+            make_response_completed_event(
+                response_id, model,
+                usage=_responses_usage(last_chunk or {}),
+                output_text=full_text,
+            )
         )
 
     yield response_stream_encoder.encode_done()
