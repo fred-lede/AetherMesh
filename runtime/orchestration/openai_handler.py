@@ -26,6 +26,7 @@ from runtime.orchestration.provider_router import (
     provider_for_model,
 )
 from runtime.orchestration.routing_engine import routing_engine
+from runtime.memory import memory_manager
 from runtime.security.auth.token_tracker import record_token_usage
 from runtime.security.database import SessionLocal
 from runtime.tools.builtin.web_search import (
@@ -133,6 +134,16 @@ class RouterService:
                                          usage.get("prompt_tokens", 0),
                                          usage.get("completion_tokens", 0),
                                          provider, effective_payload.get("model", ""))
+            memory_manager.episodic.record(
+                model=effective_payload.get("model", ""),
+                provider=provider,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=True,
+                token_count={
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                },
+            )
             return response
         except ProviderError as exc:
             error = True
@@ -156,11 +167,32 @@ class RouterService:
                 error = False
                 error_code = ""
                 try:
-                    return adapter_instance.chat(effective_payload)
+                    fallback_response = adapter_instance.chat(effective_payload)
+                    memory_manager.episodic.record(
+                        model=effective_payload.get("model", ""),
+                        provider=provider,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        success=True,
+                    )
+                    return fallback_response
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    memory_manager.episodic.record(
+                        model=effective_payload.get("model", ""),
+                        provider=provider,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        success=False,
+                        error=str(fallback_exc)[:200],
+                    )
                     raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            memory_manager.episodic.record(
+                model=effective_payload.get("model", ""),
+                provider=provider,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._provider_http_error(exc, code=error_code) from exc
         except requests.Timeout as exc:
             error = True
@@ -184,15 +216,43 @@ class RouterService:
                 error = False
                 error_code = ""
                 try:
-                    return adapter_instance.chat(effective_payload)
+                    fallback_response = adapter_instance.chat(effective_payload)
+                    memory_manager.episodic.record(
+                        model=effective_payload.get("model", ""),
+                        provider=provider,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        success=True,
+                    )
+                    return fallback_response
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
+                    memory_manager.episodic.record(
+                        model=effective_payload.get("model", ""),
+                        provider=provider,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        success=False,
+                        error=str(fallback_exc)[:200],
+                    )
                     raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
+            memory_manager.episodic.record(
+                model=effective_payload.get("model", ""),
+                provider=provider,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
         except requests.RequestException as exc:
             error = True
             error_code = "provider_unreachable"
+            memory_manager.episodic.record(
+                model=effective_payload.get("model", ""),
+                provider=provider,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
         finally:
             self._finalize_request(
