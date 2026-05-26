@@ -134,6 +134,7 @@ class RouterService:
                                          usage.get("prompt_tokens", 0),
                                          usage.get("completion_tokens", 0),
                                          provider, effective_payload.get("model", ""))
+            usage = response.get("usage") or {}
             memory_manager.episodic.record(
                 model=effective_payload.get("model", ""),
                 provider=provider,
@@ -307,6 +308,13 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
+                        memory_manager.episodic.record(
+                            model=state["payload"].get("model", ""),
+                            provider=str(state["provider"]),
+                            duration_ms=(time.perf_counter() - started) * 1000,
+                            success=False,
+                            error=str(fallback_exc)[:200],
+                        )
                         if last_chunk is None:
                             yield {
                                 "error": {
@@ -346,6 +354,13 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
+                        memory_manager.episodic.record(
+                            model=state["payload"].get("model", ""),
+                            provider=str(state["provider"]),
+                            duration_ms=(time.perf_counter() - started) * 1000,
+                            success=False,
+                            error=str(fallback_exc)[:200],
+                        )
                         if last_chunk is None:
                             yield {
                                 "error": {
@@ -370,6 +385,13 @@ class RouterService:
                     error=error,
                     error_code=error_code,
                 )
+                if not error:
+                    memory_manager.episodic.record(
+                        model=state["payload"].get("model", ""),
+                        provider=str(state["provider"]),
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        success=True,
+                    )
                 if not error and user_id is not None and isinstance(last_chunk, dict):
                     usage = last_chunk.get("usage") or {}
                     pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
