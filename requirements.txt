@@ -9,3 +9,8 @@ python-dotenv
 psutil
 sqlalchemy
 PyJWT
+pymupdf
+python-docx
+openpyxl
+python-pptx
+pytesseract

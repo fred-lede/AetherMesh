@@ -95,6 +95,25 @@ class Settings:
     config_dir: Path = field(default_factory=_detect_config_dir)
     responses_max_turns: int = field(default_factory=lambda: _env_int("AIIH_RESPONSES_MAX_TURNS", 16))
     sandbox_profiles: dict[str, Any] = field(default_factory=dict)
+    upload_dir: Path = field(
+        default_factory=lambda: Path(os.getenv("AIIH_UPLOAD_DIR", "/tmp/aethermesh/uploads"))
+    )
+    max_upload_size_mb: int = field(default_factory=lambda: _env_int("AIIH_MAX_UPLOAD_SIZE_MB", 50))
+    allowed_upload_mime_types: list[str] = field(
+        default_factory=lambda: _env_csv("AIIH_ALLOWED_UPLOAD_MIME_TYPES",
+            ",".join([
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "text/plain",
+                "text/markdown",
+            ])
+        )
+    )
+    tesseract_langs: str = field(default_factory=lambda: os.getenv("AIIH_TESSERACT_LANGS", "eng"))
+    file_cleanup_ttl_seconds: int = field(default_factory=lambda: _env_int("AIIH_FILE_CLEANUP_TTL", 600))
+    ocr_concurrency: int = field(default_factory=lambda: _env_int("AIIH_OCR_CONCURRENCY", 2))
 
     @property
     def tls_enabled(self) -> bool:
