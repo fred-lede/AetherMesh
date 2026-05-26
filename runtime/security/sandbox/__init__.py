@@ -1,3 +1,4 @@
+from runtime.security.sandbox.linux_sandbox import LinuxSandbox
 from runtime.security.sandbox.mac_sandbox import MacSandbox
 from runtime.security.sandbox.platform import SandboxResult, PlatformSandbox
 from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles, default_profile
@@ -7,6 +8,7 @@ __all__ = [
     "SandboxResult",
     "PlatformSandbox",
     "MacSandbox",
+    "LinuxSandbox",
     "builtin_profiles",
     "default_profile",
 ]

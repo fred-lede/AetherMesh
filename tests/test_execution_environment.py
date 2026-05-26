@@ -116,3 +116,36 @@ def test_mac_sandbox_scratch_cleanup():
     assert os.path.isdir(scratch)
     sandbox._cleanup_scratch(scratch)
     assert not os.path.exists(scratch)
+
+
+# ── Task 4: LinuxSandbox ────────────────────────────────────────────────
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux-specific")
+def test_linux_sandbox_execute_simple():
+    from runtime.security.sandbox.linux_sandbox import LinuxSandbox
+    sandbox = LinuxSandbox()
+    profile = SandboxProfile()
+    result = sandbox.execute(["echo", "hello"], profile)
+    assert result.return_code == 0
+    assert "hello" in result.output
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux-specific")
+def test_linux_sandbox_network_isolation():
+    from runtime.security.sandbox.linux_sandbox import LinuxSandbox
+    sandbox = LinuxSandbox()
+    profile = SandboxProfile(allow_network=False)
+    result = sandbox.execute(["ping", "-c", "1", "8.8.8.8"], profile)
+    assert result.return_code != 0
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux-specific")
+def test_linux_sandbox_timeout():
+    from runtime.security.sandbox.linux_sandbox import LinuxSandbox
+    sandbox = LinuxSandbox()
+    profile = SandboxProfile(timeout_sec=1)
+    result = sandbox.execute(["sleep", "5"], profile)
+    assert result.timed_out is True
+
+
+# ── Task 5: SandboxManager ──────────────────────────────────────────────
