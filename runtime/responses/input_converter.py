@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from runtime.responses.response_models import InputItem, InputItemType
+from runtime.tools.content_blocks import resolve_file_blocks
 
 
 def responses_input_to_messages(
@@ -123,7 +124,8 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
 
 def _input_item_to_messages(item: InputItem) -> list[dict[str, Any]]:
     if item.type == InputItemType.MESSAGE:
-        content = _content_list_to_various(item.content)
+        content = _resolve_file_content_parts(item.content)
+        content = _content_list_to_various(content)
         return [{"role": item.role, "content": content}]
 
     if item.type == InputItemType.TOOL_CALL:
@@ -147,10 +149,10 @@ def _input_item_to_messages(item: InputItem) -> list[dict[str, Any]]:
         }]
 
     if item.type == InputItemType.FILE:
-        return [{
-            "role": "user",
-            "content": f"[file: {item.filename or item.file_id}]",
-        }]
+        resolved = resolve_file_blocks([item.file_id], "generic")
+        if resolved:
+            return [{"role": "user", "content": resolved}]
+        return [{"role": "user", "content": f"[file: {item.filename or item.file_id}]"}]
 
     return [{"role": "user", "content": str(item)}]
 
@@ -162,6 +164,26 @@ def _normalize_message_role(role: Any) -> str:
     if raw in {"system", "user", "assistant", "tool"}:
         return raw
     return "user"
+
+
+def _resolve_file_content_parts(content: Any) -> Any:
+    if not isinstance(content, list):
+        return content
+    resolved: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            resolved.append(part)
+            continue
+        if part.get("type") in ("file", "input_file") and "file_id" in part:
+            blocks = resolve_file_blocks([part["file_id"]], "generic")
+            if blocks:
+                resolved.extend(blocks)
+            else:
+                name = part.get("filename") or part.get("name") or part["file_id"]
+                resolved.append({"type": "text", "text": f"[file: {name}]"})
+        else:
+            resolved.append(part)
+    return resolved
 
 
 def _content_list_to_various(content: Any) -> str | list[dict[str, Any]]:
