@@ -10,6 +10,13 @@ import pytest
 from runtime.tools.file_cleanup import FileCleanupManager
 
 
+@pytest.fixture(autouse=True)
+def reset_context_var():
+    from runtime.tools.file_cleanup import _current_request as _cr
+    yield
+    _cr.set(None)
+
+
 @pytest.fixture
 def tmp_dir():
     d = Path(mkdtemp())
@@ -74,6 +81,8 @@ def test_contextvar_isolation(tmp_dir):
     assert mgr.get_current_request() == "req_a"
 
 
-def test_track_without_request_does_not_raise(tmp_dir):
+def test_track_without_request_logs_warning(tmp_dir):
     mgr = FileCleanupManager(tmp_dir)
-    mgr.track_current("file_a")
+    with patch("runtime.tools.file_cleanup.logger.warning") as mock_warn:
+        mgr.track_current("file_a")
+        mock_warn.assert_called_once()

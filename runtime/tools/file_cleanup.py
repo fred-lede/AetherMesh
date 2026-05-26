@@ -32,6 +32,8 @@ class FileCleanupManager:
         req_id = self.get_current_request()
         if req_id:
             self.track(req_id, [file_id])
+        else:
+            logger.warning("track_current called with no active request context")
 
     def cleanup_request(self, request_id: str) -> None:
         file_ids = self._request_files.pop(request_id, [])
