@@ -8,8 +8,8 @@ from typing import Any
 from runtime.agents.agent_context import AgentContext
 from runtime.agents.agent_result import AgentResult
 from runtime.agents.agent_step import AgentStep
-from runtime.memory.memory_manager import memory_manager
-from runtime.multi_agent.coordinator import coordinator
+from runtime.memory import memory_manager
+from runtime.multi_agent import coordinator
 from runtime.orchestration.execution_plan import ExecutionPlan
 from runtime.orchestration.graph import ExecutionNode
 from runtime.orchestration.graph_executor import GraphExecutor
