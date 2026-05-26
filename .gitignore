@@ -121,6 +121,11 @@ Thumbs.db
 desktop.ini
 
 ############################
+# Superpowers / IDE brainstorm artifacts
+############################
+.superpowers/
+
+############################
 # Project-local generated assets
 ############################
 dashboard_export/
