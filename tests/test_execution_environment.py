@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from runtime.security.sandbox.platform import PlatformSandbox, SandboxResult
 from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles, default_profile
 from runtime.tools.tool_result import ToolCall, ToolResult
 
@@ -60,3 +61,17 @@ def test_default_profile_fallback():
     assert profile.enabled is True
     assert profile.sandbox_type == "process"
     assert profile.allow_network is False
+
+
+# ── Task 2: PlatformSandbox ABC + SandboxResult ─────────────────────────
+
+def test_sandbox_result_defaults():
+    result = SandboxResult(output="hello", return_code=0, duration_ms=10.0)
+    assert result.output == "hello"
+    assert result.return_code == 0
+    assert result.timed_out is False
+
+
+def test_platform_sandbox_is_abstract():
+    with pytest.raises(TypeError):
+        PlatformSandbox()  # type: ignore
