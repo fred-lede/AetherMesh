@@ -120,6 +120,7 @@ class GeminiAdapter(ProviderAdapter):
         )
         accumulated_tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason = "stop"
+        last_usage_metadata: dict[str, Any] = {}
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line or raw_line.startswith(":"):
                 continue
@@ -129,6 +130,9 @@ class GeminiAdapter(ProviderAdapter):
                 data = json.loads(raw_line)
             except json.JSONDecodeError:
                 continue
+            um = data.get("usageMetadata")
+            if um:
+                last_usage_metadata = um
             candidates = data.get("candidates", [])
             if not candidates:
                 continue
@@ -165,14 +169,20 @@ class GeminiAdapter(ProviderAdapter):
                 }
             if tc_list:
                 finish_reason = "tool_calls"
+        usage = {
+            "prompt_tokens": last_usage_metadata.get("promptTokenCount", 0),
+            "completion_tokens": last_usage_metadata.get("candidatesTokenCount", 0),
+            "total_tokens": last_usage_metadata.get("totalTokenCount", 0),
+        } if last_usage_metadata else {}
         yield {
             "id": completion_id,
             "object": "chat.completion.chunk",
             "created": created,
             "model": model,
             "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+            "usage": usage,
         }
-        yield "[DONE]"
+        yield "[DONE]" 
 
     def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         model = payload["model"]

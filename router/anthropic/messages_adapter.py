@@ -307,13 +307,21 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                     ))
                     routing_engine.set_provider_latency("ollama", fallback_latency_ms)
                     routing_engine.set_provider_health("ollama", True)
-                    _record_token_usage(
-                        user_id=getattr(request.state, "user_id", None),
-                        api_key_id=getattr(request.state, "api_key_id", None),
-                        input_tokens=usage.get("prompt_tokens", 0),
-                        output_tokens=usage.get("completion_tokens", 0),
-                        provider="ollama", model=model,
-                    )
+            _record_token_usage(
+                user_id=getattr(request.state, "user_id", None),
+                api_key_id=getattr(request.state, "api_key_id", None),
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                provider="ollama", model=model,
+            )
+            memory_manager.episodic.record(
+                session_id=request_id,
+                model=model,
+                provider="ollama",
+                duration_ms=fallback_latency_ms,
+                success=True,
+                token_count=dict(usage) if usage else None,
+            )
                     result = anthropic_service._to_anthropic_response(response, model, allowed_tool_names=allowed_tool_names)
                     return ASCIISafeJSONResponse(
                         content=result,

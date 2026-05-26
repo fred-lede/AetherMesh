@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from metrics.request_metrics import RequestRecord, request_metrics
 from protocols.anthropic.sse_builder import AnthropicSSEBuilder, map_stop_reason
+from runtime.memory import memory_manager
 from runtime.orchestration.anthropic_converter import AnthropicRouter
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.security.auth.token_tracker import record_token_usage
@@ -30,8 +31,9 @@ def stream_anthropic_with_metrics(
 ) -> Iterable[str]:
     total_output_tokens = 0
     last_error = None
+    stats: dict[str, Any] = {}
     try:
-        for item in stream_anthropic(anthropic_service, iterator, model, allowed_tool_names=allowed_tool_names):
+        for item in stream_anthropic(anthropic_service, iterator, model, allowed_tool_names=allowed_tool_names, stats=stats):
             yield item
             if isinstance(item, str) and "content_block_delta" in item and "text_delta" in item:
                 data = json.loads(item.split("data: ", 1)[1]) if "data: " in item else {}
@@ -39,7 +41,7 @@ def stream_anthropic_with_metrics(
             if isinstance(item, str) and "error" in item and "event:" in item:
                 last_error = item
     except Exception as e:
-        logger.warning(f"Upstream stream interrupted for {model}: {type(e).__name__}: {e}")
+        logger.warning("Upstream stream interrupted for %s: %s: %s", model, type(e).__name__, e)
         last_error = f"Stream interrupted: {e}"
         try:
             from protocols.anthropic.sse_builder import AnthropicSSEBuilder
@@ -48,6 +50,10 @@ def stream_anthropic_with_metrics(
             pass
     finally:
         latency_ms = (time.time() - start_time) * 1000
+        real_input = stats.get("input_tokens", 0)
+        real_output = stats.get("output_tokens", 0)
+        estimated_output = max(1, total_output_tokens // 4) if total_output_tokens else 0
+        final_output = real_output if real_output > 0 else estimated_output
         request_metrics.record_request(RequestRecord(
             request_id=request_id,
             model=model,
@@ -55,7 +61,8 @@ def stream_anthropic_with_metrics(
             endpoint="/v1/messages",
             streaming=True,
             latency_ms=latency_ms,
-            output_tokens=max(1, total_output_tokens // 4),
+            input_tokens=real_input,
+            output_tokens=final_output,
             error=last_error is not None,
             error_message=str(last_error or ""),
         ))
@@ -67,14 +74,22 @@ def stream_anthropic_with_metrics(
                 try:
                     record_token_usage(
                         db, user_id=user_id, api_key_id=api_key_id,
-                        input_tokens=0,
-                        output_tokens=max(1, total_output_tokens // 4),
+                        input_tokens=real_input,
+                        output_tokens=final_output,
                         provider=provider, model=model,
                     )
                 finally:
                     db.close()
             except Exception:
                 logger.exception("Failed to record streaming token usage")
+        memory_manager.episodic.record(
+            model=model,
+            provider=provider,
+            duration_ms=latency_ms,
+            success=last_error is None,
+            token_count={"prompt_tokens": real_input, "completion_tokens": final_output},
+            error=str(last_error)[:200] if last_error else None,
+        )
 
 
 def stream_anthropic(
@@ -82,6 +97,7 @@ def stream_anthropic(
     iterator: Iterable[dict[str, Any] | str],
     model: str,
     allowed_tool_names: set[str] | None = None,
+    stats: dict[str, Any] | None = None,
 ) -> Iterable[str]:
     sse = AnthropicSSEBuilder(model)
     pending_text_tool_content = ""
@@ -206,6 +222,9 @@ def stream_anthropic(
                     pending_text_tool_content = ""
                 usage = item.get("usage") or {}
                 output_tokens = usage.get("completion_tokens", 0)
+                if stats is not None:
+                    stats["input_tokens"] = usage.get("prompt_tokens", 0)
+                    stats["output_tokens"] = output_tokens
 
                 yield from sse.close_all_blocks()
                 yield sse.message_delta(stop_reason, int(output_tokens) if output_tokens else 0)

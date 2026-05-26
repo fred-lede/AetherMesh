@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from config.settings import settings
 
 logger = logging.getLogger("openai_handler")
-from metrics.request_metrics import request_metrics
+from metrics.request_metrics import RequestRecord, request_metrics
 from providers.base import ProviderError
 from providers.http_client import get_session
 from runtime.orchestration.capabilities import required_openai_capabilities
@@ -128,22 +128,18 @@ class RouterService:
         error_code = ""
         try:
             response = adapter.chat(effective_payload)
-            if user_id is not None:
-                usage = response.get("usage") or {}
-                self._record_token_usage(user_id, api_key_id,
-                                         usage.get("prompt_tokens", 0),
-                                         usage.get("completion_tokens", 0),
-                                         provider, effective_payload.get("model", ""))
             usage = response.get("usage") or {}
-            memory_manager.episodic.record(
+            self._record_metrics(
                 model=effective_payload.get("model", ""),
                 provider=provider,
+                endpoint="/v1/chat/completions",
+                streaming=False,
                 duration_ms=(time.perf_counter() - started) * 1000,
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                user_id=user_id,
+                api_key_id=api_key_id,
                 success=True,
-                token_count={
-                    "prompt_tokens": usage.get("prompt_tokens", 0),
-                    "completion_tokens": usage.get("completion_tokens", 0),
-                },
             )
             return response
         except ProviderError as exc:
@@ -169,27 +165,36 @@ class RouterService:
                 error_code = ""
                 try:
                     fallback_response = adapter_instance.chat(effective_payload)
-                    memory_manager.episodic.record(
+                    fallback_usage = fallback_response.get("usage") or {}
+                    self._record_metrics(
                         model=effective_payload.get("model", ""),
                         provider=provider,
+                        endpoint="/v1/chat/completions",
+                        streaming=False,
                         duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=fallback_usage.get("prompt_tokens", 0),
+                        output_tokens=fallback_usage.get("completion_tokens", 0),
                         success=True,
                     )
                     return fallback_response
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                    memory_manager.episodic.record(
+                    self._record_metrics(
                         model=effective_payload.get("model", ""),
                         provider=provider,
+                        endpoint="/v1/chat/completions",
+                        streaming=False,
                         duration_ms=(time.perf_counter() - started) * 1000,
                         success=False,
                         error=str(fallback_exc)[:200],
                     )
                     raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
-            memory_manager.episodic.record(
+            self._record_metrics(
                 model=effective_payload.get("model", ""),
                 provider=provider,
+                endpoint="/v1/chat/completions",
+                streaming=False,
                 duration_ms=(time.perf_counter() - started) * 1000,
                 success=False,
                 error=str(exc)[:200],
@@ -218,27 +223,36 @@ class RouterService:
                 error_code = ""
                 try:
                     fallback_response = adapter_instance.chat(effective_payload)
-                    memory_manager.episodic.record(
+                    fallback_usage = fallback_response.get("usage") or {}
+                    self._record_metrics(
                         model=effective_payload.get("model", ""),
                         provider=provider,
+                        endpoint="/v1/chat/completions",
+                        streaming=False,
                         duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=fallback_usage.get("prompt_tokens", 0),
+                        output_tokens=fallback_usage.get("completion_tokens", 0),
                         success=True,
                     )
                     return fallback_response
                 except ProviderError as fallback_exc:
                     error = True
                     error_code = getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc))
-                    memory_manager.episodic.record(
+                    self._record_metrics(
                         model=effective_payload.get("model", ""),
                         provider=provider,
+                        endpoint="/v1/chat/completions",
+                        streaming=False,
                         duration_ms=(time.perf_counter() - started) * 1000,
                         success=False,
                         error=str(fallback_exc)[:200],
                     )
                     raise self._provider_http_error(fallback_exc, code=error_code) from fallback_exc
-            memory_manager.episodic.record(
+            self._record_metrics(
                 model=effective_payload.get("model", ""),
                 provider=provider,
+                endpoint="/v1/chat/completions",
+                streaming=False,
                 duration_ms=(time.perf_counter() - started) * 1000,
                 success=False,
                 error=str(exc)[:200],
@@ -247,9 +261,11 @@ class RouterService:
         except requests.RequestException as exc:
             error = True
             error_code = "provider_unreachable"
-            memory_manager.episodic.record(
+            self._record_metrics(
                 model=effective_payload.get("model", ""),
                 provider=provider,
+                endpoint="/v1/chat/completions",
+                streaming=False,
                 duration_ms=(time.perf_counter() - started) * 1000,
                 success=False,
                 error=str(exc)[:200],
@@ -265,6 +281,7 @@ class RouterService:
                 error=error,
                 error_code=error_code,
             )
+
 
     def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[dict[str, Any] | str]:
         self._inject_web_search(payload)
@@ -308,9 +325,11 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
-                        memory_manager.episodic.record(
+                        self._record_metrics(
                             model=state["payload"].get("model", ""),
                             provider=str(state["provider"]),
+                            endpoint="/v1/chat/completions",
+                            streaming=True,
                             duration_ms=(time.perf_counter() - started) * 1000,
                             success=False,
                             error=str(fallback_exc)[:200],
@@ -323,20 +342,22 @@ class RouterService:
                                     "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
                                 }
                             }
-                    return
+                        return
                 error_type = "rate_limit_error" if getattr(exc, "status_code", None) == 429 else "provider_error"
-                payload = {"message": str(exc), "type": error_type, "code": error_code}
+                payload_err = {"message": str(exc), "type": error_type, "code": error_code}
                 retry_after = getattr(exc, "retry_after", None)
                 if retry_after:
-                    payload["retry_after"] = retry_after
-                memory_manager.episodic.record(
+                    payload_err["retry_after"] = retry_after
+                self._record_metrics(
                     model=state["payload"].get("model", ""),
                     provider=str(state["provider"]),
+                    endpoint="/v1/chat/completions",
+                    streaming=True,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     success=False,
                     error=str(exc)[:200],
                 )
-                yield {"error": payload}
+                yield {"error": payload_err}
             except requests.Timeout as exc:
                 error = True
                 error_code = "provider_timeout"
@@ -361,9 +382,11 @@ class RouterService:
                         yield from self._adapter("ollama", fallback_worker).stream(fallback_payload)
                     except ProviderError as fallback_exc:
                         error = True
-                        memory_manager.episodic.record(
+                        self._record_metrics(
                             model=state["payload"].get("model", ""),
                             provider=str(state["provider"]),
+                            endpoint="/v1/chat/completions",
+                            streaming=True,
                             duration_ms=(time.perf_counter() - started) * 1000,
                             success=False,
                             error=str(fallback_exc)[:200],
@@ -376,10 +399,12 @@ class RouterService:
                                     "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
                                 }
                             }
-                    return
-                memory_manager.episodic.record(
+                        return
+                self._record_metrics(
                     model=state["payload"].get("model", ""),
                     provider=str(state["provider"]),
+                    endpoint="/v1/chat/completions",
+                    streaming=True,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     success=False,
                     error=str(exc)[:200],
@@ -388,9 +413,11 @@ class RouterService:
             except requests.RequestException as exc:
                 error = True
                 error_code = "provider_unreachable"
-                memory_manager.episodic.record(
+                self._record_metrics(
                     model=state["payload"].get("model", ""),
                     provider=str(state["provider"]),
+                    endpoint="/v1/chat/completions",
+                    streaming=True,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     success=False,
                     error=str(exc)[:200],
@@ -407,25 +434,27 @@ class RouterService:
                     error_code=error_code,
                 )
                 if not error:
-                    memory_manager.episodic.record(
+                    pt = 0
+                    ct = 0
+                    if isinstance(last_chunk, dict):
+                        usage = last_chunk.get("usage") or {}
+                        pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                        ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                    self._record_metrics(
                         model=state["payload"].get("model", ""),
                         provider=str(state["provider"]),
+                        endpoint="/v1/chat/completions",
+                        streaming=True,
                         duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=pt,
+                        output_tokens=ct,
+                        user_id=user_id,
+                        api_key_id=api_key_id,
                         success=True,
                     )
-                if not error and user_id is not None and isinstance(last_chunk, dict):
-                    usage = last_chunk.get("usage") or {}
-                    pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
-                    ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
-                    if pt or ct:
-                        self._record_token_usage(
-                            user_id, api_key_id,
-                            input_tokens=pt, output_tokens=ct,
-                            provider=str(state["provider"]),
-                            model=state["payload"].get("model", ""),
-                        )
 
         return wrapped()
+
 
     def handle_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
         from runtime.responses.response_models import ResponseObject, ResponseStatus
@@ -521,10 +550,18 @@ class RouterService:
                         resp.output.append(item)
                     response_runtime.register(resp)
                 usage_data = result.get("usage", {})
-                self._record_token_usage(user_id, api_key_id,
-                                         usage_data.get("input_tokens", 0),
-                                         usage_data.get("output_tokens", 0),
-                                         provider, model)
+                self._record_metrics(
+                    model=model,
+                    provider=provider,
+                    endpoint="/v1/responses",
+                    streaming=False,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    input_tokens=usage_data.get("input_tokens", 0),
+                    output_tokens=usage_data.get("output_tokens", 0),
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    success=True,
+                )
                 return result
             else:
                 tools = self._ensure_openai_tools(payload.get("tools") or [])
@@ -550,8 +587,19 @@ class RouterService:
                         metadata=metadata,
                         input_value=input_value,
                     )
-                    self._record_response_usage(user_id, api_key_id,
-                                                response_object, provider, model)
+                    usage = getattr(response_object, "usage", None) or {}
+                    self._record_metrics(
+                        model=model,
+                        provider=provider,
+                        endpoint="/v1/responses",
+                        streaming=False,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)),
+                        output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)),
+                        user_id=user_id,
+                        api_key_id=api_key_id,
+                        success=True,
+                    )
                     if store:
                         response_runtime.register(response_object)
                     return response_object.to_dict()
@@ -564,10 +612,18 @@ class RouterService:
                         completion=completion,
                     )
                     usage = completion.get("usage") or {}
-                    self._record_token_usage(user_id, api_key_id,
-                                             usage.get("prompt_tokens", 0),
-                                             usage.get("completion_tokens", 0),
-                                             provider, effective_payload.get("model", ""))
+                    self._record_metrics(
+                        model=effective_payload.get("model", ""),
+                        provider=provider,
+                        endpoint="/v1/responses",
+                        streaming=False,
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        user_id=user_id,
+                        api_key_id=api_key_id,
+                        success=True,
+                    )
                     response = chat_completion_to_response(
                         completion=completion,
                         model=model,
@@ -625,6 +681,15 @@ class RouterService:
             err_resp = error_response(model, str(exc), error_code, response_id)
             if store:
                 response_runtime.register(err_resp)
+            self._record_metrics(
+                model=model,
+                provider=provider,
+                endpoint="/v1/responses",
+                streaming=False,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._provider_http_error(exc, code=error_code) from exc
         except requests.Timeout as exc:
             error = True
@@ -660,10 +725,28 @@ class RouterService:
                     if store:
                         response_runtime.register(err_resp)
                     return err_resp.to_dict()
+            self._record_metrics(
+                model=model,
+                provider=provider,
+                endpoint="/v1/responses",
+                streaming=False,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._as_http_error(status_code=504, code=error_code, message=str(exc)) from exc
         except requests.RequestException as exc:
             error = True
             error_code = "provider_unreachable"
+            self._record_metrics(
+                model=model,
+                provider=provider,
+                endpoint="/v1/responses",
+                streaming=False,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                success=False,
+                error=str(exc)[:200],
+            )
             raise self._as_http_error(status_code=502, code=error_code, message=str(exc)) from exc
         finally:
             self._finalize_request(
@@ -714,24 +797,14 @@ class RouterService:
             effective_payload=effective_payload,
         )
         outer_state: dict[str, Any] = {"provider": provider, "worker": worker, "payload": effective_payload}
+        last_chunk_ref: list[dict[str, Any] | None] = [None]
 
         def _with_tracking(raw_chunks) -> Iterable[dict[str, Any] | str]:
-            last_chunk = None
+            nonlocal last_chunk_ref
             for chunk in raw_chunks:
                 if isinstance(chunk, dict):
-                    last_chunk = chunk
+                    last_chunk_ref[0] = chunk
                 yield chunk
-            if user_id is not None and isinstance(last_chunk, dict):
-                usage = last_chunk.get("usage") or {}
-                pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
-                ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
-                if pt or ct:
-                    model_name = last_chunk.get("model", model)
-                    self._record_token_usage(
-                        user_id, api_key_id,
-                        input_tokens=pt, output_tokens=ct,
-                        provider=outer_state["provider"], model=model_name,
-                    )
 
         def _finalize(error: bool, error_code: str = "") -> None:
             err_msg = error_code or ("provider_error" if error else "")
@@ -771,6 +844,7 @@ class RouterService:
 
         def stream_yield() -> Iterable[str]:
             stream_error = False
+            stream_error_code = ""
             try:
                 if outer_state["provider"] == "openai":
                     openai_payload = dict(payload)
@@ -840,11 +914,33 @@ class RouterService:
                     yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
             except Exception as exc:
                 stream_error = True
+                stream_error_code = self._classify_error_text(str(exc))
                 yield from error_yield(exc)
             finally:
                 _finalize(stream_error)
+                pt = 0
+                ct = 0
+                last_chunk = last_chunk_ref[0]
+                if isinstance(last_chunk, dict):
+                    usage = last_chunk.get("usage") or {}
+                    pt = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                    ct = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                self._record_metrics(
+                    model=outer_state["payload"].get("model", model),
+                    provider=str(outer_state["provider"]),
+                    endpoint="/v1/responses",
+                    streaming=True,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    input_tokens=pt,
+                    output_tokens=ct,
+                    user_id=user_id,
+                    api_key_id=api_key_id,
+                    success=not stream_error,
+                    error=stream_error_code if stream_error else None,
+                )
 
         return stream_yield()
+
 
     def get_response(self, response_id: str) -> dict[str, Any]:
         from runtime.responses.response_runtime import response_runtime
@@ -1396,7 +1492,50 @@ class RouterService:
         input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
         output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
         self._record_token_usage(user_id, api_key_id,
-                                 input_tokens, output_tokens, provider, model)
+            input_tokens, output_tokens, provider, model)
+
+    def _record_metrics(
+        self,
+        *,
+        model: str,
+        provider: str,
+        endpoint: str,
+        streaming: bool,
+        request_id: str = "",
+        duration_ms: float = 0.0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        user_id: int | None = None,
+        api_key_id: int | None = None,
+        success: bool = True,
+        error: str | None = None,
+    ) -> None:
+        request_metrics.record_request(RequestRecord(
+            request_id=request_id or f"req_{uuid.uuid4().hex[:16]}",
+            model=model,
+            provider=provider,
+            endpoint=endpoint,
+            streaming=streaming,
+            latency_ms=duration_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            error=not success,
+            error_message=error or "",
+        ))
+        memory_manager.episodic.record(
+            model=model,
+            provider=provider,
+            duration_ms=duration_ms,
+            success=success,
+            token_count={"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+            error=error[:200] if error else None,
+        )
+        if user_id is not None and success:
+            self._record_token_usage(
+                user_id, api_key_id,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                provider=provider, model=model,
+            )
 
     def _trace_responses(self, stage: str, **data: Any) -> None:
         if not settings.debug_responses:

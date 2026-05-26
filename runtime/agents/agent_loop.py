@@ -58,10 +58,25 @@ class AgentLoop:
             task_summary=task[:200],
             duration_ms=exec_result.elapsed_ms,
             success=exec_result.success,
+            token_count=_aggregate_token_counts(exec_result.node_results),
             error="; ".join(exec_result.node_errors.values()) if exec_result.node_errors else None,
         )
 
         return result
+
+
+def _aggregate_token_counts(node_results: Any) -> dict[str, int] | None:
+    total_input = 0
+    total_output = 0
+    results = node_results.values() if isinstance(node_results, dict) else []
+    for nr in results:
+        if isinstance(nr, dict):
+            u = nr.get("usage") or {}
+            total_input += u.get("prompt_tokens", u.get("input_tokens", 0))
+            total_output += u.get("completion_tokens", u.get("output_tokens", 0))
+    if total_input == 0 and total_output == 0:
+        return None
+    return {"prompt_tokens": total_input, "completion_tokens": total_output}
 
 
 def _make_llm_handler():
@@ -100,10 +115,11 @@ def _make_llm_handler():
         try:
             response = await asyncio.to_thread(adapter.chat, payload)
             text = _extract_text_from_chat(response)
-            return {"text": text, "provider": provider, "model": model}
+            usage = response.get("usage") or {}
+            return {"text": text, "provider": provider, "model": model, "usage": usage}
         except Exception as exc:
             logger.error("LLM handler failed for %s/%s: %s", provider, model, exc)
-            return {"error": str(exc), "text": ""}
+            return {"error": str(exc), "text": "", "usage": {}}
 
     return handler
 
