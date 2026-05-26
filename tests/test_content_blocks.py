@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import base64
+import json
+from pathlib import Path
+from tempfile import mkdtemp
+
+import pytest
 
 from runtime.tools.content_blocks import (
     anthropic_block_to_openai_parts,
     anthropic_content_to_openai_parts,
     content_part_to_text_and_images,
+    resolve_file_blocks,
 )
 
 
@@ -130,3 +136,99 @@ def test_anthropic_content_to_openai_parts_preserves_order() -> None:
     )
 
     assert [part["type"] for part in parts] == ["text", "image_url", "text"]
+
+
+@pytest.fixture
+def upload_dir() -> Path:
+    d = Path(mkdtemp())
+    yield d
+    for f in d.iterdir():
+        f.unlink()
+    d.rmdir()
+
+
+def create_file_metadata(upload_dir: Path, file_id: str, mime_type: str, content_text: str) -> None:
+    meta = {"mime_type": mime_type, "original_name": f"test.{mime_type.split('/')[-1]}"}
+    (upload_dir / file_id).write_text(content_text)
+    (upload_dir / f"{file_id}.meta.json").write_text(json.dumps(meta))
+
+
+def test_resolve_anthropic_pdf(upload_dir: Path) -> None:
+    file_id = "file_abc123"
+    create_file_metadata(upload_dir, file_id, "application/pdf", "PDF text content")
+
+    result = resolve_file_blocks([file_id], "anthropic", upload_dir)
+    assert len(result) == 1
+    block = result[0]
+    assert block["type"] == "document"
+    assert block["source"]["media_type"] == "application/pdf"
+    assert block["source"]["type"] == "base64"
+    assert isinstance(block["source"]["data"], str)
+    assert len(block["source"]["data"]) > 0
+
+
+def test_resolve_anthropic_text_file(upload_dir: Path) -> None:
+    file_id = "file_def456"
+    create_file_metadata(upload_dir, file_id, "text/plain", "Hello world")
+
+    result = resolve_file_blocks([file_id], "anthropic", upload_dir)
+    assert len(result) == 1
+    block = result[0]
+    assert block["type"] == "text"
+    assert block["text"] == "Hello world"
+
+
+def test_resolve_openai_text_file(upload_dir: Path) -> None:
+    file_id = "file_ghi789"
+    create_file_metadata(upload_dir, file_id, "text/markdown", "# Title")
+
+    result = resolve_file_blocks([file_id], "openai", upload_dir)
+    assert len(result) == 1
+    assert result[0]["type"] == "text"
+    assert "# Title" in result[0]["text"]
+
+
+def test_resolve_multiple_files(upload_dir: Path) -> None:
+    ids = ["file_a", "file_b"]
+    create_file_metadata(upload_dir, "file_a", "text/plain", "File A")
+    create_file_metadata(upload_dir, "file_b", "text/plain", "File B")
+
+    result = resolve_file_blocks(ids, "openai", upload_dir)
+    assert len(result) == 2
+    assert result[0]["text"] == "File A"
+    assert result[1]["text"] == "File B"
+
+
+def test_resolve_unknown_file_id_returns_empty(upload_dir: Path) -> None:
+    result = resolve_file_blocks(["file_nonexistent"], "openai", upload_dir)
+    assert result == []
+
+
+def test_resolve_empty_file_ids(upload_dir: Path) -> None:
+    result = resolve_file_blocks([], "openai", upload_dir)
+    assert result == []
+
+
+def test_resolve_gemini_text_file(upload_dir: Path) -> None:
+    file_id = "file_gemini"
+    create_file_metadata(upload_dir, file_id, "text/plain", "Gemini content")
+
+    result = resolve_file_blocks([file_id], "gemini", upload_dir)
+    assert len(result) == 1
+    assert result[0]["type"] == "text"
+    assert "Gemini content" in result[0]["text"]
+
+
+def test_resolve_ollama_text_file(upload_dir: Path) -> None:
+    file_id = "file_ollama"
+    create_file_metadata(
+        upload_dir,
+        file_id,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "DOCX content",
+    )
+
+    result = resolve_file_blocks([file_id], "ollama", upload_dir)
+    assert len(result) == 1
+    assert result[0]["type"] == "text"
+    assert "DOCX content" in result[0]["text"]

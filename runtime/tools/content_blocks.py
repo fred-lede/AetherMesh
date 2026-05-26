@@ -1,7 +1,57 @@
 from __future__ import annotations
 
 import base64
+import json
+import logging
+from pathlib import Path
 from typing import Any
+
+from config.settings import settings
+
+logger = logging.getLogger("runtime.tools.content_blocks")
+
+
+def resolve_file_blocks(
+    file_ids: list[str],
+    provider: str,
+    upload_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    if upload_dir is None:
+        upload_dir = settings.upload_dir
+
+    blocks: list[dict[str, Any]] = []
+    provider_lower = provider.strip().lower()
+
+    for file_id in file_ids:
+        file_path = upload_dir / file_id
+        meta_path = upload_dir / f"{file_id}.meta.json"
+
+        if not file_path.exists() or not meta_path.exists():
+            logger.warning("File not found for resolve: %s", file_id)
+            continue
+
+        meta = json.loads(meta_path.read_text("utf-8"))
+        mime_type = meta.get("mime_type", "application/octet-stream")
+
+        if provider_lower == "anthropic" and mime_type == "application/pdf":
+            data_bytes = file_path.read_bytes()
+            b64_data = base64.b64encode(data_bytes).decode("ascii")
+            blocks.append({
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b64_data,
+                },
+            })
+        else:
+            content_text = file_path.read_text("utf-8", errors="replace")
+            blocks.append({
+                "type": "text",
+                "text": content_text,
+            })
+
+    return blocks
 
 
 def anthropic_content_to_openai_parts(content: list[Any]) -> list[dict[str, Any]]:
