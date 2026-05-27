@@ -47,35 +47,55 @@ def _verify_api_key(key: str) -> dict | None:
         return None
 
 
+AUTH_BYPASS_PATHS: frozenset[str] = frozenset({
+    "/health",
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+    "/.well-known/ai-plugin.json",
+})
+
+AUTH_BYPASS_PREFIXES: tuple[str, ...] = (
+    "/api/metrics/",
+)
+
+
 def add_security_middleware(
     app: FastAPI,
     enable_auth: bool = True,
     enable_rate_limit: bool = True,
     enable_validation: bool = True,
+    auth_bypass_paths: set[str] | None = None,
 ) -> None:
+    bypass_paths = set(AUTH_BYPASS_PATHS) | (auth_bypass_paths or set())
+
     @app.middleware("http")
     async def security_middleware(request: Request, call_next: Any) -> Any:
         if request.method == "OPTIONS":
             return await call_next(request)
 
+        path = request.url.path
         client_ip = request.client.host if request.client else "unknown"
         api_key = request.headers.get("x-api-key", "") or request.headers.get("authorization", "").replace("Bearer ", "")
 
         if enable_auth:
-            if not api_key:
+            if path in bypass_paths or path.startswith(AUTH_BYPASS_PREFIXES):
+                pass
+            elif not api_key:
                 return JSONResponse(
                     status_code=401,
                     content={"error": {"type": "authentication_error", "message": "Missing API key"}},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            key_info = _verify_api_key(api_key)
-            if not key_info:
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": {"type": "authentication_error", "message": "Invalid API key"}},
-                )
-            request.state.api_key_id = key_info["api_key_id"]
-            request.state.user_id = key_info["user_id"]
+            else:
+                key_info = _verify_api_key(api_key)
+                if not key_info:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": {"type": "authentication_error", "message": "Invalid API key"}},
+                    )
+                request.state.api_key_id = key_info["api_key_id"]
+                request.state.user_id = key_info["user_id"]
 
         if enable_rate_limit:
             rate_key = api_key or client_ip
