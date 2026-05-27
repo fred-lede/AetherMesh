@@ -718,6 +718,102 @@ def test_tool_loop_parallel_tool_calls():
     assert "Both done." in response.to_dict().get("output_text", "")
 
 
+def test_wrap_streaming_chunks_in_progress_event():
+    chunks = [
+        {"choices": [{"delta": {"content": "a"}, "finish_reason": "stop"}]},
+    ]
+    events = list(wrap_streaming_chunks(chunks, response_id="resp_ip", model="test"))
+    payloads = _payloads(events)
+    types = [p["type"] for p in payloads]
+    assert types[0] == "response.created"
+    assert types[1] == "response.in_progress"
+    assert "response.completed" in types
+
+
+def test_streaming_tool_loop_arguments_delta_has_item_id():
+    registry = ToolRegistry()
+    _register_tool(registry, "search", output="results")
+    loop = ResponsesToolLoop(registry=registry)
+
+    def stream_fn(payload):
+        yield {"choices": [{"delta": {"role": "assistant"}, "finish_reason": None}]}
+        yield {
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                                    "function": {"name": "search", "arguments": '{"q": "'}}],
+                },
+                "finish_reason": None,
+            }],
+        }
+        yield {
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                                    "function": {"arguments": "test}"}}],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        yield "[DONE]"
+
+    def stream_turn_2(payload):
+        yield {"choices": [{"delta": {"content": "done"}, "finish_reason": "stop"}]}
+
+    adapter = MagicMock()
+    adapter.stream.side_effect = [stream_fn({}), stream_turn_2({})]
+    encoder = ResponseStreamEncoder()
+
+    events = list(loop.run_streaming(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=[{"type": "function", "function": {"name": "search", "description": "Search", "parameters": {"type": "object", "properties": {}}}}],
+        instructions="",
+        response_id="resp_arg_done",
+        model="test-model",
+        input_value="Search",
+        encoder=encoder,
+    ))
+
+    payloads = _payloads(events)
+    delta_events = [p for p in payloads if p["type"] == "response.function_call.arguments.delta"]
+    done_events = [p for p in payloads if p["type"] == "response.function_call.arguments.done"]
+
+    assert len(delta_events) >= 1
+    assert len(done_events) >= 1
+    for d in delta_events:
+        assert "item_id" in d, "arguments.delta missing item_id"
+        assert "output_index" in d, "arguments.delta missing output_index"
+    for d in done_events:
+        assert "item_id" in d, "arguments.done missing item_id"
+        assert "output_index" in d, "arguments.done missing output_index"
+        assert "arguments" in d
+
+
+def test_streaming_tool_loop_provider_error_emits_failed():
+    loop = ResponsesToolLoop()
+    adapter = MagicMock()
+    from providers.base import ProviderError
+    adapter.stream.side_effect = ProviderError("Ollama unavailable", status_code=503)
+    encoder = ResponseStreamEncoder()
+
+    events = list(loop.run_streaming(
+        adapter=adapter,
+        chat_payload={"model": "test"},
+        tools=[],
+        instructions="",
+        response_id="resp_pe",
+        model="test-model",
+        input_value="Hi",
+        encoder=encoder,
+    ))
+
+    payloads = _payloads(events)
+    types = [p["type"] for p in payloads]
+    assert "response.failed" in types
+    assert "[DONE]" not in [p["type"] for p in payloads]
+
+
 def _payloads(events: list[str]) -> list[dict[str, Any]]:
     payloads = []
     for event in events:

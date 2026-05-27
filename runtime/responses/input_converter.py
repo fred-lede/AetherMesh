@@ -193,6 +193,16 @@ def _content_list_to_various(content: Any) -> str | list[dict[str, Any]]:
         return str(content)
     if len(content) == 1 and content[0].get("type") in {"text", "input_text", "output_text"}:
         return str(content[0].get("text", ""))
+    has_multimodal = any(
+        isinstance(p, dict) and p.get("type") not in {"text", "input_text", "output_text"}
+        for p in content
+    )
+    if has_multimodal:
+        return content
+    if len(content) == 1:
+        return str(content[0].get("text", ""))
+    if all(isinstance(p, dict) and p.get("type") in {"text", "input_text", "output_text"} for p in content):
+        return "\n".join(str(p.get("text", "")) for p in content)
     return content
 
 

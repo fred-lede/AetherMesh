@@ -5,6 +5,8 @@ import logging
 import uuid
 from typing import Any, Iterable
 
+from providers.base import ProviderError
+
 from runtime.responses.response_models import (
     ResponseObject,
     ResponseStatus,
@@ -286,6 +288,7 @@ class ResponsesToolLoop:
                 })
 
                 accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+                _tc_item_ids: dict[int, str] = {}
                 turn_text_parts: list[str] = []
 
                 yield encoder.encode({
@@ -300,7 +303,7 @@ class ResponsesToolLoop:
 
                 try:
                     _chunk_source = adapter.stream(payload)
-                except (OSError, ConnectionError, TimeoutError) as stream_exc:
+                except (OSError, ConnectionError, TimeoutError, ProviderError) as stream_exc:
                     logger.error("Streaming tool loop adapter.stream() failed: %s", stream_exc)
                     yield encoder.encode({
                         "type": "response.failed",
@@ -349,8 +352,12 @@ class ResponsesToolLoop:
                             for tool_call in tc:
                                 idx = tool_call.get("index", 0)
                                 if idx not in accumulated_tool_calls:
+                                    item_id = f"fc_{uuid.uuid4().hex[:16]}"
+                                    _tc_item_ids[idx] = item_id
                                     accumulated_tool_calls[idx] = {}
-                                    yield from self._queue_function_call(encoder, response_id, tool_call)
+                                    yield from self._queue_function_call(
+                                        encoder, response_id, tool_call, item_id=item_id,
+                                    )
                                 existing = accumulated_tool_calls[idx]
                                 for key, value in tool_call.items():
                                     if key == "index":
@@ -372,12 +379,31 @@ class ResponsesToolLoop:
                                         "data": {
                                             "type": "response.function_call.arguments.delta",
                                             "response": {"id": response_id},
+                                            "item_id": _tc_item_ids.get(idx, ""),
+                                            "output_index": turn - 1,
                                             "delta": partial_args,
                                         },
                                     })
 
                         if finish_reason:
                             break
+
+                for idx in sorted(accumulated_tool_calls.keys()):
+                    item_id = _tc_item_ids.get(idx, "")
+                    tc_data = accumulated_tool_calls[idx]
+                    fn = tc_data.get("function", {})
+                    yield encoder.encode({
+                        "type": "response.function_call.arguments.done",
+                        "data": {
+                            "type": "response.function_call.arguments.done",
+                            "response": {"id": response_id},
+                            "item_id": item_id,
+                            "output_index": turn - 1,
+                            "call_id": tc_data.get("id", ""),
+                            "name": fn.get("name", ""),
+                            "arguments": fn.get("arguments", "{}"),
+                        },
+                    })
 
                 turn_text = "".join(turn_text_parts)
                 text_content.append(turn_text)
@@ -458,15 +484,18 @@ class ResponsesToolLoop:
                     },
                 })
 
-                for tc in tool_calls_list:
+                for idx, tc in enumerate(tool_calls_list):
                     fn = tc.get("function", {})
+                    fc_item_id = _tc_item_ids.get(idx, tc.get("id", f"fc_{uuid.uuid4().hex[:16]}"))
                     yield encoder.encode({
                         "type": "response.function_call.call",
                         "data": {
                             "type": "response.function_call.call",
                             "response": {"id": response_id},
+                            "item_id": fc_item_id,
+                            "output_index": turn - 1,
                             "item": {
-                                "id": tc.get("id", ""),
+                                "id": fc_item_id,
                                 "type": "function_call",
                                 "call_id": tc.get("id", ""),
                                 "name": fn.get("name", ""),
@@ -667,15 +696,17 @@ class ResponsesToolLoop:
         encoder: Any,
         response_id: str,
         tool_call: dict[str, Any],
+        item_id: str = "",
     ) -> Iterable[str]:
         fn = tool_call.get("function", {})
+        fc_item_id = item_id or tool_call.get("id", "") or f"call_{uuid.uuid4().hex[:16]}"
         yield encoder.encode({
             "type": "response.function_call.queue",
             "data": {
                 "type": "response.function_call.queue",
                 "response": {"id": response_id},
                 "item": {
-                    "id": tool_call.get("id", "") or f"call_{uuid.uuid4().hex[:16]}",
+                    "id": fc_item_id,
                     "type": "function_call",
                     "call_id": tool_call.get("id", "") or f"call_{uuid.uuid4().hex[:16]}",
                     "name": fn.get("name", ""),

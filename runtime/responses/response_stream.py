@@ -39,6 +39,13 @@ def wrap_streaming_chunks(
     model: str,
 ) -> Iterable[str]:
     yield response_stream_encoder.encode(make_response_start_event(response_id, model))
+    yield response_stream_encoder.encode({
+        "type": "response.in_progress",
+        "data": {
+            "type": "response.in_progress",
+            "response": {"id": response_id, "object": "response", "model": model, "status": "in_progress"},
+        },
+    })
 
     emitted_done = False
     text_parts: list[str] = []
@@ -46,6 +53,7 @@ def wrap_streaming_chunks(
     item_started = False
     content_started = False
     last_chunk: dict[str, Any] | None = None
+    _tool_call_items: dict[int, str] = {}
 
     for chunk in chunks:
         if isinstance(chunk, str):
@@ -65,6 +73,29 @@ def wrap_streaming_chunks(
                 return
 
             last_chunk = chunk
+
+            tool_calls = _chunk_tool_call_deltas(chunk)
+            if tool_calls:
+                for tc in tool_calls:
+                    idx = tc.get("index", 0)
+                    fn = tc.get("function", {})
+                    if idx not in _tool_call_items:
+                        _tool_call_items[idx] = f"fc_{uuid.uuid4().hex[:16]}"
+                        yield response_stream_encoder.encode(
+                            _make_output_item_added_event(response_id, _tool_call_items[idx])
+                        )
+                        yield response_stream_encoder.encode(
+                            _make_tool_call_item_added_event(
+                                response_id, _tool_call_items[idx],
+                                tc.get("id", ""), fn.get("name", ""),
+                            )
+                        )
+                    yield response_stream_encoder.encode(
+                        _make_function_call_arguments_delta_event(
+                            response_id, _tool_call_items[idx], idx,
+                            fn.get("arguments", ""),
+                        )
+                    )
 
             for content in _chunk_text_deltas(chunk):
                 if content and not item_started:
@@ -247,6 +278,63 @@ def _chunk_text_deltas(chunk: dict[str, Any]) -> list[str]:
             if content:
                 deltas.append(str(content))
     return deltas
+
+
+def _chunk_tool_call_deltas(chunk: dict[str, Any]) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+    choices = chunk.get("choices", [])
+    if not isinstance(choices, list):
+        return calls
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        tc = delta.get("tool_calls")
+        if isinstance(tc, list):
+            calls.extend(tc)
+        message = choice.get("message")
+        if isinstance(message, dict):
+            tc = message.get("tool_calls")
+            if isinstance(tc, list):
+                calls.extend(tc)
+    return calls
+
+
+def _make_tool_call_item_added_event(
+    response_id: str, item_id: str, call_id: str, name: str,
+) -> dict[str, Any]:
+    return {
+        "type": "response.output_item.added",
+        "data": {
+            "type": "response.output_item.added",
+            "response": {"id": response_id},
+            "output_index": 0,
+            "item": {
+                "id": item_id,
+                "type": "function_call",
+                "call_id": call_id,
+                "name": name,
+                "status": "in_progress",
+            },
+        },
+    }
+
+
+def _make_function_call_arguments_delta_event(
+    response_id: str, item_id: str, output_index: int, delta: str,
+) -> dict[str, Any]:
+    return {
+        "type": "response.function_call.arguments.delta",
+        "data": {
+            "type": "response.function_call.arguments.delta",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": output_index,
+            "delta": delta,
+        },
+    }
 
 
 def _chunk_finished(chunk: dict[str, Any]) -> bool:
