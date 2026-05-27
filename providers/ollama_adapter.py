@@ -447,14 +447,21 @@ class OllamaAdapter(ProviderAdapter):
         for tool in tools:
             if not isinstance(tool, dict):
                 continue
-            if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
-                normalized_tools.append(tool)
+            if tool.get("type") == "namespace" and isinstance(tool.get("tools"), list):
+                for sub_tool in tool["tools"]:
+                    if isinstance(sub_tool, dict) and sub_tool.get("type") == "function" and isinstance(sub_tool.get("function"), dict):
+                        normalized_tools.append(self._normalize_function_tool(sub_tool))
                 continue
-
-            function = dict(tool["function"])
-            function.pop("strict", None)
-            normalized_tools.append({"type": "function", "function": function})
+            if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
+                continue
+            normalized_tools.append(self._normalize_function_tool(tool))
         return normalized_tools
+
+    @staticmethod
+    def _normalize_function_tool(tool: dict[str, Any]) -> dict[str, Any]:
+        function = dict(tool["function"])
+        function.pop("strict", None)
+        return {"type": "function", "function": function}
 
     def _debug_tool_calls(self, stage: str, payload: Any) -> None:
         if not self.debug_tool_calls:
