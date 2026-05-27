@@ -81,9 +81,12 @@ def create_responses_router(service: Any) -> APIRouter:
     async def responses(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         user_id = getattr(request.state, "user_id", None)
         api_key_id = getattr(request.state, "api_key_id", None)
-        stream = payload.get("stream", False)
+        normalized = dict(payload)
+        if "input_text" in normalized and "input" not in normalized:
+            normalized["input"] = normalized.pop("input_text")
+        stream = normalized.get("stream", False)
         if stream:
-            sync_gen = service.handle_streaming_responses(payload, user_id=user_id, api_key_id=api_key_id)
+            sync_gen = service.handle_streaming_responses(normalized, user_id=user_id, api_key_id=api_key_id)
             async_gen = _stream_with_keepalive(sync_gen)
             return StreamingResponse(
                 async_gen,
@@ -94,7 +97,7 @@ def create_responses_router(service: Any) -> APIRouter:
                     "X-Accel-Buffering": "no",
                 },
             )
-        return service.handle_responses(payload, user_id=user_id, api_key_id=api_key_id)
+        return service.handle_responses(normalized, user_id=user_id, api_key_id=api_key_id)
 
     @router.get("/v1/responses/{response_id}")
     def get_response(response_id: str) -> dict[str, Any]:
