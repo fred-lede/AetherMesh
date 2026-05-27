@@ -247,6 +247,11 @@ class OllamaAdapter(ProviderAdapter):
                 try:
                     body_str = json.dumps(body, ensure_ascii=False, default=str)
                     LOGGER.error("Ollama 400 payload (%d chars): %.4000s", len(body_str), body_str)
+                    import tempfile, os
+                    dump_path = os.path.join(tempfile.gettempdir(), "ollama_400_payload.json")
+                    with open(dump_path, "w") as f:
+                        f.write(body_str)
+                    LOGGER.error("Ollama 400 full payload dumped to %s (%d bytes)", dump_path, len(body_str))
                 except Exception as exc:
                     LOGGER.error("Ollama 400 (could not serialize body: %s)", exc)
 
