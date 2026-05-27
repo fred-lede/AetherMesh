@@ -26,6 +26,7 @@ from router.openai.rerank_adapter import create_rerank_route
 from router.files_router import router as files_router
 from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
 from router.skills_router import skills_router
+from runtime.skills.skill_registry import skill_registry
 
 logger = logging.getLogger("openai_router")
 
@@ -117,6 +118,32 @@ def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "router"}
+
+
+@app.get("/.well-known/ai-plugin.json")
+def ai_plugin_manifest() -> dict[str, Any]:
+    skills = skill_registry.list_skills()
+    return {
+        "schema_version": "v1",
+        "name_for_human": "AetherMesh Skills",
+        "name_for_model": "aethermesh_skills",
+        "description_for_human": "Built-in AetherMesh runtime skills including web search, file operations, code execution, and shell commands.",
+        "description_for_model": "Plugin providing AetherMesh runtime skills: web_search, web_fetch, code_interpreter, shell_commands, file_operations, plugin_manager.",
+        "auth": {"type": "none"},
+        "api": {"type": "openapi", "url": "/openapi.json", "is_user_authenticated": False},
+        "contact_email": "support@aethermesh.local",
+        "legal_info_url": "http://aethermesh.local/legal",
+        "skills": [_descriptor_to_dict(s) for s in skills],
+    }
+
+
+def _descriptor_to_dict(s: Any) -> dict[str, Any]:
+    return {
+        "name": s.name,
+        "description": s.description,
+        "capabilities": s.capabilities or [],
+        "parameters": s.parameters or {},
+    }
 
 
 @app.post("/v1/chat/completions")

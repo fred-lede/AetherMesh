@@ -88,6 +88,25 @@ async def _file_operations_handler(name: str, ctx: dict[str, Any]) -> str:
     return str(result.output)
 
 
+async def _plugin_manager_handler(name: str, ctx: dict[str, Any]) -> str:
+    action = ctx.get("params", {}).get("action", "list")
+    if action == "list":
+        skills = skill_registry.list()
+        plugin_skills = [s for s in skills if "plugin" in (s.capabilities or [])]
+        if not plugin_skills:
+            plugin_skills = skills
+        lines = [f"Available skills ({len(plugin_skills)} total):"]
+        for s in plugin_skills:
+            lines.append(f"  - {s.name}: {s.description}")
+        return "\n".join(lines)
+    if action == "help":
+        return (
+            "AetherMesh Skills System manages capabilities via /v1/skills. "
+            "Clients can list, query, and invoke skills at runtime."
+        )
+    return f"Unknown action: {action}"
+
+
 def register_builtin_skills() -> None:
     global _registered
     if _registered:
@@ -145,6 +164,24 @@ def register_builtin_skills() -> None:
                     "command": {"type": "string", "description": "Shell command to execute"},
                 },
                 "required": ["command"],
+            },
+        ),
+        SkillDescriptor(
+            name="plugin_manager",
+            description="Manage third-party plugins: list, install, and query available plugins",
+            capabilities=["plugin", "plugins"],
+            handler=_plugin_manager_handler,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "info", "help"],
+                        "description": "Plugin action to perform",
+                    },
+                    "name": {"type": "string", "description": "Plugin name (for info/help)"},
+                },
+                "required": ["action"],
             },
         ),
         SkillDescriptor(

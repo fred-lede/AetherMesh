@@ -163,7 +163,7 @@ class ToolCallNormalizer:
         name = item.get("name") or item.get("tool_name") or item.get("toolName")
         input_value = item.get("input", item.get("tool_args", item.get("arguments", {})))
         item_type = str(item.get("type", "")).replace("_", "").lower()
-        if name and (item_type in ("", "function", "tooluse") or "input" in item or "tool_args" in item):
+        if name and (item_type in ("", "function", "tooluse", "plugin") or "input" in item or "tool_args" in item):
             return [
                 NormalizedToolCall(
                     id=self._normalize_id(item.get("id"), index),

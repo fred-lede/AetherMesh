@@ -452,6 +452,24 @@ class OllamaAdapter(ProviderAdapter):
                     if isinstance(sub_tool, dict) and sub_tool.get("type") == "function" and isinstance(sub_tool.get("function"), dict):
                         normalized_tools.append(self._normalize_function_tool(sub_tool))
                 continue
+            if tool.get("type") in ("plugin", "integration") and isinstance(tool.get("tools"), list):
+                for sub_tool in tool["tools"]:
+                    if isinstance(sub_tool, dict) and sub_tool.get("type") == "function" and isinstance(sub_tool.get("function"), dict):
+                        normalized_tools.append(self._normalize_function_tool(sub_tool))
+                continue
+            if tool.get("type") in ("plugin", "integration") and isinstance(tool.get("function"), dict):
+                normalized_tools.append(self._normalize_function_tool(tool))
+                continue
+            if tool.get("type") in ("plugin", "integration") and tool.get("name"):
+                normalized_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": f"plugin_{tool['name']}",
+                        "description": f"Plugin: {tool.get('description', '')}",
+                        "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+                    },
+                })
+                continue
             if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
                 continue
             normalized_tools.append(self._normalize_function_tool(tool))

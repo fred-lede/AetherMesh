@@ -30,6 +30,7 @@ from runtime.multi_agent.routes import agent_router
 from runtime.tools.builtin.web_search import stream_web_server_tool_response
 from router.anthropic.messages_adapter import create_messages_routes
 from router.skills_router import skills_router
+from runtime.skills.skill_registry import skill_registry
 
 anthropic_service = AnthropicRouter()
 logger = logging.getLogger("anthropic_router")
@@ -84,6 +85,31 @@ def metrics_provider_diagnostics() -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "anthropic_router"}
+
+
+@app.get("/.well-known/ai-plugin.json")
+def ai_plugin_manifest() -> dict[str, Any]:
+    skills = skill_registry.list_skills()
+    return {
+        "schema_version": "v1",
+        "name_for_human": "AetherMesh Skills",
+        "name_for_model": "aethermesh_skills",
+        "description_for_human": "Built-in AetherMesh runtime skills including web search, file operations, code execution, and shell commands.",
+        "description_for_model": "Plugin providing AetherMesh runtime skills: web_search, web_fetch, code_interpreter, shell_commands, file_operations, plugin_manager.",
+        "auth": {"type": "none"},
+        "api": {"type": "openapi", "url": "/openapi.json", "is_user_authenticated": False},
+        "contact_email": "support@aethermesh.local",
+        "legal_info_url": "http://aethermesh.local/legal",
+        "skills": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "capabilities": s.capabilities or [],
+                "parameters": s.parameters or {},
+            }
+            for s in skills
+        ],
+    }
 
 
 @app.get("/v1/models")

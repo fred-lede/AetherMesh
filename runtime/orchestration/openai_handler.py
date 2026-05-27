@@ -1366,9 +1366,24 @@ class RouterService:
             if not isinstance(tool, dict):
                 normalized.append(tool)
                 continue
-            if tool.get("type") == "function" and "function" not in tool and "name" in tool:
+            tool_type = tool.get("type", "function")
+            if tool_type == "function" and "function" not in tool and "name" in tool:
                 fn_def = {k: v for k, v in tool.items() if k != "type"}
                 normalized.append({"type": "function", "function": fn_def})
+            elif tool_type in ("plugin", "integration"):
+                if isinstance(tool.get("tools"), list):
+                    for sub_tool in tool["tools"]:
+                        if isinstance(sub_tool, dict) and sub_tool.get("type") == "function" and isinstance(sub_tool.get("function"), dict):
+                            normalized.append(sub_tool)
+                elif tool.get("name"):
+                    normalized.append({
+                        "type": "function",
+                        "function": {
+                            "name": f"plugin_{tool['name']}",
+                            "description": f"Plugin: {tool.get('description', '')}",
+                            "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+                        },
+                    })
             else:
                 normalized.append(tool)
         return normalized
