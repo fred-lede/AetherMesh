@@ -158,14 +158,50 @@ class RouterService:
                 cleanup_mgr.track_current(fid)
         if self._is_async_requested(prepared_payload):
             return self._enqueue_async_task("/v1/chat/completions", prepared_payload)
+        if settings.debug_responses:
+            raw_tools = payload.get("tools", [])
+            if isinstance(raw_tools, list):
+                for t in raw_tools:
+                    logger.debug("handle_chat RAW tool from OpenCode: type=%s keys=%s",
+                        t.get("type", "?") if isinstance(t, dict) else "?",
+                        list(t.keys()) if isinstance(t, dict) else "?",
+                    )
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
         adapter = self._adapter(provider, worker)
+        if settings.debug_responses:
+            tools = effective_payload.get("tools", [])
+            if isinstance(tools, list):
+                for t in tools:
+                    fn = t.get("function", {}) if isinstance(t, dict) else {}
+                    logger.debug("handle_chat tool def: name=%s strict=%s params_keys=%s",
+                        fn.get("name", "?"),
+                        fn.get("strict"),
+                        list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else "?",
+                    )
         started = time.perf_counter()
         error = False
         error_code = ""
         try:
             response = adapter.chat(effective_payload)
+            if settings.debug_responses:
+                choices = response.get("choices", [])
+                if choices and isinstance(choices[0], dict):
+                    msg = choices[0].get("message", {})
+                    tcs = msg.get("tool_calls", [])
+                    logger.debug("handle_chat response: model=%s tools=%d finish=%s",
+                        response.get("model", "?"),
+                        len(tcs) if isinstance(tcs, list) else 0,
+                        choices[0].get("finish_reason", ""),
+                    )
+                    if isinstance(tcs, list):
+                        for tc in tcs:
+                            fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                            logger.debug("handle_chat tool_call: id=%s name=%s args=%s",
+                                tc.get("id", "?"),
+                                fn.get("name", "?"),
+                                fn.get("arguments", "?"),
+                            )
             usage = response.get("usage") or {}
             self._record_metrics(
                 model=effective_payload.get("model", ""),
