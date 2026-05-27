@@ -551,7 +551,7 @@ def test_streaming_tool_loop_no_tools():
     assert "response.created" in types
     assert "response.completed" in types
     completed = next(p for p in payloads if p["type"] == "response.completed")
-    assert completed.get("status") == "completed"
+    assert completed["response"]["status"] == "completed"
 
 
 def test_streaming_tool_loop_one_tool():
@@ -599,7 +599,7 @@ def test_streaming_tool_loop_one_tool():
     assert "response.function_call.output" in types
     assert "response.completed" in types
     completed = next(p for p in payloads if p["type"] == "response.completed")
-    assert completed.get("status") == "completed"
+    assert completed["response"]["status"] == "completed"
 
 
 def test_streaming_tool_loop_empty_choices():
@@ -627,8 +627,8 @@ def test_streaming_tool_loop_empty_choices():
 
     payloads = _payloads(events)
     completed = next(p for p in payloads if p["type"] == "response.completed")
-    assert completed.get("status") == "completed"
-    assert "survived" in completed.get("output_text", "")
+    assert completed["response"]["status"] == "completed"
+    assert "survived" in completed["response"].get("output_text", "")
 
 
 def test_tool_loop_empty_choices_run():

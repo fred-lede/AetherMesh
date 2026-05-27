@@ -948,7 +948,7 @@ class RouterService:
                         encoder=response_stream_encoder,
                     ):
                         yield sse_event
-                        if sse_event.startswith("event: response.completed"):
+                        if "response.completed" in sse_event:
                             import json
                             data_line = sse_event.split("data: ", 1)[-1].rstrip()
                             try:

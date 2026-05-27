@@ -441,7 +441,10 @@ class ResponsesToolLoop:
                         resp.output.append(make_text_output(completed_text))
                     yield encoder.encode({
                         "type": "response.completed",
-                        "data": resp.to_dict(),
+                        "data": {
+                            "type": "response.completed",
+                            "response": resp.to_dict(),
+                        },
                     })
                     yield encoder.encode_done()
                     return
