@@ -43,12 +43,9 @@ def _stream_with_keepalive(
         except q_module.Empty:
             keepalive_data = {
                 "type": "response.in_progress",
-                "data": {
-                    "type": "response.in_progress",
-                    "response": {"id": _response_id},
-                },
+                "response": {"id": _response_id},
             }
-            yield f"event: response.in_progress\ndata: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
             continue
         if item is _sentinel:
             logger.info("Keepalive reader sentinel received, total events: %d", _event_count)
@@ -56,15 +53,19 @@ def _stream_with_keepalive(
         if isinstance(item, BaseException):
             logger.error("Keepalive reader exception item: %s", item)
             raise item
-        if not _response_id and item.startswith("event: response.created"):
+        if not _response_id and "response.created" in item:
             try:
                 data_part = item.split("data: ", 1)[1].rstrip()
                 parsed = json.loads(data_part)
-                _response_id = parsed.get("data", {}).get("response", {}).get("id", "")
+                _response_id = parsed.get("response", {}).get("id", "")
                 logger.info("Captured response_id: %s", _response_id)
             except (IndexError, json.JSONDecodeError):
                 pass
-        event_type = item.split("\n")[0].replace("event: ", "") if item.startswith("event: ") else "data"
+        try:
+            data_json = item.split("data: ", 1)[1].rstrip()
+            event_type = json.loads(data_json).get("type", "?")
+        except (IndexError, json.JSONDecodeError):
+            event_type = "?"
         logger.debug("SSE event: %s (id=%s)", event_type, _response_id or "?")
         _event_count += 1
         yield item

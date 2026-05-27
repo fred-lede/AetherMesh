@@ -456,7 +456,7 @@ def test_wrap_streaming_chunks_completed_event_contains_output_text():
     completed = [
         json.loads(event.split("data: ", 1)[1])
         for event in events
-        if event.startswith("event: response.completed")
+        if event.startswith("data: ") and '"response.completed"' in event
     ][0]
 
     output = completed["response"]["output"]
@@ -466,7 +466,7 @@ def test_wrap_streaming_chunks_completed_event_contains_output_text():
     deltas = [
         json.loads(event.split("data: ", 1)[1])
         for event in events
-        if event.startswith("event: response.output_text.delta")
+        if event.startswith("data: ") and '"response.output_text.delta"' in event
     ]
     assert deltas[0]["item_id"].startswith("msg_")
     assert deltas[0]["output_index"] == 0
@@ -480,7 +480,7 @@ def test_wrap_streaming_chunks_emits_done_marker():
 
     events = list(wrap_streaming_chunks(chunks, response_id="resp_1", model="test-model"))
 
-    assert events[-1] == "event: response.done\ndata: [DONE]\n\n"
+    assert events[-1] == "data: [DONE]\n\n"
 
 
 # ── Unit Tests: Response Model Helpers ──────────────────────────────
