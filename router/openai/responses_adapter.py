@@ -45,7 +45,7 @@ def _stream_with_keepalive(
                 "type": "response.in_progress",
                 "response": {"id": _response_id},
             }
-            yield f"data: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
+            yield f"event: response.in_progress\ndata: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
             continue
         if item is _sentinel:
             logger.info("Keepalive reader sentinel received, total events: %d", _event_count)

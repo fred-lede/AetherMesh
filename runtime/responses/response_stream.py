@@ -18,13 +18,14 @@ class ResponseStreamEncoder:
     """Encode events as Codex-compatible SSE format: `data: {flat_json}\n\n`."""
 
     def encode(self, event: dict[str, Any]) -> str:
-        flat: dict[str, Any] = {"type": event.get("type", "event")}
+        event_type = event.get("type", "event")
         data = event.get("data", {})
+        flat: dict[str, Any] = {"type": event_type}
         if isinstance(data, dict):
             for k, v in data.items():
                 if k != "type":
                     flat[k] = v
-        return f"data: {json.dumps(flat, ensure_ascii=False, default=str)}\n\n"
+        return f"event: {event_type}\ndata: {json.dumps(flat, ensure_ascii=False, default=str)}\n\n"
 
     def encode_done(self) -> str:
         return "data: [DONE]\n\n"

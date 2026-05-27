@@ -453,21 +453,14 @@ def test_wrap_streaming_chunks_completed_event_contains_output_text():
     ]
 
     events = list(wrap_streaming_chunks(chunks, response_id="resp_1", model="test-model"))
-    completed = [
-        json.loads(event.split("data: ", 1)[1])
-        for event in events
-        if event.startswith("data: ") and '"response.completed"' in event
-    ][0]
+    payloads = _payloads(events)
+    completed = [p for p in payloads if p["type"] == "response.completed"][0]
 
     output = completed["response"]["output"]
     assert output[0]["content"][0]["text"] == "Hello world"
     assert completed["response"]["output_text"] == "Hello world"
 
-    deltas = [
-        json.loads(event.split("data: ", 1)[1])
-        for event in events
-        if event.startswith("data: ") and '"response.output_text.delta"' in event
-    ]
+    deltas = [p for p in payloads if p["type"] == "response.output_text.delta"]
     assert deltas[0]["item_id"].startswith("msg_")
     assert deltas[0]["output_index"] == 0
     assert deltas[0]["content_index"] == 0
