@@ -25,6 +25,7 @@ from router.openai.embeddings_adapter import create_embeddings_route
 from router.openai.rerank_adapter import create_rerank_route
 from router.files_router import router as files_router
 from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
+from router.skills_router import skills_router
 
 logger = logging.getLogger("openai_router")
 
@@ -65,6 +66,7 @@ async def _shutdown_file_cleanup() -> None:
 app.include_router(gpu_router)
 app.include_router(agent_router)
 app.include_router(files_router)
+app.include_router(skills_router)
 app.include_router(create_responses_router(service))
 
 
