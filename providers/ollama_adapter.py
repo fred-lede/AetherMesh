@@ -243,6 +243,13 @@ class OllamaAdapter(ProviderAdapter):
 
             self._circuit.record_failure()
 
+            if response.status_code == 400:
+                try:
+                    body_str = json.dumps(body, ensure_ascii=False, default=str)
+                    LOGGER.error("Ollama 400 payload (%d chars): %.4000s", len(body_str), body_str)
+                except Exception as exc:
+                    LOGGER.error("Ollama 400 (could not serialize body: %s)", exc)
+
             if response.status_code in {429, 500, 502, 503, 504}:
                 if attempt < attempts:
                     wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
