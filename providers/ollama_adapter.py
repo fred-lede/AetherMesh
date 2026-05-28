@@ -474,12 +474,20 @@ class OllamaAdapter(ProviderAdapter):
                 continue
             normalized_tools.append(self._normalize_function_tool(tool))
 
+        stripped_schema_count = 0
         for t in normalized_tools:
             fn = t.get("function")
             if isinstance(fn, dict):
                 params = fn.get("parameters")
-                if isinstance(params, dict):
+                if isinstance(params, dict) and "$schema" in params:
                     params.pop("$schema", None)
+                    stripped_schema_count += 1
+        if settings.debug_responses and stripped_schema_count:
+            LOGGER.info("_tools_for_ollama: stripped $schema from %d tool(s)", stripped_schema_count)
+            for ti, t in enumerate(normalized_tools[:3]):
+                fn = t.get("function", {})
+                keys = list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else []
+                LOGGER.info("_tools_for_ollama tool[%d]: name=%s params_keys=%s", ti, fn.get("name", "?"), keys)
         return normalized_tools
 
     @staticmethod
