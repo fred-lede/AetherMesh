@@ -782,7 +782,18 @@ class OllamaAdapter(ProviderAdapter):
                 argument_buffers,
             )
             if arguments_text is None:
+                if self.debug_tool_calls:
+                    self._debug_tool_calls(
+                        "stream.tool_call_dropped",
+                        {"call_id": call_id, "name": name, "reason": "arguments never formed valid JSON"},
+                    )
                 continue
+
+            if arguments_text == "{}" and self.debug_tool_calls:
+                self._debug_tool_calls(
+                    "stream.tool_call_empty_args",
+                    {"call_id": call_id, "name": name},
+                )
 
             normalized.append(
                 {

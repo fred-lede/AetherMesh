@@ -1519,6 +1519,8 @@ class RouterService:
                 if isinstance(parsed, (dict, list)):
                     fn["arguments"] = parsed
                 elif parsed is None:
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("_normalize_inbound_tool_calls: JSON parse failed, arguments=%r", arguments[:500])
                     fn["arguments"] = {}
                 else:
                     fn["arguments"] = {"value": parsed}

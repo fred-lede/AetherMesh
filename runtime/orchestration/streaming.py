@@ -6,6 +6,8 @@ import time
 import uuid
 from typing import Any, Iterable
 
+logger = logging.getLogger(__name__)
+
 from config.settings import settings
 from metrics.request_metrics import RequestRecord, request_metrics
 from protocols.anthropic.sse_builder import AnthropicSSEBuilder, map_stop_reason
