@@ -6,6 +6,7 @@ import time
 import uuid
 from typing import Any, Iterable
 
+from config.settings import settings
 from metrics.request_metrics import RequestRecord, request_metrics
 from protocols.anthropic.sse_builder import AnthropicSSEBuilder, map_stop_reason
 from runtime.memory import memory_manager
@@ -155,6 +156,12 @@ def stream_anthropic(
 
             elif content:
                 yield from sse.emit_text_delta(str(content))
+
+            if settings.debug_responses and tool_calls and isinstance(tool_calls, list):
+                for tci, tc in enumerate(tool_calls):
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                    logger.info("stream_anthropic tool_call[%s]: name=%s args=%s",
+                        tci, fn.get("name", "?"), fn.get("arguments", "?"))
 
             if tool_calls and isinstance(tool_calls, list):
                 normalized_text_calls = text_tool_call_objects
