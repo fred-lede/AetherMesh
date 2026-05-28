@@ -203,6 +203,22 @@ class AnthropicRouter:
         message = choice.get("message", {})
         content = message.get("content", "") or ""
         normalized_tool_calls = self.tool_call_normalizer.from_openai_tool_calls(message.get("tool_calls"))
+        if settings.debug_responses:
+            tcs = message.get("tool_calls") or []
+            if isinstance(tcs, list):
+                for tc in tcs:
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                    logger.debug("_to_anthropic_response RAW tool_call: id=%s name=%s args_type=%s args_len=%d",
+                        tc.get("id", "?"),
+                        fn.get("name", "?") if isinstance(fn, dict) else "?",
+                        type(fn.get("arguments", "")).__name__ if isinstance(fn, dict) else "?",
+                        len(str(fn.get("arguments", ""))) if isinstance(fn, dict) else 0,
+                    )
+            if normalized_tool_calls:
+                for nc in normalized_tool_calls:
+                    logger.debug("_to_anthropic_response NORMALIZED: id=%s name=%s input_keys=%s",
+                        nc.id, nc.name, list(nc.input.keys()) if isinstance(nc.input, dict) else "?",
+                    )
         if isinstance(content, str):
             thinking_text = message.get("reasoning") or message.get("reasoning_content")
             combined_calls = self.tool_call_normalizer.from_content_with_thinking(

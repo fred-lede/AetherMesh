@@ -106,6 +106,25 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
         payload, file_ids = _resolve_file_content_blocks(payload)
 
         openai_payload = anthropic_service._to_openai_payload(payload)
+        if settings.debug_responses:
+            raw_tools = payload.get("tools", [])
+            if isinstance(raw_tools, list):
+                for t in raw_tools:
+                    if isinstance(t, dict):
+                        logger.debug("Anthropic RAW tool: name=%s type=%s desc_len=%d",
+                            t.get("name", "?"), t.get("type", "?"),
+                            len(t.get("description", "") or ""),
+                        )
+            oai_tools = openai_payload.get("tools", [])
+            if isinstance(oai_tools, list):
+                for t in oai_tools:
+                    fn = t.get("function", {}) if isinstance(t, dict) else {}
+                    if isinstance(fn, dict):
+                        logger.debug("Anthropic->OpenAI tool: name=%s strict=%s params_keys=%s",
+                            fn.get("name", "?"), fn.get("strict"),
+                            list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else "?",
+                        )
+            logger.debug("allowed_tool_names: %s", sorted(allowed_tool_names) if allowed_tool_names else "NONE")
         openai_payload["model"] = anthropic_service._strip_model_prefix(model)
 
         required_caps = sorted(required_anthropic_capabilities(payload))
