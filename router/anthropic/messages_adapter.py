@@ -115,7 +115,7 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
                         tool.get("type", "?"),
                         len(tool.get("description", "") or ""),
                     )
-            openai_tools = converter._anthropic_tools_to_openai(tools_in)
+            openai_tools = anthropic_service._anthropic_tools_to_openai(tools_in)
             for ot in openai_tools[:3]:
                 fn = ot.get("function", {})
                 if isinstance(fn, dict):
