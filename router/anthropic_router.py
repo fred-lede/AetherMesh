@@ -18,6 +18,12 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from config.settings import settings
 
+logging.basicConfig(level=logging.INFO, force=True)
+logger0 = logging.getLogger("anthropic_router")
+logger0.info("AIIH_DEBUG_RESPONSES=%s debug_responses=%s",
+    os.environ.get("AIIH_DEBUG_RESPONSES", "NOT_SET"),
+    settings.debug_responses,
+)
 if settings.debug_responses:
     logging.getLogger().setLevel(logging.INFO)
 from metrics.request_metrics import RequestRecord, request_metrics
