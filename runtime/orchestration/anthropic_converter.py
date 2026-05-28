@@ -208,16 +208,15 @@ class AnthropicRouter:
             if isinstance(tcs, list):
                 for tc in tcs:
                     fn = tc.get("function", {}) if isinstance(tc, dict) else {}
-                    logger.debug("_to_anthropic_response RAW tool_call: id=%s name=%s args_type=%s args_len=%d",
+                    logger.info("_to_anthropic_response RAW tool_call: id=%s name=%s args=%s",
                         tc.get("id", "?"),
                         fn.get("name", "?") if isinstance(fn, dict) else "?",
-                        type(fn.get("arguments", "")).__name__ if isinstance(fn, dict) else "?",
-                        len(str(fn.get("arguments", ""))) if isinstance(fn, dict) else 0,
+                        fn.get("arguments", "?") if isinstance(fn, dict) else "?",
                     )
             if normalized_tool_calls:
                 for nc in normalized_tool_calls:
-                    logger.debug("_to_anthropic_response NORMALIZED: id=%s name=%s input_keys=%s",
-                        nc.id, nc.name, list(nc.input.keys()) if isinstance(nc.input, dict) else "?",
+                    logger.info("_to_anthropic_response NORMALIZED: id=%s name=%s input=%s",
+                        nc.id, nc.name, nc.input,
                     )
         if isinstance(content, str):
             thinking_text = message.get("reasoning") or message.get("reasoning_content")

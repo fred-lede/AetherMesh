@@ -107,24 +107,24 @@ def create_messages_routes(app, anthropic_service: AnthropicRouter):
 
         openai_payload = anthropic_service._to_openai_payload(payload)
         if settings.debug_responses:
-            raw_tools = payload.get("tools", [])
-            if isinstance(raw_tools, list):
-                for t in raw_tools:
-                    if isinstance(t, dict):
-                        logger.debug("Anthropic RAW tool: name=%s type=%s desc_len=%d",
-                            t.get("name", "?"), t.get("type", "?"),
-                            len(t.get("description", "") or ""),
-                        )
-            oai_tools = openai_payload.get("tools", [])
-            if isinstance(oai_tools, list):
-                for t in oai_tools:
-                    fn = t.get("function", {}) if isinstance(t, dict) else {}
-                    if isinstance(fn, dict):
-                        logger.debug("Anthropic->OpenAI tool: name=%s strict=%s params_keys=%s",
-                            fn.get("name", "?"), fn.get("strict"),
-                            list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else "?",
-                        )
-            logger.debug("allowed_tool_names: %s", sorted(allowed_tool_names) if allowed_tool_names else "NONE")
+            tools_in = payload.get("tools") or []
+            for tool in tools_in[:3]:
+                if isinstance(tool, dict):
+                    logger.info("Anthropic RAW tool: name=%s type=%s desc_len=%d",
+                        tool.get("name", "?"),
+                        tool.get("type", "?"),
+                        len(tool.get("description", "") or ""),
+                    )
+            openai_tools = converter._anthropic_tools_to_openai(tools_in)
+            for ot in openai_tools[:3]:
+                fn = ot.get("function", {})
+                if isinstance(fn, dict):
+                    logger.info("Anthropic->OpenAI tool: name=%s strict=%s params_keys=%s",
+                        fn.get("name", "?"),
+                        fn.get("strict", "NOT_SET"),
+                        list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else "?",
+                    )
+            logger.info("allowed_tool_names: %s", sorted(allowed_tool_names) if allowed_tool_names else "NONE")
         openai_payload["model"] = anthropic_service._strip_model_prefix(model)
 
         required_caps = sorted(required_anthropic_capabilities(payload))

@@ -162,7 +162,7 @@ class RouterService:
             raw_tools = payload.get("tools", [])
             if isinstance(raw_tools, list):
                 for t in raw_tools:
-                    logger.debug("handle_chat RAW tool from OpenCode: type=%s keys=%s",
+                    logger.info("handle_chat RAW tool from OpenCode: type=%s keys=%s",
                         t.get("type", "?") if isinstance(t, dict) else "?",
                         list(t.keys()) if isinstance(t, dict) else "?",
                     )
@@ -174,7 +174,7 @@ class RouterService:
             if isinstance(tools, list):
                 for t in tools:
                     fn = t.get("function", {}) if isinstance(t, dict) else {}
-                    logger.debug("handle_chat tool def: name=%s strict=%s params_keys=%s",
+                    logger.info("handle_chat tool def: name=%s strict=%s params_keys=%s",
                         fn.get("name", "?"),
                         fn.get("strict"),
                         list(fn.get("parameters", {}).keys()) if isinstance(fn.get("parameters"), dict) else "?",
@@ -189,7 +189,7 @@ class RouterService:
                 if choices and isinstance(choices[0], dict):
                     msg = choices[0].get("message", {})
                     tcs = msg.get("tool_calls", [])
-                    logger.debug("handle_chat response: model=%s tools=%d finish=%s",
+                    logger.info("handle_chat response: model=%s tools=%d finish=%s",
                         response.get("model", "?"),
                         len(tcs) if isinstance(tcs, list) else 0,
                         choices[0].get("finish_reason", ""),
@@ -197,7 +197,7 @@ class RouterService:
                     if isinstance(tcs, list):
                         for tc in tcs:
                             fn = tc.get("function", {}) if isinstance(tc, dict) else {}
-                            logger.debug("handle_chat tool_call: id=%s name=%s args=%s",
+                            logger.info("handle_chat tool_call: id=%s name=%s args=%s",
                                 tc.get("id", "?"),
                                 fn.get("name", "?"),
                                 fn.get("arguments", "?"),
