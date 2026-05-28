@@ -14,6 +14,9 @@ from fastapi.responses import JSONResponse
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 from config.settings import settings
+
+if settings.debug_responses:
+    logging.getLogger().setLevel(logging.INFO)
 from runtime.orchestration.openai_handler import RouterService
 from runtime.security.middleware import add_security_middleware
 from runtime.gpu_os.routes import gpu_router

@@ -17,6 +17,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from config.settings import settings
+
+if settings.debug_responses:
+    logging.getLogger().setLevel(logging.INFO)
 from metrics.request_metrics import RequestRecord, request_metrics
 from providers.base import ProviderError
 from runtime.orchestration.anthropic_converter import AnthropicRouter
