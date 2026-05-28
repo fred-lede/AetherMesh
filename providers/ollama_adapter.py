@@ -473,6 +473,13 @@ class OllamaAdapter(ProviderAdapter):
             if tool.get("type") != "function" or not isinstance(tool.get("function"), dict):
                 continue
             normalized_tools.append(self._normalize_function_tool(tool))
+
+        for t in normalized_tools:
+            fn = t.get("function")
+            if isinstance(fn, dict):
+                params = fn.get("parameters")
+                if isinstance(params, dict):
+                    params.pop("$schema", None)
         return normalized_tools
 
     @staticmethod
