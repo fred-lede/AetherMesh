@@ -60,6 +60,7 @@ pytest tests/test_orchestration.py -x -v -k "memory"
 - `AgentLoop` rewritten as functional DAG executor with 4 async handlers (`llm_call`, `tool_call`, `conditional`, `agent_call`).
 - Fixed: Settings `.get()` → attribute access, NVIDIA NIM tool format, SSE Chinese escaping, model prefix routing, Ollama `tool_choice`, worker leak, streaming tool loop (double call, dropped events, missing SSE events).
 - Fixed: `from_content_with_thinking()` in non-streaming Anthropic path, dead code removal, metadata passthrough, empty choices guard, max_turns data loss, Gemini fake → real streaming, Gemini tool call parsing.
+- Fixed: Auth bypass for `/api/metrics/` paths (401 on localhost metrics endpoints). `/health`, `/docs`, `/openapi.json`, `/.well-known/` also bypass auth now.
 - Fixed: Python 3.14 `UnboundLocalError` in `tool_executor.py` (removed `import asyncio.tasks` inside function body).
 - Execution Environment Abstraction: 5 commits — `SandboxProfile`, `PlatformSandbox` ABC, `MacSandbox`, `LinuxSandbox`, `SandboxManager` + ToolExecutor/Settings integration. 21 new tests.
 - 6 new E2E tests for streaming tool loop, 5 for AgentLoop, 2 for memory wiring.
