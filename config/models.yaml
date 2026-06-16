@@ -6,6 +6,20 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools, vision, audio]
+
+  - name: qwen3.6:27b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, thinking, tools, vision]
+
+  - name: gemma4:31b-it-qat
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, thinking, tools, vision, audio]
     
   - name: gemma4:31b
     provider: ollama
@@ -15,13 +29,6 @@ models:
     capabilities: [chat, thinking, tools, vision, audio]
 
   - name: qwen3.6:35b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision]
-
-  - name: qwen3.5:27b
     provider: ollama
     worker_bindings:
       - node_id: node-01
@@ -43,6 +50,17 @@ models:
     capabilities: [chat, thinking, tools]
 
   # ── RTX 4070 Ti SUPER (16GB, tier A) — vision / specialist ──
+  - name: gemma4:12b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
+    
   - name: gemma4:e4b
     provider: ollama
     worker_bindings:
@@ -68,13 +86,6 @@ models:
         port: 11435
     capabilities: [tools, vision]
 
-  - name: gemma3:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, vision]
-
   - name: translategemma:12b
     provider: ollama
     worker_bindings:
@@ -98,6 +109,28 @@ models:
     capabilities: [chat, thinking, tools, vision]
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
+  - name: gemma4:31b-it-qat
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, thinking, tools, vision]
+    
+  - name: gemma4:12b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, thinking, tools, vision]
+
   - name: qwen3.5:9b
     provider: ollama
     worker_bindings:
@@ -148,7 +181,7 @@ models:
     worker_ports: []
     capabilities: [chat, responses, embeddings, tools]
 
-  - name: gemini-2.0-flash
+  - name: gemini-3.5-flash
     provider: gemini
     worker_ports: []
     capabilities: [chat, responses, embeddings, tools]

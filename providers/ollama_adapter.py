@@ -200,16 +200,20 @@ class OllamaAdapter(ProviderAdapter):
         base_delay = 1.0
         last_response: requests.Response | None = None
         last_error: str | None = None
+        timeout = settings.request_timeout_s
+        if stream:
+            timeout = (settings.request_timeout_s, 30)
 
         for attempt in range(1, attempts + 1):
             try:
                 response = get_session().post(
                     f"{self.base_url}/api/chat",
                     json=body,
-                    timeout=settings.request_timeout_s,
+                    timeout=timeout,
                     stream=stream,
                 )
             except requests.exceptions.Timeout:
+                self._circuit.record_failure()
                 if attempt < attempts:
                     wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
                     LOGGER.warning("Ollama timeout attempt %s/%s, retry in %.2fs", attempt, attempts, wait_time)
@@ -218,6 +222,7 @@ class OllamaAdapter(ProviderAdapter):
                 raise ProviderError(f"Ollama timeout after {attempts} attempts", status_code=504, code="provider_timeout")
 
             except requests.exceptions.ConnectionError as e:
+                self._circuit.record_failure()
                 last_error = f"connection_error: {e}"
                 if attempt < attempts:
                     wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)
@@ -227,6 +232,7 @@ class OllamaAdapter(ProviderAdapter):
                 raise ProviderError(f"Ollama unreachable after {attempts} attempts: {e}", status_code=502, code="provider_unreachable")
 
             except requests.exceptions.RequestException as e:
+                self._circuit.record_failure()
                 last_error = f"request_error: {e}"
                 if attempt < attempts:
                     wait_time = min(base_delay * (2 ** (attempt - 1)) + (attempt * 0.1), 30)

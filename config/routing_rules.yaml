@@ -17,8 +17,8 @@ model_aliases:
     qwen3-coder-480b: qwen3-coder:480b
     qwen3-vl-235b: qwen3-vl:235b
     # Claude tier → local model mapping
-    claude-sonnet-4-20250514: qwen3.6:35b      # Opus tier — strongest reasoning(5090)
-    claude-sonnet-4-6: gemma4:31b               # Sonnet tier — balanced all-round(5090)
+    claude-sonnet-4-20250514: qwen3.6:27b      # Opus tier — strongest reasoning(5090)
+    claude-sonnet-4-6: gemma4:26b               # Sonnet tier — balanced all-round(5090)
     claude-3-5-haiku-20241022: gemma4:e4b       # Haiku tier — fast & light (4070)
 
 fallback:

@@ -64,6 +64,9 @@ dump.rdb
 appendonly.aof
 config/routing_audit.jsonl
 config/routing_state.yaml
+/routing_audit.jsonl
+/routing_state.yaml
+/curl/
 
 ############################
 # Environment / secrets

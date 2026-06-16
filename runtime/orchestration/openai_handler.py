@@ -424,6 +424,7 @@ class RouterService:
                                     "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
                                 }
                             }
+                        yield "[DONE]"
                         return
                 error_type = "rate_limit_error" if getattr(exc, "status_code", None) == 429 else "provider_error"
                 payload_err = {"message": str(exc), "type": error_type, "code": error_code}
@@ -440,6 +441,7 @@ class RouterService:
                     error=str(exc)[:200],
                 )
                 yield {"error": payload_err}
+                yield "[DONE]"
             except requests.Timeout as exc:
                 error = True
                 error_code = "provider_timeout"
@@ -481,6 +483,7 @@ class RouterService:
                                     "code": getattr(fallback_exc, "code", "") or self._classify_error_text(str(fallback_exc)),
                                 }
                             }
+                        yield "[DONE]"
                         return
                 self._record_metrics(
                     model=state["payload"].get("model", ""),
@@ -492,6 +495,7 @@ class RouterService:
                     error=str(exc)[:200],
                 )
                 yield {"error": {"message": str(exc), "type": "provider_timeout", "code": error_code}}
+                yield "[DONE]"
             except requests.RequestException as exc:
                 error = True
                 error_code = "provider_unreachable"
@@ -505,6 +509,7 @@ class RouterService:
                     error=str(exc)[:200],
                 )
                 yield {"error": {"message": str(exc), "type": "provider_unreachable", "code": error_code}}
+                yield "[DONE]"
             finally:
                 self._finalize_request(
                     endpoint="/v1/chat/completions",
