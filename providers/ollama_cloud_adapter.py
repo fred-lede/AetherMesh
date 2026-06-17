@@ -83,6 +83,7 @@ class OllamaCloudAdapter(ProviderAdapter):
             timeout=settings.request_timeout_s,
             stream=True,
         )
+        self._stream_response = response
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         model = payload.get("model", "unknown")
@@ -196,6 +197,15 @@ class OllamaCloudAdapter(ProviderAdapter):
         )
         response.encoding = "utf-8"
         return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
+
+    def abort_stream(self) -> None:
+        resp = getattr(self, "_stream_response", None)
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            self._stream_response = None
 
     def _headers(self) -> dict[str, str]:
         return {

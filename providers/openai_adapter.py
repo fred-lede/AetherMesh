@@ -38,6 +38,7 @@ class OpenAIAdapter(ProviderAdapter):
             timeout=settings.request_timeout_s,
             stream=True,
         )
+        self._stream_response = response
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
                 continue
@@ -61,6 +62,15 @@ class OpenAIAdapter(ProviderAdapter):
     def health_check(self) -> dict[str, Any]:
         response = get_session().get(f"{self.base_url}/models", headers=self._headers(), timeout=5)
         return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
+
+    def abort_stream(self) -> None:
+        resp = getattr(self, "_stream_response", None)
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            self._stream_response = None
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = post_with_retry(

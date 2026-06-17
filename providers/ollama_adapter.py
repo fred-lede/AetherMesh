@@ -86,6 +86,7 @@ class OllamaAdapter(ProviderAdapter):
         response.encoding = "utf-8"
         if not response.ok:
             raise ProviderError(response.text)
+        self._stream_response = response
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         model = payload.get("model", "unknown")
@@ -346,6 +347,15 @@ class OllamaAdapter(ProviderAdapter):
         response = get_session().get(f"{self.base_url}/api/tags", timeout=5)
         response.encoding = "utf-8"
         return {"ok": response.ok, "status_code": response.status_code, "base_url": self.base_url}
+
+    def abort_stream(self) -> None:
+        resp = getattr(self, "_stream_response", None)
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            self._stream_response = None
 
     def _chat_payload(self, payload: dict[str, Any], *, stream: bool) -> dict[str, Any]:
         body: dict[str, Any] = {

@@ -178,7 +178,7 @@ def test_memory_wiring_streaming(monkeypatch) -> None:
     try:
         result = list(service.handle_streaming_chat(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}], "stream": True}
-        ))
+        ).iterator)
     except Exception:
         pass
     assert len(records) > 0, "memory_manager.episodic.record was never called in streaming path"

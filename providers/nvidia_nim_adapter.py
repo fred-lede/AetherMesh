@@ -77,6 +77,7 @@ class NvidiaNIMAdapter(ProviderAdapter):
         body = self._strip_prefix(payload)
         body["stream"] = True
         response = self._post_with_retry("/chat/completions", body, stream=True)
+        self._stream_response = response
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
                 continue
@@ -102,6 +103,15 @@ class NvidiaNIMAdapter(ProviderAdapter):
         self._wait_for_turn()
         response = self._session.get(f"{self.base_url}/models", headers=self._headers(), timeout=15)
         return {"ok": response.ok, "status_code": response.status_code, "provider": self.provider_name}
+
+    def abort_stream(self) -> None:
+        resp = getattr(self, "_stream_response", None)
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            self._stream_response = None
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._post_with_retry(path, payload, stream=False)

@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 import requests
@@ -66,6 +67,12 @@ def _resolve_file_ids_in_payload(payload: dict[str, Any]) -> tuple[dict[str, Any
                 new_content.append(block)
         msg["content"] = new_content
     return payload, file_ids
+
+
+@dataclass
+class StreamResult:
+    iterator: Iterable[dict[str, Any] | str]
+    adapter: Any = None
 
 
 class RouterService:
@@ -166,7 +173,7 @@ class RouterService:
                         t.get("type", "?") if isinstance(t, dict) else "?",
                         list(t.keys()) if isinstance(t, dict) else "?",
                     )
-        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=True)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
         adapter = self._adapter(provider, worker)
         if settings.debug_responses:
@@ -358,7 +365,7 @@ class RouterService:
             if file_ids:
                 get_file_cleanup_manager().cleanup_request(request_id)
 
-    def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[dict[str, Any] | str]:
+    def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> StreamResult:
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         prepared_payload, file_ids = _resolve_file_ids_in_payload(prepared_payload)
@@ -368,7 +375,7 @@ class RouterService:
             cleanup_mgr.set_current_request(request_id)
             for fid in file_ids:
                 cleanup_mgr.track_current(fid)
-        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=True)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
         adapter = self._adapter(provider, worker)
         started = time.perf_counter()
@@ -542,7 +549,7 @@ class RouterService:
                         success=True,
                     )
 
-        return wrapped()
+        return StreamResult(iterator=wrapped(), adapter=adapter)
 
 
     def handle_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
@@ -580,7 +587,7 @@ class RouterService:
         chat_payload.pop("store", None)
         chat_payload.pop("stream", None)
 
-        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=True)
         self._trace_responses(
             "route_selected",
             response_id=response_id,
@@ -875,7 +882,7 @@ class RouterService:
         chat_payload.pop("store", None)
         chat_payload.pop("stream", None)
 
-        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=True)
         effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
         started = time.perf_counter()
         self._trace_responses(
@@ -1096,7 +1103,7 @@ class RouterService:
     def handle_embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self._is_async_requested(payload):
             return self._enqueue_async_task("/v1/embeddings", payload)
-        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=True)
         adapter = self._adapter(provider, worker)
         started = time.perf_counter()
         error = False
@@ -1129,7 +1136,7 @@ class RouterService:
     def handle_rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self._is_async_requested(payload):
             return self._enqueue_async_task("/v1/rerank", payload)
-        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=False)
+        provider, worker = self._resolve_provider_and_worker(payload, allow_queue=True)
         adapter = self._adapter(provider, worker)
         started = time.perf_counter()
         error = False
@@ -1314,73 +1321,85 @@ class RouterService:
         try_models.extend(fallbacks)
         try_models = self._prioritize_warm_models(try_models)
 
-        last_error_resp = None
+        deadline = time.monotonic() + settings.queue_timeout_s if allow_queue else 0
+        retry_count = 0
 
-        for current_model in try_models:
-            provider = (payload.get("provider") or provider_for_model(current_model, self.registry)).lower()
-            if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
-                if current_model == original_model:
-                    return provider, None
+        while True:
+            last_error_resp = None
+
+            for current_model in try_models:
+                provider = (payload.get("provider") or provider_for_model(current_model, self.registry)).lower()
+                if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
+                    if current_model == original_model:
+                        return provider, None
+                    continue
+
+                try:
+                    response = get_session().post(
+                        f"{settings.control_plane_url}/cluster/dispatch",
+                        json={
+                            "model": current_model,
+                            "provider": provider,
+                            "allow_queue": False,
+                            "task_payload": payload,
+                        },
+                        timeout=10,
+                    )
+
+                    if response.status_code == 200:
+                        dispatch = response.json()
+                        if dispatch.get("status") == "assigned":
+                            payload["model"] = current_model
+                            worker = dict(dispatch["worker"])
+                            if dispatch.get("assignment_id"):
+                                worker["assignment_id"] = dispatch["assignment_id"]
+                            return provider, worker
+                        else:
+                            last_error_resp = response
+                    elif response.status_code in {429, 503}:
+                        last_error_resp = response
+                    else:
+                        raise self._as_http_error(status_code=502, code="control_plane_error", message=response.text)
+
+                except requests.RequestException as exc:
+                    last_error_resp = exc
+                    if current_model == original_model:
+                        pass
+
+            if allow_queue and time.monotonic() < deadline:
+                backoff = min(30, 2 ** retry_count)
+                retry_count += 1
+                time.sleep(backoff)
                 continue
 
-            try:
-                response = get_session().post(
-                    f"{settings.control_plane_url}/cluster/dispatch",
-                    json={
-                        "model": current_model,
-                        "provider": provider,
-                        "allow_queue": allow_queue,
-                        "task_payload": payload,
-                    },
-                    timeout=10,
-                )
-
-                if response.status_code == 200:
-                    dispatch = response.json()
-                    if dispatch.get("status") == "assigned":
-                        payload["model"] = current_model
-                        worker = dict(dispatch["worker"])
-                        if dispatch.get("assignment_id"):
-                            worker["assignment_id"] = dispatch["assignment_id"]
-                        return provider, worker
+            if isinstance(last_error_resp, requests.Response):
+                status = last_error_resp.status_code
+                if status == 429:
+                    detail = last_error_resp.json().get("detail", {})
+                    retry_after = 3
+                    if isinstance(detail, dict):
+                        message = str(detail.get("message", "All matching workers are at queue capacity."))
+                        retry_after = int(detail.get("retry_after", retry_after) or retry_after)
                     else:
-                        last_error_resp = response
-                elif response.status_code in {429, 503}:
-                    last_error_resp = response
-                else:
-                    raise self._as_http_error(status_code=502, code="control_plane_error", message=response.text)
+                        message = str(detail or "All matching workers are at queue capacity.")
+                    raise HTTPException(
+                        status_code=429,
+                        detail={"code": "worker_queue_full", "message": message, "retry_after": retry_after},
+                        headers={"Retry-After": str(retry_after)},
+                    )
+                if status == 503:
+                    message = last_error_resp.json().get("detail", "No worker available.")
+                    if isinstance(message, dict):
+                        message = str(message.get("message", "No worker available."))
+                    if allow_queue:
+                        message = f"{message} (queued {settings.queue_timeout_s}s, timed out)"
+                    raise self._as_http_error(status_code=503, code="worker_unavailable", message=str(message))
+                raise self._as_http_error(status_code=502, code="control_plane_error", message=last_error_resp.text)
 
-            except requests.RequestException as exc:
-                last_error_resp = exc
-                if current_model == original_model:
-                    pass
+            elif isinstance(last_error_resp, Exception):
+                raise self._as_http_error(status_code=503, code="provider_unreachable", message=str(last_error_resp))
 
-        if isinstance(last_error_resp, requests.Response):
-            status = last_error_resp.status_code
-            if status == 429:
-                detail = last_error_resp.json().get("detail", {})
-                retry_after = 3
-                if isinstance(detail, dict):
-                    message = str(detail.get("message", "All matching workers are at queue capacity."))
-                    retry_after = int(detail.get("retry_after", retry_after) or retry_after)
-                else:
-                    message = str(detail or "All matching workers are at queue capacity.")
-                raise HTTPException(
-                    status_code=429,
-                    detail={"code": "worker_queue_full", "message": message, "retry_after": retry_after},
-                    headers={"Retry-After": str(retry_after)},
-                )
-            if status == 503:
-                message = last_error_resp.json().get("detail", "No worker available.")
-                if isinstance(message, dict):
-                    message = str(message.get("message", "No worker available."))
-                raise self._as_http_error(status_code=503, code="worker_unavailable", message=str(message))
-            raise self._as_http_error(status_code=502, code="control_plane_error", message=last_error_resp.text)
-
-        elif isinstance(last_error_resp, Exception):
-            raise self._as_http_error(status_code=503, code="provider_unreachable", message=str(last_error_resp))
-
-        raise self._as_http_error(status_code=503, code="worker_unavailable", message="No suitable worker found in fallback chain.")
+            raise self._as_http_error(status_code=503, code="worker_unavailable", message="No suitable worker found in fallback chain.")
 
     def _adapter(self, provider: str, worker: dict[str, Any] | None):
         return adapter(provider, worker)

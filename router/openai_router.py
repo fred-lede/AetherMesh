@@ -150,8 +150,8 @@ def _descriptor_to_dict(s: Any) -> dict[str, Any]:
 
 
 @app.post("/v1/chat/completions")
-def chat_completions(request: Request, payload: dict[str, Any] = Body(...)):
-    return create_chat_completions_route(service)(request, payload)
+async def chat_completions(request: Request, payload: dict[str, Any] = Body(...)):
+    return await create_chat_completions_route(service)(request, payload)
 
 
 @app.post("/v1/rerank")
