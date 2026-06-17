@@ -443,11 +443,12 @@ def test_set_provider_failure_sets_cooldown_for_cloud() -> None:
     assert engine._provider_cooldown_reason.get("openai") == "busy"
 
 
-def test_set_provider_failure_no_cooldown_for_ollama() -> None:
+def test_set_provider_failure_sets_cooldown_for_ollama() -> None:
     engine = ModelRoutingEngine()
     engine.set_provider_failure("ollama", code="provider_overloaded", message="busy", cooldown_s=10)
     assert engine._provider_health.get("ollama") is False
-    assert "ollama" not in engine._provider_cooldown_until
+    assert engine._provider_cooldown_until.get("ollama", 0) > 0
+    assert engine._provider_cooldown_reason.get("ollama") == "busy"
 
 
 def test_set_provider_latency() -> None:

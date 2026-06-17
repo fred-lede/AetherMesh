@@ -86,7 +86,7 @@ class Settings:
         default_factory=lambda: _env_csv("AIIH_TASK_PRUNE_STATUSES", "completed,failed")
     )
     # Rate limiting (per IP)
-    rate_limit_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_RATE_LIMIT_ENABLED", "false"))
+    rate_limit_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_RATE_LIMIT_ENABLED", "true"))
     rate_limit_per_minute: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_PER_MINUTE", 60))
     rate_limit_burst: int = field(default_factory=lambda: _env_int("AIIH_RATE_LIMIT_BURST", 10))
     ssl_certfile: str = field(default_factory=lambda: os.getenv("AIIH_SSL_CERTFILE", "").strip())

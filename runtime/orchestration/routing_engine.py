@@ -158,8 +158,6 @@ class ModelRoutingEngine:
     ) -> None:
         with self._lock:
             self._provider_health[provider] = False
-            if provider not in CLOUD_PROVIDERS:
-                return
             cooldown_codes = {
                 "model_not_found",
                 "provider_overloaded",
