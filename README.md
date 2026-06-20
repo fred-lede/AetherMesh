@@ -423,6 +423,8 @@ When a selected local Ollama worker has an open circuit, streaming Responses
 reroutes to another local worker that supports the same required capabilities
 before emitting SSE output. The same pre-stream reroute applies to OpenAI
 chat-completions streaming clients such as Codex.
+Client-supplied Responses function tools are returned as function-call events
+for the client to execute; AetherMesh does not run them as server-side tools.
 
 ### Embeddings API
 

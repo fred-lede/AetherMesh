@@ -180,26 +180,23 @@ class ResponsesToolLoop:
         如果 model 回傳 require_action (tool calls but client 未提供 tools),
         第二個值會是 require_action dict。
         """
-        temp_tool_ids: list[str] = []
+        messages = self._build_messages(input_value, instructions)
+        payload = dict(chat_payload)
+        payload["messages"] = messages
         if tools:
-            temp_tool_ids = self._register_temp_tools(tools)
+            payload["tools"] = tools
 
-        try:
-            response = self.run(
-                adapter=adapter,
-                chat_payload=chat_payload,
-                tools=tools,
-                instructions=instructions,
-                response_id=response_id,
-                model=model,
-                previous_response_id=previous_response_id,
-                metadata=metadata,
-                input_value=input_value,
-            )
-            return response, None
-        finally:
-            for tid in temp_tool_ids:
-                self._registry.unregister(tid)
+        completion = adapter.chat(payload)
+        response = chat_completion_to_response(
+            completion,
+            model,
+            response_id,
+            instructions,
+            previous_response_id,
+            metadata,
+        )
+        response.status = ResponseStatus.COMPLETED
+        return response, None
 
     def run_streaming(
         self,

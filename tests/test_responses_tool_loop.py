@@ -476,6 +476,27 @@ def test_wrap_streaming_chunks_emits_done_marker():
     assert events[-1] == "data: [DONE]\n\n"
 
 
+def test_wrap_streaming_chunks_returns_client_function_call():
+    chunks = [{
+        "choices": [{
+            "delta": {
+                "tool_calls": [{
+                    "index": 0,
+                    "id": "call_1",
+                    "function": {"name": "list_files", "arguments": "{}"},
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }],
+    }]
+
+    payloads = _payloads(list(wrap_streaming_chunks(chunks, response_id="resp_1", model="test-model")))
+
+    assert any(p["type"] == "response.function_call_arguments.delta" for p in payloads)
+    completed = next(p for p in payloads if p["type"] == "response.completed")
+    assert completed["response"]["output"][0]["name"] == "list_files"
+
+
 # ── Unit Tests: Response Model Helpers ──────────────────────────────
 
 def test_make_function_call_output_model():

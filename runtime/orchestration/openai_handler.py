@@ -686,7 +686,7 @@ class RouterService:
                             max_turns=max_turns,
                             parallel_tool_calls=parallel_tool_calls,
                         )
-                    response_object = loop.run(
+                    response_object, _ = loop.run_with_client_tools(
                         adapter=adapter_instance,
                         chat_payload=effective_payload,
                         tools=tools,
@@ -697,7 +697,7 @@ class RouterService:
                         metadata=metadata,
                         input_value=input_value,
                     )
-                    usage = getattr(response_object, "usage", None) or {}
+                    usage = self._usage_dict(getattr(response_object, "usage", None))
                     self._record_metrics(
                         model=model,
                         provider=provider,
@@ -1006,80 +1006,14 @@ class RouterService:
                             effective_payload=effective_payload,
                         )
                 if tools:
-                    from runtime.responses.tool_loop import responses_tool_loop
-                    loop = responses_tool_loop
-                    max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
-                    parallel_tool_calls = payload.get("parallel_tool_calls", True)
-                    if max_turns != loop._max_turns or parallel_tool_calls != loop._parallel_tool_calls:
-                        from runtime.responses.tool_loop import ResponsesToolLoop, DEFAULT_MAX_TURNS, DEFAULT_TOOL_TIMEOUT_S
-                        loop = ResponsesToolLoop(
-                            max_turns=max_turns,
-                            parallel_tool_calls=parallel_tool_calls,
-                        )
-                    completed_response_data: list[dict[str, Any]] = []
-                    for sse_event in loop.run_streaming(
-                        adapter=adapter_instance,
-                        chat_payload=outer_state["payload"],
-                        tools=tools,
-                        instructions=instructions,
-                        response_id=response_id,
-                        model=model,
-                        previous_response_id=previous_response_id,
-                        metadata=metadata,
-                        input_value=input_value,
-                        encoder=response_stream_encoder,
-                    ):
-                        yield sse_event
-                        if "response.completed" in sse_event:
-                            import json
-                            data_line = sse_event.split("data: ", 1)[-1].rstrip()
-                            try:
-                                completed_response_data.append(json.loads(data_line))
-                            except (json.JSONDecodeError, ValueError):
-                                pass
-                    store_flag = bool(payload.get("store", True))
-                    if store_flag and completed_response_data:
-                        resp_data = completed_response_data[-1].get("response", {})
-                        from runtime.responses.output_converter import chat_completion_to_response
-                        final_resp = ResponseObject(
-                            id=resp_data.get("id", response_id),
-                            model=resp_data.get("model", model),
-                            status=ResponseStatus.COMPLETED,
-                            instructions=instructions,
-                            previous_response_id=previous_response_id,
-                            metadata=metadata,
-                        )
-                        from runtime.responses.response_models import ResponseUsage
-                        usage_data = resp_data.get("usage", {})
-                        final_resp.usage = ResponseUsage(
-                            input_tokens=usage_data.get("input_tokens", 0),
-                            output_tokens=usage_data.get("output_tokens", 0),
-                            total_tokens=usage_data.get("total_tokens", 0),
-                        )
-                        for out_item in resp_data.get("output", []):
-                            from runtime.responses.response_models import OutputItem, OutputItemType, ContentPart, ContentPartType
-                            oi_type = OutputItemType.MESSAGE if out_item.get("type", "message") == "message" else OutputItemType.FUNCTION_CALL
-                            item = OutputItem(
-                                id=out_item.get("id", f"item_{uuid.uuid4().hex[:16]}"),
-                                type=oi_type,
-                                role=out_item.get("role", "assistant"),
-                            )
-                            if oi_type == OutputItemType.FUNCTION_CALL:
-                                item.call_id = out_item.get("call_id", "")
-                                item.tool_name = out_item.get("name", "")
-                                item.arguments = out_item.get("arguments", "")
-                            else:
-                                for cp in out_item.get("content", []):
-                                    cp_type = ContentPartType.OUTPUT_TEXT if cp.get("type") == "output_text" else ContentPartType.REFUSAL
-                                    item.content.append(ContentPart(
-                                        type=cp_type,
-                                        text=cp.get("text", cp.get("refusal", "")),
-                                    ))
-                            final_resp.output.append(item)
-                        response_runtime.register(final_resp)
-                else:
+                    # Client-owned tools (such as Codex's filesystem/shell tools)
+                    # must be returned to the client, not executed by AetherMesh.
                     raw_chunks = adapter_instance.stream(outer_state["payload"])
                     yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
+                    return
+
+                raw_chunks = adapter_instance.stream(outer_state["payload"])
+                yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
             except Exception as exc:
                 stream_error = True
                 stream_error_code = self._classify_error_text(str(exc))
@@ -1711,10 +1645,22 @@ class RouterService:
         usage = getattr(response, "usage", None)
         if not usage:
             return
+        usage = self._usage_dict(usage)
         input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
         output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
         self._record_token_usage(user_id, api_key_id,
-            input_tokens, output_tokens, provider, model)
+                                 input_tokens, output_tokens, provider, model)
+
+    @staticmethod
+    def _usage_dict(usage: Any) -> dict[str, Any]:
+        if isinstance(usage, dict):
+            return usage
+        to_dict = getattr(usage, "to_dict", None)
+        if callable(to_dict):
+            value = to_dict()
+            if isinstance(value, dict):
+                return value
+        return {}
 
     def _record_metrics(
         self,

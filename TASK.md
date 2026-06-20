@@ -218,6 +218,7 @@
 | 2026-05-26 | Phase 23f | Responses SSE compatibility: emit stateful output item/content part/delta/done events with indexes |
 | 2026-06-21 | Phase 23g | Responses circuit resilience: reroute streaming requests away from an open Ollama worker circuit |
 | 2026-06-21 | Phase 23h | Chat streaming circuit resilience: apply the same pre-stream Ollama reroute for Codex clients |
+| 2026-06-21 | Phase 23i | Codex tool ownership: return client function calls without AIIH executing noop handlers |
 
 ## Phase 23 - Responses Client Compatibility (2026-05-25)
 - [x] Accept bare Responses content parts such as `input_text` and plain `text` dictionaries as user input.
@@ -232,4 +233,5 @@
 - [x] Emit stateful Responses SSE events with stable `item_id`, `output_index`, and `content_index` fields.
 - [x] Reroute Responses streams to an alternate capable Ollama worker when the selected worker's circuit is open.
 - [x] Apply open-circuit Ollama rerouting to `/v1/chat/completions` streams used by Codex.
+- [x] Return client-owned Responses function calls to Codex instead of executing temporary noop handlers in AIIH.
 - [x] Added regression coverage for bare input parts and streaming completed output.

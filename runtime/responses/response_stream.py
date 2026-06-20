@@ -54,7 +54,7 @@ def wrap_streaming_chunks(
     item_started = False
     content_started = False
     last_chunk: dict[str, Any] | None = None
-    _tool_call_items: dict[int, str] = {}
+    tool_calls: dict[int, dict[str, Any]] = {}
 
     for chunk in chunks:
         if isinstance(chunk, str):
@@ -75,26 +75,36 @@ def wrap_streaming_chunks(
 
             last_chunk = chunk
 
-            tool_calls = _chunk_tool_call_deltas(chunk)
-            if tool_calls:
-                for tc in tool_calls:
+            chunk_tool_calls = _chunk_tool_call_deltas(chunk)
+            if chunk_tool_calls:
+                for tc in chunk_tool_calls:
                     idx = tc.get("index", 0)
                     fn = tc.get("function", {})
-                    if idx not in _tool_call_items:
-                        _tool_call_items[idx] = f"fc_{uuid.uuid4().hex[:16]}"
-                        yield response_stream_encoder.encode(
-                            _make_output_item_added_event(response_id, _tool_call_items[idx])
-                        )
+                    if idx not in tool_calls:
+                        tool_calls[idx] = {
+                            "item_id": f"fc_{uuid.uuid4().hex[:16]}",
+                            "call_id": str(tc.get("id", "")),
+                            "name": str(fn.get("name", "")),
+                            "arguments": "",
+                        }
                         yield response_stream_encoder.encode(
                             _make_tool_call_item_added_event(
-                                response_id, _tool_call_items[idx],
-                                tc.get("id", ""), fn.get("name", ""),
+                                response_id, tool_calls[idx]["item_id"],
+                                tool_calls[idx]["call_id"], tool_calls[idx]["name"],
+                                output_index=idx + (1 if item_started else 0),
                             )
                         )
+                    call = tool_calls[idx]
+                    if tc.get("id"):
+                        call["call_id"] = str(tc["id"])
+                    if fn.get("name"):
+                        call["name"] = str(fn["name"])
+                    arguments_delta = str(fn.get("arguments", "") or "")
+                    call["arguments"] += arguments_delta
                     yield response_stream_encoder.encode(
                         _make_function_call_arguments_delta_event(
-                            response_id, _tool_call_items[idx], idx,
-                            fn.get("arguments", ""),
+                            response_id, call["item_id"],
+                            idx + (1 if item_started else 0), arguments_delta,
                         )
                     )
 
@@ -128,13 +138,27 @@ def wrap_streaming_chunks(
                     yield response_stream_encoder.encode(
                         _make_output_item_done_event(response_id, item_id, full_text)
                     )
-                yield response_stream_encoder.encode(
-                    make_response_completed_event(
-                        response_id,
-                        model,
-                        usage=_responses_usage(chunk),
-                        output_text=full_text,
+                for index, call in tool_calls.items():
+                    output_index = index + (1 if item_started else 0)
+                    yield response_stream_encoder.encode(
+                        _make_function_call_arguments_done_event(
+                            response_id, call["item_id"], output_index, call["arguments"],
+                        )
                     )
+                    yield response_stream_encoder.encode(
+                        _make_tool_call_item_done_event(
+                            response_id, call, output_index,
+                        )
+                    )
+                completed_event = make_response_completed_event(
+                    response_id,
+                    model,
+                    usage=_responses_usage(chunk),
+                    output_text=full_text,
+                )
+                _append_tool_call_outputs(completed_event, tool_calls)
+                yield response_stream_encoder.encode(
+                    completed_event
                 )
                 emitted_done = True
                 break
@@ -152,12 +176,24 @@ def wrap_streaming_chunks(
             yield response_stream_encoder.encode(
                 _make_output_item_done_event(response_id, item_id, full_text)
             )
-        yield response_stream_encoder.encode(
-            make_response_completed_event(
-                response_id, model,
-                usage=_responses_usage(last_chunk or {}),
-                output_text=full_text,
+        for index, call in tool_calls.items():
+            output_index = index + (1 if item_started else 0)
+            yield response_stream_encoder.encode(
+                _make_function_call_arguments_done_event(
+                    response_id, call["item_id"], output_index, call["arguments"],
+                )
             )
+            yield response_stream_encoder.encode(
+                _make_tool_call_item_done_event(response_id, call, output_index)
+            )
+        completed_event = make_response_completed_event(
+            response_id, model,
+            usage=_responses_usage(last_chunk or {}),
+            output_text=full_text,
+        )
+        _append_tool_call_outputs(completed_event, tool_calls)
+        yield response_stream_encoder.encode(
+            completed_event
         )
 
     yield response_stream_encoder.encode_done()
@@ -235,9 +271,9 @@ def make_function_call_arguments_delta_event(
     delta: str,
 ) -> dict[str, Any]:
     return {
-        "type": "response.function_call.arguments.delta",
+        "type": "response.function_call_arguments.delta",
         "data": {
-            "type": "response.function_call.arguments.delta",
+            "type": "response.function_call_arguments.delta",
             "response": {"id": response_id},
             "delta": delta,
         },
@@ -304,14 +340,14 @@ def _chunk_tool_call_deltas(chunk: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _make_tool_call_item_added_event(
-    response_id: str, item_id: str, call_id: str, name: str,
+    response_id: str, item_id: str, call_id: str, name: str, *, output_index: int,
 ) -> dict[str, Any]:
     return {
         "type": "response.output_item.added",
         "data": {
             "type": "response.output_item.added",
             "response": {"id": response_id},
-            "output_index": 0,
+            "output_index": output_index,
             "item": {
                 "id": item_id,
                 "type": "function_call",
@@ -327,15 +363,68 @@ def _make_function_call_arguments_delta_event(
     response_id: str, item_id: str, output_index: int, delta: str,
 ) -> dict[str, Any]:
     return {
-        "type": "response.function_call.arguments.delta",
+        "type": "response.function_call_arguments.delta",
         "data": {
-            "type": "response.function_call.arguments.delta",
+            "type": "response.function_call_arguments.delta",
             "response": {"id": response_id},
             "item_id": item_id,
             "output_index": output_index,
             "delta": delta,
         },
     }
+
+
+def _make_function_call_arguments_done_event(
+    response_id: str, item_id: str, output_index: int, arguments: str,
+) -> dict[str, Any]:
+    return {
+        "type": "response.function_call_arguments.done",
+        "data": {
+            "type": "response.function_call_arguments.done",
+            "response": {"id": response_id},
+            "item_id": item_id,
+            "output_index": output_index,
+            "arguments": arguments,
+        },
+    }
+
+
+def _make_tool_call_item_done_event(
+    response_id: str, call: dict[str, Any], output_index: int,
+) -> dict[str, Any]:
+    return {
+        "type": "response.output_item.done",
+        "data": {
+            "type": "response.output_item.done",
+            "response": {"id": response_id},
+            "output_index": output_index,
+            "item": {
+                "id": call["item_id"],
+                "type": "function_call",
+                "status": "completed",
+                "call_id": call["call_id"],
+                "name": call["name"],
+                "arguments": call["arguments"],
+            },
+        },
+    }
+
+
+def _append_tool_call_outputs(
+    completed_event: dict[str, Any],
+    tool_calls: dict[int, dict[str, Any]],
+) -> None:
+    response = completed_event["data"]["response"]
+    output = response.setdefault("output", [])
+    for index, call in tool_calls.items():
+        output.append({
+            "id": call["item_id"],
+            "type": "function_call",
+            "status": "completed",
+            "call_id": call["call_id"],
+            "name": call["name"],
+            "arguments": call["arguments"],
+        })
 
 
 def _chunk_finished(chunk: dict[str, Any]) -> bool:
