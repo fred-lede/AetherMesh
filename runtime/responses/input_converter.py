@@ -83,6 +83,8 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
         )
 
     item_type_str = str(item.get("type", "message"))
+    if item_type_str == "function_call":
+        item_type_str = InputItemType.TOOL_CALL.value
     try:
         item_type = InputItemType(item_type_str)
     except ValueError:
@@ -106,8 +108,8 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
             result.content = [{"type": "text", "text": str(content)}]
 
     elif item_type == InputItemType.TOOL_CALL:
-        result.tool_call_id = str(item.get("tool_call_id", ""))
-        result.tool_name = str(item.get("tool_name", ""))
+        result.tool_call_id = str(item.get("tool_call_id", item.get("call_id", "")))
+        result.tool_name = str(item.get("tool_name", item.get("name", "")))
         result.arguments = _stringify_arguments(item.get("arguments", "{}"))
 
     elif item_type in (InputItemType.TOOL_RESULT, InputItemType.FUNCTION_CALL_OUTPUT):

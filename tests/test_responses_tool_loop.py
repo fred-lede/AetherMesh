@@ -141,6 +141,32 @@ def test_responses_input_to_messages_with_function_call_output():
     assert messages[1]["content"] == "Result"
 
 
+def test_responses_input_round_trips_function_call_and_output():
+    input_value = [
+        {
+            "type": "function_call",
+            "call_id": "call_123",
+            "name": "list_files",
+            "arguments": '{"path":"."}',
+        },
+        {"type": "function_call_output", "call_id": "call_123", "output": "README.md"},
+    ]
+
+    messages = responses_input_to_messages(input_value)
+
+    assert messages[0]["role"] == "assistant"
+    assert messages[0]["tool_calls"] == [{
+        "id": "call_123",
+        "type": "function",
+        "function": {"name": "list_files", "arguments": '{"path":"."}'},
+    }]
+    assert messages[1] == {
+        "role": "tool",
+        "tool_call_id": "call_123",
+        "content": "README.md",
+    }
+
+
 def test_responses_input_truncation_keeps_last_turns():
     """With truncation='auto', oldest messages should be dropped."""
     items = [
