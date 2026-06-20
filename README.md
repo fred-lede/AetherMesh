@@ -419,6 +419,9 @@ includes the assembled text in both top-level `output_text` and
 `response.completed.output` for clients that read the final event instead of
 deltas. Responses `developer` messages are normalized to `system` messages for
 Ollama-compatible providers.
+When a selected local Ollama worker has an open circuit, streaming Responses
+reroutes to another local worker that supports the same required capabilities
+before emitting SSE output.
 
 ### Embeddings API
 

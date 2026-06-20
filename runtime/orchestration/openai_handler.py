@@ -971,6 +971,26 @@ class RouterService:
 
                 tools = self._ensure_openai_tools(payload.get("tools") or [])
                 adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])
+                if (
+                    outer_state["provider"] == "ollama"
+                    and not adapter_instance.is_available()
+                ):
+                    fallback = self._alternate_ollama_fallback(
+                        outer_state["payload"],
+                        excluded_base_url=str((outer_state["worker"] or {}).get("base_url", "")),
+                    )
+                    if fallback is not None:
+                        effective_payload, worker = fallback
+                        outer_state["worker"] = worker
+                        outer_state["payload"] = effective_payload
+                        adapter_instance = self._adapter("ollama", worker)
+                        self._trace_responses(
+                            "stream.circuit_fallback",
+                            response_id=response_id,
+                            provider="ollama",
+                            worker=worker,
+                            effective_payload=effective_payload,
+                        )
                 if tools:
                     from runtime.responses.tool_loop import responses_tool_loop
                     loop = responses_tool_loop
@@ -1219,6 +1239,31 @@ class RouterService:
         fallback_payload.pop("provider", None)
         fallback_payload["model"] = model_name
         return self._normalize_payload_for_provider(fallback_payload, "ollama"), worker
+
+    def _alternate_ollama_fallback(
+        self,
+        payload: dict[str, Any],
+        *,
+        excluded_base_url: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        required = self._required_capabilities(payload)
+        excluded = excluded_base_url.rstrip("/")
+        for model in self.registry.get("models", []):
+            if str(model.get("provider", "ollama")).lower() != "ollama":
+                continue
+            if not required.issubset(set(model.get("capabilities", []))):
+                continue
+            for binding in model.get("worker_bindings", []):
+                base_url = settings.worker_base_url(binding)
+                if not base_url or base_url.rstrip("/") == excluded:
+                    continue
+                fallback_payload = dict(payload)
+                fallback_payload.pop("provider", None)
+                fallback_payload["model"] = str(model.get("name", ""))
+                return self._normalize_payload_for_provider(fallback_payload, "ollama"), {
+                    "base_url": base_url,
+                }
+        return None
 
     def _configured_ollama_fallback(self, required: set[str]) -> tuple[str, dict[str, Any]] | None:
         model_name = settings.ollama_fallback_model()

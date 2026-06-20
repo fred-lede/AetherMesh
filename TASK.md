@@ -216,6 +216,7 @@
 | 2026-05-26 | Phase 23d | OpenAI router env bootstrap: load `.env` before settings for direct uvicorn starts |
 | 2026-05-26 | Phase 23e | Responses role normalization: map `developer` input messages to Ollama-compatible `system` role |
 | 2026-05-26 | Phase 23f | Responses SSE compatibility: emit stateful output item/content part/delta/done events with indexes |
+| 2026-06-21 | Phase 23g | Responses circuit resilience: reroute streaming requests away from an open Ollama worker circuit |
 
 ## Phase 23 - Responses Client Compatibility (2026-05-25)
 - [x] Accept bare Responses content parts such as `input_text` and plain `text` dictionaries as user input.
@@ -228,4 +229,5 @@
 - [x] Normalize Responses `developer` messages to `system` before routing to Ollama-compatible providers.
 - [x] Add `stream.failed` trace logging for Responses SSE provider exceptions.
 - [x] Emit stateful Responses SSE events with stable `item_id`, `output_index`, and `content_index` fields.
+- [x] Reroute Responses streams to an alternate capable Ollama worker when the selected worker's circuit is open.
 - [x] Added regression coverage for bare input parts and streaming completed output.

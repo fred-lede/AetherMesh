@@ -348,6 +348,10 @@ class OllamaAdapter(ProviderAdapter):
         response.encoding = "utf-8"
         return {"ok": response.ok, "status_code": response.status_code, "base_url": self.base_url}
 
+    def is_available(self) -> bool:
+        """Return whether this worker's local circuit currently accepts requests."""
+        return self._circuit.is_available()
+
     def abort_stream(self) -> None:
         resp = getattr(self, "_stream_response", None)
         if resp is not None:
