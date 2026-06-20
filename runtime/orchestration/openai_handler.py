@@ -378,6 +378,20 @@ class RouterService:
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=True)
         effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
         adapter = self._adapter(provider, worker)
+        if provider == "ollama" and not adapter.is_available():
+            fallback = self._alternate_ollama_fallback(
+                effective_payload,
+                excluded_base_url=str((worker or {}).get("base_url", "")),
+            )
+            if fallback is not None:
+                effective_payload, worker = fallback
+                adapter = self._adapter("ollama", worker)
+                self._trace_responses(
+                    "chat.stream.circuit_fallback",
+                    provider="ollama",
+                    worker=worker,
+                    effective_payload=effective_payload,
+                )
         started = time.perf_counter()
         state = {"provider": provider, "worker": worker, "payload": effective_payload}
 

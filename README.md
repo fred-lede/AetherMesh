@@ -421,7 +421,8 @@ deltas. Responses `developer` messages are normalized to `system` messages for
 Ollama-compatible providers.
 When a selected local Ollama worker has an open circuit, streaming Responses
 reroutes to another local worker that supports the same required capabilities
-before emitting SSE output.
+before emitting SSE output. The same pre-stream reroute applies to OpenAI
+chat-completions streaming clients such as Codex.
 
 ### Embeddings API
 
