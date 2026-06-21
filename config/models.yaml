@@ -69,6 +69,8 @@ models:
       - node_id: node-p40-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
+    ollama_options:
+      num_ctx: 32768
     
   - name: gemma4:e4b
     provider: ollama

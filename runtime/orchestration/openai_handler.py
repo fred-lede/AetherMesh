@@ -994,6 +994,15 @@ class RouterService:
                         excluded_base_url=str((outer_state["worker"] or {}).get("base_url", "")),
                     )
                     if fallback is not None:
+                        self._finalize_request(
+                            endpoint="/v1/responses",
+                            payload=outer_state["payload"],
+                            provider=str(outer_state["provider"]),
+                            worker=outer_state["worker"],
+                            latency_ms=(time.perf_counter() - started) * 1000,
+                            error=True,
+                            error_code="circuit_open",
+                        )
                         effective_payload, worker = fallback
                         outer_state["worker"] = worker
                         outer_state["payload"] = effective_payload
@@ -1449,6 +1458,23 @@ class RouterService:
             messages = self._extract_messages_from_payload(normalized)
             if messages is not None:
                 normalized["messages"] = [self._normalize_ollama_message(message) for message in messages]
+            model_config = self._find_registry_model(str(normalized.get("model", "")))
+            model_options = model_config.get("ollama_options", {}) if isinstance(model_config, dict) else {}
+            if isinstance(model_options, dict):
+                options = dict(normalized.get("options", {}))
+                configured_num_ctx = model_options.get("num_ctx")
+                if configured_num_ctx is not None:
+                    try:
+                        configured_num_ctx = int(configured_num_ctx)
+                        requested_num_ctx = options.get("num_ctx")
+                        options["num_ctx"] = (
+                            min(int(requested_num_ctx), configured_num_ctx)
+                            if requested_num_ctx else configured_num_ctx
+                        )
+                    except (TypeError, ValueError):
+                        pass
+                if options:
+                    normalized["options"] = options
         return normalized
 
     def _extract_messages_from_payload(self, payload: dict[str, Any]) -> list[dict[str, Any]] | None:

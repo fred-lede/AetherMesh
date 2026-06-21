@@ -26,6 +26,7 @@ from runtime.responses.response_stream import (
 from runtime.tools.tool_registry import ToolRegistry, ToolDescriptor
 from runtime.tools.tool_result import ToolCall, ToolResult
 from runtime.responses.response_stream import ResponseStreamEncoder
+from runtime.orchestration.openai_handler import RouterService
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -108,6 +109,22 @@ def test_responses_input_to_messages_simple_string():
     assert len(messages) == 1
     assert messages[0]["role"] == "user"
     assert messages[0]["content"] == "Hello world"
+
+
+def test_ollama_model_context_cap_is_applied(monkeypatch):
+    service = RouterService()
+    monkeypatch.setattr(
+        service,
+        "_find_registry_model",
+        lambda model: {"ollama_options": {"num_ctx": 32768}},
+    )
+
+    payload = service._normalize_payload_for_provider(
+        {"model": "gemma4:12b", "messages": [], "options": {"num_ctx": 100000}},
+        "ollama",
+    )
+
+    assert payload["options"]["num_ctx"] == 32768
 
 
 def test_responses_input_to_messages_with_instructions():
