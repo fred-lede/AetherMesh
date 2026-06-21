@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from cluster.load_balancer import choose_best_worker
+from config.settings import settings
 from metrics.metrics import metrics_store
 from ai_queue.redis_queue import RedisTaskQueue
 
@@ -40,8 +41,11 @@ class Scheduler:
         task_payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         candidates = self.worker_registry.available_workers(model=model, provider=provider)
+        vram_candidates = [worker for worker in candidates if self._has_vram_capacity(worker, model)]
+        if candidates and not vram_candidates:
+            raise RuntimeError("Insufficient VRAM capacity for the requested model.")
         worker = choose_best_worker(
-            candidates,
+            vram_candidates,
             max_queue_size=self.max_worker_queue_size,
             model=model,
         )
@@ -85,6 +89,43 @@ class Scheduler:
                 retry_after_s=3,
             )
         raise RuntimeError("No healthy worker available for the requested model.")
+
+    def _has_vram_capacity(self, worker: dict[str, Any], model: str) -> bool:
+        if not settings.vram_admission_enabled:
+            return True
+        required_mb = self._estimated_vram_mb(model)
+        if required_mb <= 0:
+            return True
+
+        gpu_memory_mb = int(worker.get("gpu_memory", 0) or 0)
+        if gpu_memory_mb <= 0:
+            return True
+        metadata = worker.get("metadata", {})
+        loaded_vram = metadata.get("ps_model_vram_mb", {}) if isinstance(metadata, dict) else {}
+        loaded_vram = loaded_vram if isinstance(loaded_vram, dict) else {}
+        loaded_mb = sum(int(value or 0) for value in loaded_vram.values())
+        requested_loaded = any(_same_model(str(name), model) for name in loaded_vram)
+        reserve_mb = max(0, settings.vram_reserve_mb)
+
+        if requested_loaded:
+            return loaded_mb + reserve_mb <= gpu_memory_mb
+        if loaded_vram and int(worker.get("queue_size", 0)) > 0:
+            return False
+        return required_mb + reserve_mb <= gpu_memory_mb
+
+    @staticmethod
+    def _estimated_vram_mb(model: str) -> int:
+        for item in settings.model_registry().get("models", []):
+            if item.get("name") == model:
+                try:
+                    return max(0, int(item.get("estimated_vram_mb", 0)))
+                except (TypeError, ValueError):
+                    return 0
+        return 0
+
+
+def _same_model(left: str, right: str) -> bool:
+    return left == right or left.removesuffix(":latest") == right.removesuffix(":latest")
 
     def requeue_pending_tasks(self, max_retries: int = 3) -> int:
         """

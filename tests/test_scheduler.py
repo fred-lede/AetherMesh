@@ -56,3 +56,45 @@ def test_dispatch_reports_gpu_saturation_as_unavailable() -> None:
 
     with pytest.raises(RuntimeError, match="GPU saturated"):
         scheduler.dispatch(model="gemma4:26b", provider="ollama")
+
+
+def test_dispatch_blocks_model_switch_while_worker_is_active() -> None:
+    registry = WorkerRegistry()
+    registry.register_node_workers(
+        node_id="node-01",
+        host="127.0.0.1",
+        gpus=[{"id": 0, "name": "RTX 5090", "memory": 32768}],
+        workers=[11434],
+        model_assignments={"node-01:11434": ["gemma4:31b-it-qat", "qwen3-coder:30b"]},
+        node_metadata={
+            "worker_runtime": {
+                "11434": {"ps_model_vram_mb": {"gemma4:31b-it-qat": 19333}},
+            },
+        },
+    )
+    registry.acquire("node-01:11434", assignment_id="active")
+    scheduler = Scheduler(registry, DummyQueue(), max_worker_queue_size=8)
+
+    with pytest.raises(RuntimeError, match="Insufficient VRAM"):
+        scheduler.dispatch(model="qwen3-coder:30b", provider="ollama")
+
+
+def test_dispatch_allows_idle_worker_model_switch() -> None:
+    registry = WorkerRegistry()
+    registry.register_node_workers(
+        node_id="node-01",
+        host="127.0.0.1",
+        gpus=[{"id": 0, "name": "RTX 5090", "memory": 32768}],
+        workers=[11434],
+        model_assignments={"node-01:11434": ["gemma4:31b-it-qat", "qwen3-coder:30b"]},
+        node_metadata={
+            "worker_runtime": {
+                "11434": {"ps_model_vram_mb": {"gemma4:31b-it-qat": 19333}},
+            },
+        },
+    )
+    scheduler = Scheduler(registry, DummyQueue(), max_worker_queue_size=8)
+
+    dispatch = scheduler.dispatch(model="qwen3-coder:30b", provider="ollama")
+
+    assert dispatch["status"] == "assigned"

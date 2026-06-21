@@ -66,6 +66,8 @@ class Settings:
     ollama_model_switch_wait_timeout_s: int = field(
         default_factory=lambda: _env_int("AIIH_OLLAMA_MODEL_SWITCH_WAIT_TIMEOUT", 900)
     )
+    vram_admission_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_VRAM_ADMISSION_ENABLED", "true"))
+    vram_reserve_mb: int = field(default_factory=lambda: _env_int("AIIH_VRAM_RESERVE_MB", 4096))
     queue_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_QUEUE_TIMEOUT", 120))
     heartbeat_interval_s: int = field(default_factory=lambda: _env_int("AIIH_HEARTBEAT_INTERVAL", 15))
     stale_after_s: int = field(default_factory=lambda: _env_int("AIIH_STALE_AFTER", 45))

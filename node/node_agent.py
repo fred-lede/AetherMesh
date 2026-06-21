@@ -81,6 +81,7 @@ class NodeAgent:
                 "port": port,
                 "ps_count": 0,
                 "ps_models": [],
+                "ps_model_vram_mb": {},
                 "processors": [],
                 "error": None,
             }
@@ -90,6 +91,7 @@ class NodeAgent:
                     payload = response.json()
                     models = payload.get("models", []) if isinstance(payload, dict) else []
                     ps_models: list[str] = []
+                    ps_model_vram_mb: dict[str, int] = {}
                     processors: list[str] = []
                     for item in models:
                         if not isinstance(item, dict):
@@ -97,6 +99,12 @@ class NodeAgent:
                         name = str(item.get("name") or item.get("model") or "").strip()
                         if name:
                             ps_models.append(name)
+                            try:
+                                size_vram = int(item.get("size_vram", 0) or 0)
+                                if size_vram > 0:
+                                    ps_model_vram_mb[name] = round(size_vram / (1024 * 1024))
+                            except (TypeError, ValueError):
+                                pass
                         processor = str(item.get("processor") or "").strip()
                         if not processor:
                             details = item.get("details")
@@ -117,6 +125,7 @@ class NodeAgent:
                             processors.append(processor)
                     entry["ps_count"] = len(models)
                     entry["ps_models"] = sorted(set(ps_models))
+                    entry["ps_model_vram_mb"] = ps_model_vram_mb
                     entry["processors"] = sorted(set(processors))
                 else:
                     entry["error"] = f"/api/ps status={response.status_code}"
