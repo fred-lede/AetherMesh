@@ -203,7 +203,7 @@ class OllamaAdapter(ProviderAdapter):
         last_error: str | None = None
         timeout = settings.request_timeout_s
         if stream:
-            timeout = (settings.request_timeout_s, 30)
+            timeout = (settings.request_timeout_s, settings.stream_read_timeout_s)
 
         for attempt in range(1, attempts + 1):
             try:
