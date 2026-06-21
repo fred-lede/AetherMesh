@@ -20,7 +20,7 @@ models:
       - node_id: node-01
         port: 11434
         ollama_options:
-          num_ctx: 65536
+          num_ctx: 32768
     capabilities: [chat, thinking, tools, vision, audio]
     estimated_vram_mb: 19333
     
