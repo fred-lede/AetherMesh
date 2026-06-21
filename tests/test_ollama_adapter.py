@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 from providers.ollama_adapter import OllamaAdapter
@@ -20,6 +21,32 @@ def test_stream_uses_configured_read_timeout() -> None:
         adapter._post_chat_with_retry({"model": "test"}, stream=True)
 
     assert get_session.return_value.post.call_args.kwargs["timeout"] == (30, 1800)
+
+
+def test_stream_emits_tool_calls_from_done_chunk() -> None:
+    response = MagicMock(ok=True)
+    response.iter_lines.return_value = [json.dumps({
+        "done": True,
+        "done_reason": "stop",
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_1",
+                "function": {"name": "list_files", "arguments": {"path": "."}},
+            }],
+        },
+    })]
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434")
+    with patch.object(adapter, "_post_chat_with_retry", return_value=response):
+        chunks = list(adapter.stream({"model": "qwen3-coder:30b", "messages": [], "tools": []}))
+
+    tool_chunk = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk["choices"][0]["delta"].get("tool_calls"))
+    tool_call = tool_chunk["choices"][0]["delta"]["tool_calls"][0]
+    assert tool_call["function"]["name"] == "list_files"
+    assert json.loads(tool_call["function"]["arguments"]) == {"path": "."}
+    assert chunks[-2]["choices"][0]["finish_reason"] == "tool_calls"
 
 
 def test_model_switch_unloads_different_loaded_model() -> None:

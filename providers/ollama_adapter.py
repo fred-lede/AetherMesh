@@ -117,42 +117,6 @@ class OllamaAdapter(ProviderAdapter):
             except json.JSONDecodeError:
                 LOGGER.warning("Ollama non-JSON stream line: %s", raw_line[:200])
                 continue
-            if item.get("done"):
-                if pending_text_tool_content:
-                    yield {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": int(time.time()),
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"role": "assistant", "content": pending_text_tool_content},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    pending_text_tool_content = ""
-                finish_reason = item.get("done_reason", "stop")
-                if emitted_tool_calls and finish_reason == "stop":
-                    finish_reason = "tool_calls"
-                pe = item.get("prompt_eval_count", 0) or 0
-                ec = item.get("eval_count", 0) or 0
-                yield {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": model,
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
-                    "usage": {
-                        "prompt_tokens": pe,
-                        "completion_tokens": ec,
-                        "total_tokens": pe + ec,
-                    },
-                }
-                yield "[DONE]"
-                return
-
             message = item.get("message", {})
             delta: dict[str, Any] = {"role": "assistant"}
 
@@ -206,6 +170,42 @@ class OllamaAdapter(ProviderAdapter):
                     "model": model,
                     "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
                 }
+
+            if item.get("done"):
+                if pending_text_tool_content:
+                    yield {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"role": "assistant", "content": pending_text_tool_content},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                    pending_text_tool_content = ""
+                finish_reason = item.get("done_reason", "stop")
+                if emitted_tool_calls and finish_reason == "stop":
+                    finish_reason = "tool_calls"
+                pe = item.get("prompt_eval_count", 0) or 0
+                ec = item.get("eval_count", 0) or 0
+                yield {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+                    "usage": {
+                        "prompt_tokens": pe,
+                        "completion_tokens": ec,
+                        "total_tokens": pe + ec,
+                    },
+                }
+                yield "[DONE]"
+                return
 
     def _post_chat_with_retry(self, body: dict[str, Any], *, stream: bool) -> requests.Response:
         if not self._circuit.is_available():
