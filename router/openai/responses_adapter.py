@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import queue as q_module
@@ -12,9 +13,10 @@ from fastapi.responses import StreamingResponse
 logger = logging.getLogger("responses.adapter")
 
 
-def _stream_with_keepalive(
+async def _stream_with_keepalive(
     sync_gen: Iterable[str],
     keepalive_interval: float = 8.0,
+    adapter: Any | list[Any] | None = None,
 ) -> AsyncIterable[str]:
     _q: q_module.Queue = q_module.Queue(maxsize=100)
     _sentinel = object()
@@ -37,41 +39,45 @@ def _stream_with_keepalive(
     reader_thread.start()
     logger.info("Keepalive reader thread started")
 
-    while True:
-        try:
-            item = _q.get(timeout=keepalive_interval)
-        except q_module.Empty:
-            keepalive_data = {
-                "type": "response.in_progress",
-                "response": {"id": _response_id},
-            }
-            yield f"event: response.in_progress\ndata: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
-            continue
-        if item is _sentinel:
-            logger.info("Keepalive reader sentinel received, total events: %d", _event_count)
-            break
-        if isinstance(item, BaseException):
-            logger.error("Keepalive reader exception item: %s", item)
-            raise item
-        if not _response_id and "response.created" in item:
+    try:
+        while True:
             try:
-                data_part = item.split("data: ", 1)[1].rstrip()
-                parsed = json.loads(data_part)
-                _response_id = parsed.get("response", {}).get("id", "")
-                logger.info("Captured response_id: %s", _response_id)
+                item = await asyncio.to_thread(_q.get, True, keepalive_interval)
+            except q_module.Empty:
+                keepalive_data = {
+                    "type": "response.in_progress",
+                    "response": {"id": _response_id},
+                }
+                yield f"event: response.in_progress\ndata: {json.dumps(keepalive_data, ensure_ascii=False)}\n\n"
+                continue
+            if item is _sentinel:
+                logger.info("Keepalive reader sentinel received, total events: %d", _event_count)
+                break
+            if isinstance(item, BaseException):
+                logger.error("Keepalive reader exception item: %s", item)
+                raise item
+            if not _response_id and "response.created" in item:
+                try:
+                    data_part = item.split("data: ", 1)[1].rstrip()
+                    parsed = json.loads(data_part)
+                    _response_id = parsed.get("response", {}).get("id", "")
+                    logger.info("Captured response_id: %s", _response_id)
+                except (IndexError, json.JSONDecodeError):
+                    pass
+            try:
+                data_json = item.split("data: ", 1)[1].rstrip()
+                event_type = json.loads(data_json).get("type", "?")
             except (IndexError, json.JSONDecodeError):
-                pass
-        try:
-            data_json = item.split("data: ", 1)[1].rstrip()
-            event_type = json.loads(data_json).get("type", "?")
-        except (IndexError, json.JSONDecodeError):
-            event_type = "?"
-        logger.debug("SSE event: %s (id=%s)", event_type, _response_id or "?")
-        _event_count += 1
-        yield item
-
-    reader_thread.join(timeout=3)
-    logger.info("Keepalive wrapper done, total events: %d", _event_count)
+                event_type = "?"
+            logger.debug("SSE event: %s (id=%s)", event_type, _response_id or "?")
+            _event_count += 1
+            yield item
+    finally:
+        active_adapter = adapter[0] if isinstance(adapter, list) and adapter else adapter
+        if active_adapter is not None:
+            active_adapter.abort_stream()
+        reader_thread.join(timeout=3)
+        logger.info("Keepalive wrapper done, total events: %d", _event_count)
 
 
 def create_responses_router(service: Any) -> APIRouter:
@@ -86,8 +92,14 @@ def create_responses_router(service: Any) -> APIRouter:
             normalized["input"] = normalized.pop("input_text")
         stream = normalized.get("stream", False)
         if stream:
-            sync_gen = service.handle_streaming_responses(normalized, user_id=user_id, api_key_id=api_key_id)
-            async_gen = _stream_with_keepalive(sync_gen)
+            adapter_ref: list[Any] = []
+            sync_gen = service.handle_streaming_responses(
+                normalized,
+                user_id=user_id,
+                api_key_id=api_key_id,
+                stream_adapter_ref=adapter_ref,
+            )
+            async_gen = _stream_with_keepalive(sync_gen, adapter=adapter_ref)
             return StreamingResponse(
                 async_gen,
                 media_type="text/event-stream",

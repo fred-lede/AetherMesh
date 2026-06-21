@@ -869,7 +869,13 @@ class RouterService:
                 error_code=error_code,
             )
 
-    def handle_streaming_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> Iterable[str]:
+    def handle_streaming_responses(
+        self,
+        payload: dict[str, Any],
+        user_id: int | None = None,
+        api_key_id: int | None = None,
+        stream_adapter_ref: list[Any] | None = None,
+    ) -> Iterable[str]:
         from runtime.responses.input_converter import responses_input_to_messages
         from runtime.responses.response_stream import wrap_streaming_chunks, response_stream_encoder
         from runtime.responses.response_runtime import response_runtime
@@ -908,6 +914,10 @@ class RouterService:
         )
         outer_state: dict[str, Any] = {"provider": provider, "worker": worker, "payload": effective_payload}
         last_chunk_ref: list[dict[str, Any] | None] = [None]
+
+        def _set_stream_adapter(adapter: Any) -> None:
+            if stream_adapter_ref is not None:
+                stream_adapter_ref[:] = [adapter]
 
         def _with_tracking(raw_chunks) -> Iterable[dict[str, Any] | str]:
             nonlocal last_chunk_ref
@@ -961,6 +971,7 @@ class RouterService:
                     openai_payload["stream"] = True
                     try:
                         adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])
+                        _set_stream_adapter(adapter_instance)
                         raw_chunks = adapter_instance.stream(openai_payload)
                         yield from wrap_streaming_chunks(_with_tracking(raw_chunks), response_id, model)
                         return
@@ -985,6 +996,7 @@ class RouterService:
 
                 tools = self._ensure_openai_tools(payload.get("tools") or [])
                 adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])
+                _set_stream_adapter(adapter_instance)
                 if (
                     outer_state["provider"] == "ollama"
                     and not adapter_instance.is_available()
@@ -1007,6 +1019,7 @@ class RouterService:
                         outer_state["worker"] = worker
                         outer_state["payload"] = effective_payload
                         adapter_instance = self._adapter("ollama", worker)
+                        _set_stream_adapter(adapter_instance)
                         self._trace_responses(
                             "stream.circuit_fallback",
                             response_id=response_id,
