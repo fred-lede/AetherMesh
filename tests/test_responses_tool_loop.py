@@ -127,6 +127,29 @@ def test_ollama_model_context_cap_is_applied(monkeypatch):
     assert payload["options"]["num_ctx"] == 32768
 
 
+def test_ollama_worker_context_cap_overrides_model_cap(monkeypatch):
+    service = RouterService()
+    monkeypatch.setattr(
+        service,
+        "_find_registry_model",
+        lambda model: {
+            "ollama_options": {"num_ctx": 32768},
+            "worker_bindings": [{
+                "base_url": "http://192.168.1.123:11434",
+                "ollama_options": {"num_ctx": 16384},
+            }],
+        },
+    )
+
+    payload = service._normalize_payload_for_provider(
+        {"model": "gemma4:12b", "messages": [], "options": {"num_ctx": 100000}},
+        "ollama",
+        {"base_url": "http://192.168.1.123:11434"},
+    )
+
+    assert payload["options"]["num_ctx"] == 16384
+
+
 def test_responses_input_to_messages_with_instructions():
     messages = responses_input_to_messages("Hello", instructions="You are helpful")
     assert len(messages) == 2

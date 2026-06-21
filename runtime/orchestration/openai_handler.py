@@ -174,7 +174,7 @@ class RouterService:
                         list(t.keys()) if isinstance(t, dict) else "?",
                     )
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=True)
-        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
+        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider, worker)
         adapter = self._adapter(provider, worker)
         if settings.debug_responses:
             tools = effective_payload.get("tools", [])
@@ -376,7 +376,7 @@ class RouterService:
             for fid in file_ids:
                 cleanup_mgr.track_current(fid)
         provider, worker = self._resolve_provider_and_worker(prepared_payload, allow_queue=True)
-        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider)
+        effective_payload = self._normalize_payload_for_provider(prepared_payload, provider, worker)
         adapter = self._adapter(provider, worker)
         if provider == "ollama" and not adapter.is_available():
             fallback = self._alternate_ollama_fallback(
@@ -612,7 +612,7 @@ class RouterService:
 
         original_payload = dict(payload)
         original_payload.pop("stream", None)
-        effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+        effective_payload = self._normalize_payload_for_provider(chat_payload, provider, worker)
         adapter_instance = self._adapter(provider, worker)
         started = time.perf_counter()
         error = False
@@ -897,7 +897,7 @@ class RouterService:
         chat_payload.pop("stream", None)
 
         provider, worker = self._resolve_provider_and_worker(chat_payload, allow_queue=True)
-        effective_payload = self._normalize_payload_for_provider(chat_payload, provider)
+        effective_payload = self._normalize_payload_for_provider(chat_payload, provider, worker)
         started = time.perf_counter()
         self._trace_responses(
             "stream.route_selected",
@@ -1195,7 +1195,7 @@ class RouterService:
         fallback_payload = dict(payload)
         fallback_payload.pop("provider", None)
         fallback_payload["model"] = model_name
-        return self._normalize_payload_for_provider(fallback_payload, "ollama"), worker
+        return self._normalize_payload_for_provider(fallback_payload, "ollama", worker), worker
 
     def _alternate_ollama_fallback(
         self,
@@ -1217,9 +1217,8 @@ class RouterService:
                 fallback_payload = dict(payload)
                 fallback_payload.pop("provider", None)
                 fallback_payload["model"] = str(model.get("name", ""))
-                return self._normalize_payload_for_provider(fallback_payload, "ollama"), {
-                    "base_url": base_url,
-                }
+                worker = {"base_url": base_url}
+                return self._normalize_payload_for_provider(fallback_payload, "ollama", worker), worker
         return None
 
     def _configured_ollama_fallback(self, required: set[str]) -> tuple[str, dict[str, Any]] | None:
@@ -1450,7 +1449,12 @@ class RouterService:
                 normalized.append(tool)
         return normalized
 
-    def _normalize_payload_for_provider(self, payload: dict[str, Any], provider: str) -> dict[str, Any]:
+    def _normalize_payload_for_provider(
+        self,
+        payload: dict[str, Any],
+        provider: str,
+        worker: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         normalized = dict(payload)
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
@@ -1459,7 +1463,7 @@ class RouterService:
             if messages is not None:
                 normalized["messages"] = [self._normalize_ollama_message(message) for message in messages]
             model_config = self._find_registry_model(str(normalized.get("model", "")))
-            model_options = model_config.get("ollama_options", {}) if isinstance(model_config, dict) else {}
+            model_options = self._ollama_options_for_worker(model_config, worker)
             if isinstance(model_options, dict):
                 options = dict(normalized.get("options", {}))
                 configured_num_ctx = model_options.get("num_ctx")
@@ -1476,6 +1480,28 @@ class RouterService:
                 if options:
                     normalized["options"] = options
         return normalized
+
+    @staticmethod
+    def _ollama_options_for_worker(
+        model_config: dict[str, Any] | None,
+        worker: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(model_config, dict):
+            return {}
+        options = dict(model_config.get("ollama_options", {}))
+        worker_base_url = str((worker or {}).get("base_url", "")).rstrip("/")
+        if not worker_base_url:
+            return options
+        for binding in model_config.get("worker_bindings", []):
+            if not isinstance(binding, dict):
+                continue
+            binding_base_url = settings.worker_base_url(binding)
+            if binding_base_url and binding_base_url.rstrip("/") == worker_base_url:
+                binding_options = binding.get("ollama_options", {})
+                if isinstance(binding_options, dict):
+                    options.update(binding_options)
+                break
+        return options
 
     def _extract_messages_from_payload(self, payload: dict[str, Any]) -> list[dict[str, Any]] | None:
         messages = payload.get("messages")

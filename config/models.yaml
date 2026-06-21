@@ -64,10 +64,16 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
+        ollama_options:
+          num_ctx: 32768
       - node_id: node-p40-01
         port: 11434
+        ollama_options:
+          num_ctx: 16384
       - node_id: node-p40-01
         port: 11435
+        ollama_options:
+          num_ctx: 16384
     capabilities: [chat, thinking, tools, vision]
     ollama_options:
       num_ctx: 32768
