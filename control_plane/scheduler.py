@@ -115,13 +115,7 @@ class Scheduler:
 
     @staticmethod
     def _estimated_vram_mb(model: str) -> int:
-        for item in settings.model_registry().get("models", []):
-            if item.get("name") == model:
-                try:
-                    return max(0, int(item.get("estimated_vram_mb", 0)))
-                except (TypeError, ValueError):
-                    return 0
-        return 0
+        return settings.model_vram_estimate_mb(model)
 
 
 def _same_model(left: str, right: str) -> bool:

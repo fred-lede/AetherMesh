@@ -183,6 +183,7 @@ class ClusterManager:
         return assignments
 
     def register_node(self, payload: NodeRegistrationPayload) -> dict[str, Any]:
+        self._record_model_vram_profiles(payload.metadata)
         node = self.node_registry.upsert_node(
             node_id=payload.node_id,
             ip=payload.ip,
@@ -207,6 +208,21 @@ class ClusterManager:
                 status=str(worker.get("status", "healthy")),
             )
         return {"node": node.to_dict(), "workers": workers}
+
+    @staticmethod
+    def _record_model_vram_profiles(metadata: dict[str, Any]) -> None:
+        runtime = metadata.get("worker_runtime", {}) if isinstance(metadata, dict) else {}
+        samples: dict[str, int] = {}
+        if isinstance(runtime, dict):
+            for entry in runtime.values():
+                model_vram = entry.get("ps_model_vram_mb", {}) if isinstance(entry, dict) else {}
+                if isinstance(model_vram, dict):
+                    for name, vram_mb in model_vram.items():
+                        try:
+                            samples[str(name)] = max(samples.get(str(name), 0), int(vram_mb))
+                        except (TypeError, ValueError):
+                            continue
+        settings.record_model_vram_profiles(samples)
 
     def aggregate_gpus(self) -> list[dict[str, Any]]:
         nodes = self.node_registry.list_nodes()

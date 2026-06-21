@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+_MODEL_VRAM_PROFILE_LOCK = threading.Lock()
 
 
 def _env_bool(name: str, default: str = "false") -> bool:
@@ -145,6 +151,60 @@ class Settings:
 
     def model_registry(self) -> dict[str, Any]:
         return self.load_yaml("models.yaml")
+
+    def model_vram_estimate_mb(self, model_name: str) -> int:
+        for model in self.model_registry().get("models", []):
+            if model.get("name") == model_name:
+                try:
+                    configured = int(model.get("estimated_vram_mb", 0))
+                    if configured > 0:
+                        return configured
+                except (TypeError, ValueError):
+                    pass
+                break
+        profiles = self._load_model_vram_profiles()
+        try:
+            return max(0, int(profiles.get(model_name, {}).get("vram_mb", 0)))
+        except (AttributeError, TypeError, ValueError):
+            return 0
+
+    def record_model_vram_profiles(self, profiles: dict[str, int]) -> None:
+        normalized: dict[str, int] = {}
+        for name, vram_mb in profiles.items():
+            try:
+                parsed_vram_mb = int(vram_mb)
+            except (TypeError, ValueError):
+                continue
+            if str(name).strip() and parsed_vram_mb > 0:
+                normalized[str(name)] = parsed_vram_mb
+        if not normalized:
+            return
+        path = self.config_path("model_vram_profiles.json")
+        with _MODEL_VRAM_PROFILE_LOCK:
+            current = self._load_model_vram_profiles()
+            now = int(time.time())
+            changed = False
+            for name, vram_mb in normalized.items():
+                entry = {"vram_mb": vram_mb, "updated_at": now}
+                if current.get(name) != entry:
+                    current[name] = entry
+                    changed = True
+            if not changed:
+                return
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"models": current}, indent=2, sort_keys=True), encoding="utf-8")
+            temporary.replace(path)
+
+    def _load_model_vram_profiles(self) -> dict[str, dict[str, Any]]:
+        path = self.config_path("model_vram_profiles.json")
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        profiles = data.get("models", {}) if isinstance(data, dict) else {}
+        return profiles if isinstance(profiles, dict) else {}
 
     def routing_rules_config(self) -> dict[str, Any]:
         return self.load_yaml("routing_rules.yaml")

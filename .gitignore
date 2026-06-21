@@ -80,6 +80,7 @@ config/routing_state.yaml
 ############################
 logs/
 *.log
+config/model_vram_profiles.json
 *.out
 *.err
 *.pid
