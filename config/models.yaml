@@ -21,6 +21,13 @@ models:
         port: 11434
     capabilities: [chat, thinking, tools, vision, audio]
     
+  - name: qwen3-coder:30b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, tools]
+
   - name: gemma4:31b
     provider: ollama
     worker_bindings:
@@ -109,28 +116,6 @@ models:
     capabilities: [chat, thinking, tools, vision]
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
-  - name: gemma4:31b-it-qat
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: gemma4:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-
   - name: qwen3.5:9b
     provider: ollama
     worker_bindings:

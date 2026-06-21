@@ -60,6 +60,9 @@ class Settings:
     redis_url: str = field(default_factory=lambda: os.getenv("AIIH_REDIS_URL", "redis://127.0.0.1:6379/0"))
     request_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_REQUEST_TIMEOUT", 120))
     stream_read_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_STREAM_READ_TIMEOUT", 1800))
+    ollama_evict_on_model_switch: bool = field(
+        default_factory=lambda: _env_bool("AIIH_OLLAMA_EVICT_ON_MODEL_SWITCH", "true")
+    )
     queue_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_QUEUE_TIMEOUT", 120))
     heartbeat_interval_s: int = field(default_factory=lambda: _env_int("AIIH_HEARTBEAT_INTERVAL", 15))
     stale_after_s: int = field(default_factory=lambda: _env_int("AIIH_STALE_AFTER", 45))

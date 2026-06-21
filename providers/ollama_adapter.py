@@ -4,6 +4,7 @@ import ast
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from typing import Any, Iterable
@@ -17,6 +18,17 @@ from .http_client import get_session
 from cluster.circuit_breaker import get_circuit_registry
 
 LOGGER = logging.getLogger("aiih.ollama")
+_MODEL_SWITCH_LOCKS: dict[str, threading.Lock] = {}
+_MODEL_SWITCH_LOCKS_GUARD = threading.Lock()
+
+
+def _model_switch_lock(base_url: str) -> threading.Lock:
+    with _MODEL_SWITCH_LOCKS_GUARD:
+        return _MODEL_SWITCH_LOCKS.setdefault(base_url, threading.Lock())
+
+
+def _same_model(left: str, right: str) -> bool:
+    return left == right or left.removesuffix(":latest") == right.removesuffix(":latest")
 
 
 class OllamaAdapter(ProviderAdapter):
@@ -197,6 +209,8 @@ class OllamaAdapter(ProviderAdapter):
         if not self._circuit.is_available():
             raise ProviderError(f"Circuit breaker OPEN for {self.base_url}, skipping request")
 
+        self._prepare_model_switch(str(body.get("model", "")))
+
         attempts = 5
         base_delay = 1.0
         last_response: requests.Response | None = None
@@ -279,6 +293,46 @@ class OllamaAdapter(ProviderAdapter):
             last_error or f"Ollama request failed after {attempts} attempts",
             status_code=502, code="provider_error",
         )
+
+    def _prepare_model_switch(self, requested_model: str) -> None:
+        if not settings.ollama_evict_on_model_switch or not requested_model:
+            return
+
+        with _model_switch_lock(self.base_url):
+            try:
+                response = get_session().get(f"{self.base_url}/api/ps", timeout=5)
+                if not response.ok:
+                    LOGGER.warning("Unable to inspect loaded Ollama models on %s: HTTP %s", self.base_url, response.status_code)
+                    return
+                data = response.json()
+            except requests.RequestException as exc:
+                LOGGER.warning("Unable to inspect loaded Ollama models on %s: %s", self.base_url, exc)
+                return
+            except ValueError as exc:
+                LOGGER.warning("Invalid Ollama /api/ps response from %s: %s", self.base_url, exc)
+                return
+
+            loaded_models = [
+                str(item.get("name", ""))
+                for item in data.get("models", [])
+                if isinstance(item, dict) and item.get("name")
+            ] if isinstance(data, dict) else []
+
+            for loaded_model in loaded_models:
+                if _same_model(loaded_model, requested_model):
+                    continue
+                unload = get_session().post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": loaded_model, "keep_alive": 0},
+                    timeout=settings.request_timeout_s,
+                )
+                if not unload.ok:
+                    raise ProviderError(
+                        f"Failed to unload Ollama model {loaded_model}: {unload.text}",
+                        status_code=unload.status_code,
+                        code="provider_error",
+                    )
+                LOGGER.info("Unloaded Ollama model %s on %s before loading %s", loaded_model, self.base_url, requested_model)
 
     def _is_transient_runner_stop(self, text: str) -> bool:
         lowered = (text or "").lower()
