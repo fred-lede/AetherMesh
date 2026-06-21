@@ -1205,8 +1205,13 @@ class RouterService:
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
         required = self._required_capabilities(payload)
         excluded = excluded_base_url.rstrip("/")
+        requested_model = str(payload.get("model", ""))
+        if not requested_model:
+            return None
         for model in self.registry.get("models", []):
             if str(model.get("provider", "ollama")).lower() != "ollama":
+                continue
+            if str(model.get("name", "")) != requested_model:
                 continue
             if not required.issubset(set(model.get("capabilities", []))):
                 continue

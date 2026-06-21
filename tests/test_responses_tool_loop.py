@@ -150,6 +150,33 @@ def test_ollama_worker_context_cap_overrides_model_cap(monkeypatch):
     assert payload["options"]["num_ctx"] == 16384
 
 
+def test_alternate_ollama_fallback_does_not_change_requested_model():
+    service = RouterService()
+    service.registry = {
+        "models": [
+            {
+                "name": "qwen3-coder:30b",
+                "provider": "ollama",
+                "capabilities": ["chat", "tools"],
+                "worker_bindings": [{"base_url": "http://127.0.0.1:11434"}],
+            },
+            {
+                "name": "gemma4:12b",
+                "provider": "ollama",
+                "capabilities": ["chat", "tools"],
+                "worker_bindings": [{"base_url": "http://127.0.0.1:11435"}],
+            },
+        ]
+    }
+
+    fallback = service._alternate_ollama_fallback(
+        {"model": "qwen3-coder:30b", "messages": []},
+        excluded_base_url="http://127.0.0.1:11434",
+    )
+
+    assert fallback is None
+
+
 def test_responses_input_to_messages_with_instructions():
     messages = responses_input_to_messages("Hello", instructions="You are helpful")
     assert len(messages) == 2
