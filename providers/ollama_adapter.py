@@ -34,8 +34,10 @@ def _same_model(left: str, right: str) -> bool:
 class OllamaAdapter(ProviderAdapter):
     provider_name = "ollama"
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, worker: dict[str, Any] | None = None) -> None:
         self.base_url = base_url.rstrip("/")
+        self.worker_id = str((worker or {}).get("worker_id", ""))
+        self.assignment_id = str((worker or {}).get("assignment_id", ""))
         self.debug_tool_calls = settings.debug_tool_calls
         # Create circuit breaker for this worker
         self._circuit = get_circuit_registry().get_or_create(
@@ -318,7 +320,14 @@ class OllamaAdapter(ProviderAdapter):
                 if isinstance(item, dict) and item.get("name")
             ] if isinstance(data, dict) else []
 
-            for loaded_model in loaded_models:
+            conflicting_models = [
+                loaded_model for loaded_model in loaded_models
+                if not _same_model(loaded_model, requested_model)
+            ]
+            if not conflicting_models or not self._wait_for_model_switch_turn():
+                return
+
+            for loaded_model in conflicting_models:
                 if _same_model(loaded_model, requested_model):
                     continue
                 unload = get_session().post(
@@ -333,6 +342,48 @@ class OllamaAdapter(ProviderAdapter):
                         code="provider_error",
                     )
                 LOGGER.info("Unloaded Ollama model %s on %s before loading %s", loaded_model, self.base_url, requested_model)
+
+    def _wait_for_model_switch_turn(self) -> bool:
+        if not self.worker_id or not self.assignment_id:
+            LOGGER.warning(
+                "Skipping Ollama model eviction on %s because worker assignment metadata is unavailable",
+                self.base_url,
+            )
+            return False
+
+        deadline = time.monotonic() + settings.ollama_model_switch_wait_timeout_s
+        while True:
+            try:
+                response = get_session().get(f"{settings.control_plane_url}/cluster/workers", timeout=5)
+                if not response.ok:
+                    LOGGER.warning("Unable to inspect worker assignments for %s: HTTP %s", self.worker_id, response.status_code)
+                    return False
+                workers = response.json().get("workers", [])
+            except (requests.RequestException, ValueError) as exc:
+                LOGGER.warning("Unable to inspect worker assignments for %s: %s", self.worker_id, exc)
+                return False
+
+            worker = next(
+                (item for item in workers if isinstance(item, dict) and item.get("worker_id") == self.worker_id),
+                None,
+            )
+            active = worker.get("metadata", {}).get("active_assignments", {}) if isinstance(worker, dict) else {}
+            own_started_at = active.get(self.assignment_id) if isinstance(active, dict) else None
+            earlier_assignments = [
+                assignment_id
+                for assignment_id, started_at in active.items()
+                if assignment_id != self.assignment_id and own_started_at is not None and float(started_at) < float(own_started_at)
+            ] if isinstance(active, dict) else []
+            if not earlier_assignments:
+                return True
+            if time.monotonic() >= deadline:
+                raise ProviderError(
+                    f"Timed out waiting for active requests before switching models on {self.base_url}",
+                    status_code=503,
+                    code="worker_busy",
+                )
+            LOGGER.info("Waiting for %s active request(s) before switching models on %s", len(earlier_assignments), self.base_url)
+            time.sleep(1)
 
     def _is_transient_runner_stop(self, text: str) -> bool:
         lowered = (text or "").lower()

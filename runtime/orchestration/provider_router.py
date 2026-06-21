@@ -19,7 +19,7 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
     if provider == "ollama":
         if worker is None:
             raise ValueError("No worker was assigned for Ollama provider.")
-        return OllamaAdapter(worker["base_url"])
+        return OllamaAdapter(worker["base_url"], worker=worker)
     if provider == "ollama_cloud":
         return OllamaCloudAdapter()
     if provider == "openai":

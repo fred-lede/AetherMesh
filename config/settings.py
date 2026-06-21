@@ -63,6 +63,9 @@ class Settings:
     ollama_evict_on_model_switch: bool = field(
         default_factory=lambda: _env_bool("AIIH_OLLAMA_EVICT_ON_MODEL_SWITCH", "true")
     )
+    ollama_model_switch_wait_timeout_s: int = field(
+        default_factory=lambda: _env_int("AIIH_OLLAMA_MODEL_SWITCH_WAIT_TIMEOUT", 900)
+    )
     queue_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_QUEUE_TIMEOUT", 120))
     heartbeat_interval_s: int = field(default_factory=lambda: _env_int("AIIH_HEARTBEAT_INTERVAL", 15))
     stale_after_s: int = field(default_factory=lambda: _env_int("AIIH_STALE_AFTER", 45))
