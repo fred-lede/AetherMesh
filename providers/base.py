@@ -52,3 +52,10 @@ class ProviderAdapter(ABC):
         Called when the client disconnects mid-stream to release the worker.
         Default is no-op; adapters that use blocking HTTP reads should override.
         """
+
+    def abort_stream(self) -> None:
+        """Abort any in-progress stream by closing the underlying HTTP connection.
+        
+        Called when the client disconnects mid-stream to release the worker.
+        Default is no-op; adapters that use blocking HTTP reads should override.
+        """
