@@ -263,7 +263,7 @@ class WorkerRegistry:
                     continue
                 if record.status == "dead":
                     continue
-                if model and record.models and model not in record.models:
+                if model and (not record.models or model not in record.models):
                     continue
                 workers.append(record.to_dict())
             return workers
