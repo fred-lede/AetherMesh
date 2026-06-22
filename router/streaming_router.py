@@ -48,7 +48,12 @@ async def async_stream_response(
                 return
 
             try:
-                item = await loop.run_in_executor(None, next, iter_obj)
+                item = await asyncio.wait_for(
+                    loop.run_in_executor(None, next, iter_obj),
+                    timeout=1.0,
+                )
+            except asyncio.TimeoutError:
+                continue
             except StopIteration:
                 return
             else:
