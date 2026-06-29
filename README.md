@@ -473,7 +473,7 @@ exposed via an OpenAI-compatible `/v1/audio/speech` REST API.
 
 **Installation:**
 ```bash
-pip install -e ".[tts]"    # installs TTS, soundfile, and other audio deps
+pip install -r requirements-tts.txt   # installs TTS, torch, soundfile
 ```
 
 **Configuration (`.env`):**
