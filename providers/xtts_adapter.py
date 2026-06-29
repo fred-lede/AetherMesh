@@ -83,12 +83,14 @@ class XTTSAdapter(TTSProviderAdapter):
         speed = payload.get("speed", 1.0)
 
         gpt_cond, speaker_embed = self._load_embedding(voice_id)
-        wav: np.ndarray = self._model.tts(
+        output = self._model.synthesizer.tts_model.inference(
             text=text,
             gpt_cond_latent=gpt_cond,
             speaker_embedding=speaker_embed,
             language=language,
+            speed=speed,
         )
+        wav: np.ndarray = output["wav"]
         buffer = io.BytesIO()
         if sf is not None:
             sf.write(buffer, wav, 24000, format="WAV", subtype="PCM_16")
@@ -127,7 +129,7 @@ class XTTSAdapter(TTSProviderAdapter):
         ref_path = vp / "reference.wav"
         ref_path.write_bytes(audio_data)
 
-        gpt_cond, speaker_embed = self._model.get_conditioning_latents(
+        gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
             audio_path=str(ref_path)
         )
         import torch
