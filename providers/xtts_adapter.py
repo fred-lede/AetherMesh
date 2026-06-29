@@ -79,7 +79,7 @@ class XTTSAdapter(TTSProviderAdapter):
     def tts(self, payload: dict[str, Any]) -> bytes:
         voice_id = payload["voice"]
         text = payload["input"]
-        language = payload.get("language", "en")
+        language = payload.get("language") or "en"
         speed = payload.get("speed", 1.0)
 
         gpt_cond, speaker_embed = self._load_embedding(voice_id)
