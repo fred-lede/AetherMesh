@@ -135,3 +135,11 @@ desktop.ini
 ############################
 dashboard_export/
 metrics_export/
+
+############################
+# Audio model files / datasets
+############################
+data/
+body.json
+output*.wav
+test.py

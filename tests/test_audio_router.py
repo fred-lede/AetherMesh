@@ -128,3 +128,69 @@ class TestVoicesAPI:
         mock_adapter.delete_voice.return_value = False
         resp = client.delete("/v1/voices/nonexistent")
         assert resp.status_code == 404
+
+
+@pytest.fixture
+def mock_asr_adapter() -> MagicMock:
+    adapter = MagicMock()
+    adapter.transcribe.return_value = {"text": "hello world"}
+    return adapter
+
+
+@pytest.fixture
+def asr_app(mock_asr_adapter: MagicMock) -> FastAPI:
+    with patch("router.audio_router.settings.tts_enabled", False):
+        with patch("router.audio_router.settings.asr_enabled", True):
+            with patch("router.audio_router.get_adapter", return_value=mock_asr_adapter):
+                from router.audio_router import router
+                app = FastAPI()
+                app.include_router(router)
+                yield app
+
+
+@pytest.fixture
+def asr_client(asr_app: FastAPI) -> TestClient:
+    return TestClient(asr_app)
+
+
+class TestASR:
+    def test_transcribe_success(self, asr_client: TestClient, mock_asr_adapter: MagicMock) -> None:
+        resp = asr_client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("test.wav", b"fake-wav-data", "audio/wav")},
+            data={"model": "whisper-large-v3"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["text"] == "hello world"
+
+    def test_translate_success(self, asr_client: TestClient, mock_asr_adapter: MagicMock) -> None:
+        resp = asr_client.post(
+            "/v1/audio/translations",
+            files={"file": ("test.wav", b"fake-wav-data", "audio/wav")},
+            data={"model": "whisper-large-v3"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["text"] == "hello world"
+
+    def test_transcribe_missing_file(self, asr_client: TestClient) -> None:
+        resp = asr_client.post("/v1/audio/transcriptions", data={"model": "whisper-large-v3"})
+        assert resp.status_code == 422
+
+    def test_asr_disabled(self, client: TestClient) -> None:
+        resp = client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("test.wav", b"data", "audio/wav")},
+        )
+        assert resp.status_code == 503
+
+    def test_transcribe_adapter_error(self, asr_client: TestClient, mock_asr_adapter: MagicMock) -> None:
+        from providers.asr_base import ASRProviderError
+        mock_asr_adapter.transcribe.side_effect = ASRProviderError("bad audio", status_code=400)
+        resp = asr_client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("test.wav", b"bad", "audio/wav")},
+        )
+        assert resp.status_code == 400
+        assert "bad audio" in resp.text

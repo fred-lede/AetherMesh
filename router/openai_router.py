@@ -73,7 +73,7 @@ app.include_router(files_router)
 app.include_router(skills_router)
 app.include_router(create_responses_router(service))
 
-if settings.tts_enabled:
+if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router
     app.include_router(audio_router)
 

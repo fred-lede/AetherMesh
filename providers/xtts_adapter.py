@@ -44,8 +44,10 @@ class XTTSAdapter(TTSProviderAdapter):
         device: str = "cuda:0",
         voices_dir: str = "data/voices",
         models_dir: str | None = None,
+        dtype: str = "fp32",
     ) -> None:
         self._device = device
+        self._dtype = dtype
         self._voices_dir = Path(voices_dir)
         self._voices_dir.mkdir(parents=True, exist_ok=True)
         self._model = self._load_model(model_name, models_dir)
@@ -75,10 +77,14 @@ class XTTSAdapter(TTSProviderAdapter):
 
         import os
         os.environ.setdefault("COQUI_TOS_AGREED", "1")
+        if models_dir:
+            os.environ["TTS_HOME"] = os.path.abspath(models_dir)
 
         from TTS.api import TTS
         tts = TTS(model_name=model_name, progress_bar=False)
         tts.to(self._device)
+        if self._dtype == "fp16":
+            tts.half()
         return tts
 
     def _voice_path(self, voice_id: str) -> Path:
@@ -107,14 +113,27 @@ class XTTSAdapter(TTSProviderAdapter):
         speed = payload.get("speed", 1.0)
 
         gpt_cond, speaker_embed = self._load_embedding(voice_id)
-        output = self._model.synthesizer.tts_model.inference(
-            text=text,
-            gpt_cond_latent=gpt_cond,
-            speaker_embedding=speaker_embed,
-            language=language,
-            speed=speed,
-        )
+        import torch
+        if "cuda" in self._device:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                output = self._model.synthesizer.tts_model.inference(
+                    text=text,
+                    gpt_cond_latent=gpt_cond,
+                    speaker_embedding=speaker_embed,
+                    language=language,
+                    speed=speed,
+                )
+        else:
+            output = self._model.synthesizer.tts_model.inference(
+                text=text,
+                gpt_cond_latent=gpt_cond,
+                speaker_embedding=speaker_embed,
+                language=language,
+                speed=speed,
+            )
         wav: np.ndarray = output["wav"]
+        if wav.dtype == np.float16:
+            wav = wav.astype(np.float32)
         buffer = io.BytesIO()
         if sf is not None:
             sf.write(buffer, wav, 24000, format="WAV", subtype="PCM_16")

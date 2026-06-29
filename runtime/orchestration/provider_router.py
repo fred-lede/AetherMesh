@@ -15,6 +15,11 @@ try:
 except ImportError:
     XTTSAdapter = None  # type: ignore[assignment, misc]
 
+try:
+    from providers.faster_whisper_adapter import FasterWhisperAdapter
+except ImportError:
+    FasterWhisperAdapter = None  # type: ignore[assignment, misc]
+
 NVIDIA_PREFIXES = (
     "meta/", "mistralai/", "nvidia/", "google/", "microsoft/", "baichuan-inc/",
     "deepseek/", "upstage/", "snowflake/", "ibm/", "yola/", "writer/", "z-ai/",
@@ -94,6 +99,10 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
         if XTTSAdapter is None:
             raise ValueError("XTTS adapter not available (TTS not installed)")
         return _get_tts_adapter()
+    if provider == "asr":
+        if FasterWhisperAdapter is None:
+            raise ValueError("ASR adapter not available (faster-whisper not installed)")
+        return _get_asr_adapter()
     raise ValueError(f"Unsupported provider: {provider}")
 
 
@@ -108,15 +117,31 @@ def _get_tts_adapter() -> Any:
             device=settings.tts_device,
             voices_dir=settings.tts_voices_dir,
             models_dir=settings.tts_models_dir,
+            dtype=settings.tts_dtype,
         )
     return _tts_adapter
+
+
+_asr_adapter: Any | None = None
+
+
+def _get_asr_adapter() -> Any:
+    global _asr_adapter
+    if _asr_adapter is None and settings.asr_enabled:
+        _asr_adapter = FasterWhisperAdapter(
+            model_name=settings.asr_model,
+            device=settings.asr_device,
+            compute_type=settings.asr_compute_type,
+            download_dir=settings.asr_models_dir,
+        )
+    return _asr_adapter
 
 
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     for prefix, hinted_provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
             stripped = model[len(prefix):]
-            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts"):
+            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts", "asr"):
                 return hinted_provider, None
             for item in registry.get("models", []):
                 if item.get("name") == stripped:
@@ -158,6 +183,7 @@ ROUTE_PREFIXES = {
     "openai/": "openai",
     "gemini/": "gemini",
     "xtts/": "xtts",
+    "asr/": "asr",
 }
 
 

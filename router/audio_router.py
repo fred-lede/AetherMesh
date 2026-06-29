@@ -8,6 +8,7 @@ from fastapi.responses import Response
 
 from config.settings import settings
 from providers.tts_base import TTSProviderError
+from providers.asr_base import ASRProviderError
 from runtime.orchestration.provider_router import adapter as get_adapter
 
 router = APIRouter(tags=["audio"])
@@ -108,3 +109,60 @@ async def delete_voice(voice_id: str) -> Response:
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Voice {voice_id} not found")
     return Response(status_code=204)
+
+
+# ── ASR ──────────────────────────────────────────────────────
+
+
+def _resolve_asr_adapter():
+    if not settings.asr_enabled:
+        raise HTTPException(status_code=503, detail="ASR is not enabled")
+    return get_adapter("asr")
+
+
+@router.post("/v1/audio/transcriptions")
+async def create_transcription(
+    file: UploadFile = File(...),
+    model: str = Form("whisper-large-v3"),
+    language: str = Form(default=""),
+    prompt: str = Form(default=""),
+    temperature: float = Form(default=0.0),
+    response_format: str = Form(default="json"),
+) -> dict[str, Any]:
+    audio_data = await file.read()
+    adapter = _resolve_asr_adapter()
+    try:
+        return adapter.transcribe(
+            audio=audio_data,
+            task="transcribe",
+            language=language,
+            prompt=prompt,
+            temperature=temperature,
+            response_format=response_format,
+        )
+    except ASRProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.post("/v1/audio/translations")
+async def create_translation(
+    file: UploadFile = File(...),
+    model: str = Form("whisper-large-v3"),
+    language: str = Form(default=""),
+    prompt: str = Form(default=""),
+    temperature: float = Form(default=0.0),
+    response_format: str = Form(default="json"),
+) -> dict[str, Any]:
+    audio_data = await file.read()
+    adapter = _resolve_asr_adapter()
+    try:
+        return adapter.transcribe(
+            audio=audio_data,
+            task="translate",
+            language=language,
+            prompt=prompt,
+            temperature=temperature,
+            response_format=response_format,
+        )
+    except ASRProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))

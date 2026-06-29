@@ -138,6 +138,12 @@ class Settings:
     tts_device: str = field(default_factory=lambda: os.getenv("AIIH_TTS_DEVICE", "cuda:0"))
     tts_voices_dir: str = field(default_factory=lambda: os.getenv("AIIH_TTS_VOICES_DIR", "data/voices"))
     tts_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_TTS_MODELS_DIR"))
+    tts_dtype: str = field(default_factory=lambda: os.getenv("AIIH_TTS_DTYPE", "fp32").strip().lower())
+    asr_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_ASR_ENABLED", "false"))
+    asr_model: str = field(default_factory=lambda: os.getenv("AIIH_ASR_MODEL", "large-v3"))
+    asr_device: str = field(default_factory=lambda: os.getenv("AIIH_ASR_DEVICE", "cuda"))
+    asr_compute_type: str = field(default_factory=lambda: os.getenv("AIIH_ASR_COMPUTE_TYPE", "float16"))
+    asr_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_ASR_MODELS_DIR"))
 
     @property
     def tls_enabled(self) -> bool:

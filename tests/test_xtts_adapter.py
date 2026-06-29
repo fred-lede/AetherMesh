@@ -17,10 +17,13 @@ def _mock_tts_deps() -> MagicMock:
         fake_tts = MagicMock()
         fake_tts.tts.return_value = np.zeros((24000,), dtype=np.float32)
         fake_tts.to.return_value = None
-        fake_tts.get_conditioning_latents.return_value = (
+        fake_tts.synthesizer.tts_model.get_conditioning_latents.return_value = (
             np.zeros((1, 1024), dtype=np.float32),
             np.zeros((1, 256), dtype=np.float32),
         )
+        fake_tts.synthesizer.tts_model.inference.return_value = {
+            "wav": np.zeros((24000,), dtype=np.float32),
+        }
 
         tts_api = MagicMock()
         tts_api.TTS.return_value = fake_tts
@@ -34,6 +37,8 @@ def _mock_tts_deps() -> MagicMock:
         sys.modules["soundfile"] = mock_sf
 
         sys.modules["torch"] = MagicMock()
+        sys.modules["transformers"] = MagicMock()
+        sys.modules["transformers.pytorch_utils"] = MagicMock()
 
         yield fake_tts
 
