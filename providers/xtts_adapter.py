@@ -56,8 +56,11 @@ class XTTSAdapter(TTSProviderAdapter):
             import torch
             _tpu.isin_mps_friendly = lambda e, t: torch.isin(e, t)
 
+        import os
+        os.environ.setdefault("COQUI_TOS_AGREED", "1")
+
         from TTS.api import TTS
-        tts = TTS(model_name=model_name, model_dir=models_dir, progress_bar=False)
+        tts = TTS(model_name=model_name, progress_bar=False)
         tts.to(self._device)
         return tts
 
