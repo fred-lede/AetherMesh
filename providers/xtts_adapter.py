@@ -54,7 +54,9 @@ class XTTSAdapter(TTSProviderAdapter):
         import transformers.pytorch_utils as _tpu
         if not hasattr(_tpu, "isin_mps_friendly"):
             import torch
-            _tpu.isin_mps_friendly = lambda e, t: torch.isin(e, t)
+            def _isin_mps_friendly(elements, test_elements):
+                return torch.isin(elements, test_elements)
+            _tpu.isin_mps_friendly = _isin_mps_friendly
 
         import os
         os.environ.setdefault("COQUI_TOS_AGREED", "1")
