@@ -3,3 +3,4 @@ torch>=2.0.0
 torchaudio
 torchcodec
 langdetect
+pypinyin
