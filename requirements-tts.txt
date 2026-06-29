@@ -1,2 +1,3 @@
-TTS
+coqui-tts
 torch>=2.0.0
+torchaudio
