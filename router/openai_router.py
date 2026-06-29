@@ -73,6 +73,10 @@ app.include_router(files_router)
 app.include_router(skills_router)
 app.include_router(create_responses_router(service))
 
+if settings.tts_enabled:
+    from router.audio_router import router as audio_router
+    app.include_router(audio_router)
+
 
 def _error_type_for_status(status_code: int) -> str:
     if status_code == 429:
