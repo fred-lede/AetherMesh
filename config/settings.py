@@ -130,6 +130,14 @@ class Settings:
     tesseract_langs: str = field(default_factory=lambda: os.getenv("AIIH_TESSERACT_LANGS", "eng"))
     file_cleanup_ttl_seconds: int = field(default_factory=lambda: _env_int("AIIH_FILE_CLEANUP_TTL", 600))
     ocr_concurrency: int = field(default_factory=lambda: _env_int("AIIH_OCR_CONCURRENCY", 2))
+    tts_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_TTS_ENABLED", "false"))
+    tts_model_name: str = field(
+        default_factory=lambda: os.getenv("AIIH_TTS_MODEL",
+                                          "tts_models/multilingual/multi-dataset/xtts_v2")
+    )
+    tts_device: str = field(default_factory=lambda: os.getenv("AIIH_TTS_DEVICE", "cuda:0"))
+    tts_voices_dir: str = field(default_factory=lambda: os.getenv("AIIH_TTS_VOICES_DIR", "data/voices"))
+    tts_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_TTS_MODELS_DIR"))
 
     @property
     def tls_enabled(self) -> bool:
@@ -243,7 +251,7 @@ class Settings:
 
     def strip_model_route_prefix(self, model: str) -> str:
         clean_model = str(model or "")
-        for prefix in ("anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/"):
+        for prefix in ("anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/", "xtts/"):
             if clean_model.startswith(prefix):
                 return clean_model[len(prefix):]
         return clean_model

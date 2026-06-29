@@ -214,3 +214,9 @@ models:
     provider: ollama_cloud
     worker_ports: []
     capabilities: [chat, vision, thinking, tools]
+
+  # ── Local TTS ──────────────────────────────────────────────
+  - name: xtts-v2
+    provider: xtts
+    worker_ports: []
+    capabilities: [audio]

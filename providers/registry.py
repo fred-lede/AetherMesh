@@ -194,3 +194,21 @@ class ProviderCapabilityRegistry:
 
 
 provider_capability_registry = ProviderCapabilityRegistry()
+
+
+def _auto_register_tts() -> None:
+    """Register the XTTS provider if TTS is enabled."""
+    from config.settings import settings
+    if settings.tts_enabled:
+        provider_capability_registry.register(
+            ProviderCapabilityEntry(
+                name="xtts",
+                capabilities={Capability.AUDIO},
+                healthy=True,
+                latency_ms=0,
+                requires_key=False,
+            )
+        )
+
+
+_auto_register_tts()
