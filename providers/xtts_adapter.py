@@ -19,6 +19,21 @@ try:
 except ImportError:
     sf = None  # type: ignore[assignment]
 
+try:
+    from langdetect import detect as _detect_lang
+except ImportError:
+    _detect_lang = None  # type: ignore[assignment]
+
+_LANG_MAP = {
+    "zh": "zh-cn",
+    "zh-cn": "zh-cn",
+    "zh-tw": "zh-cn",
+    "en": "en", "es": "es", "fr": "fr", "de": "de",
+    "it": "it", "pt": "pt", "pl": "pl", "tr": "tr",
+    "ru": "ru", "nl": "nl", "cs": "cs", "ar": "ar",
+    "ja": "ja", "hu": "hu", "ko": "ko", "hi": "hi",
+}
+
 
 class XTTSAdapter(TTSProviderAdapter):
     provider_name = "xtts"
@@ -81,7 +96,14 @@ class XTTSAdapter(TTSProviderAdapter):
     def tts(self, payload: dict[str, Any]) -> bytes:
         voice_id = payload["voice"]
         text = payload["input"]
-        language = payload.get("language") or "en"
+        language = payload.get("language")
+        if not language and _detect_lang is not None:
+            try:
+                detected = _detect_lang(text)
+                language = _LANG_MAP.get(detected, detected)
+            except Exception:
+                language = "en"
+        language = language or "en"
         speed = payload.get("speed", 1.0)
 
         gpt_cond, speaker_embed = self._load_embedding(voice_id)
