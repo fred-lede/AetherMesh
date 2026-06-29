@@ -462,8 +462,57 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 | Gemini | `providers/gemini_adapter.py` | chat, stream, responses, rerank |
 | NVIDIA NIM | `providers/nvidia_nim_adapter.py` | chat, stream, responses, embeddings, rerank |
 | Ollama Cloud | `providers/ollama_cloud_adapter.py` | chat, stream, responses, embeddings, rerank |
+| XTTS-v2 (local) | `providers/xtts_adapter.py` | audio (TTS) |
 
 All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
+
+### Local TTS (XTTS-v2)
+
+AetherMesh can run **XTTS-v2** locally on your GPU for text-to-speech with voice cloning,
+exposed via an OpenAI-compatible `/v1/audio/speech` REST API.
+
+**Installation:**
+```bash
+pip install -e ".[tts]"    # installs TTS, soundfile, and other audio deps
+```
+
+**Configuration (`.env`):**
+```bash
+AIIH_TTS_ENABLED=true                      # enable TTS feature
+AIIH_TTS_MODEL_NAME=tts_models/multilingual/multi-dataset/xtts_v2
+AIIH_TTS_DEVICE=cuda                       # or "cpu" for CPU inference
+AIIH_TTS_VOICES_DIR=data/voices            # cloned voice storage
+AIIH_TTS_MODELS_DIR=data/tts_models        # model cache directory
+```
+
+**Voice Management API:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/voices` | GET | List registered voices |
+| `/v1/voices` | POST | Register a new voice (multipart: audio file + name) |
+| `/v1/voices/{voice_id}` | DELETE | Remove a registered voice |
+
+**Text-to-Speech API:**
+
+```
+POST /v1/audio/speech
+Content-Type: application/json
+{
+  "model": "xtts-v2",
+  "input": "Hello, this is a test of the cloned voice.",
+  "voice": "my_voice_id",
+  "response_format": "mp3",
+  "speed": 1.0
+}
+```
+
+Available `response_format` values: `mp3` (default), `opus`, `wav`, `flac`.
+Language can be specified via an optional `language` field (e.g., `"zh-cn"`, `"ja"`).
+When omitted, the language is auto-detected from the input text.
+
+> **Note:** Voice cloning requires a reference audio sample (any language).
+> The `conditioning_latents` are computed once and cached to disk for fast reloads.
 
 ### Multi-Key Failover (Credential Pool)
 
@@ -506,6 +555,11 @@ the `CredentialPool` composite wrapper transparently rotates to the next key:
 | `AIIH_WORKER_ASSIGNMENT_TTL` | `900` | Seconds before unreleased sync worker assignments are reclaimed after router crashes |
 | `AIIH_PROVIDER_COOLDOWN` | — | Seconds before retrying failed provider |
 | `AIIH_DEBUG_RESPONSES` | `false` | Emit compact `/v1/responses` conversion traces to `logs/openai_router.log` |
+| `AIIH_TTS_ENABLED` | `false` | Enable local TTS (XTTS-v2) feature |
+| `AIIH_TTS_MODEL_NAME` | `tts_models/multilingual/multi-dataset/xtts_v2` | TTS model to load |
+| `AIIH_TTS_DEVICE` | `cuda` | Device for TTS inference (`cuda` or `cpu`) |
+| `AIIH_TTS_VOICES_DIR` | `data/voices` | Directory for cloned voice embeddings |
+| `AIIH_TTS_MODELS_DIR` | `data/tts_models` | Directory for TTS model cache |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
 | `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
 | `AIIH_ADMIN_EMAIL` | — | Admin email for first-run bootstrap (creates initial admin) |
