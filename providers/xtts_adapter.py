@@ -49,6 +49,13 @@ class XTTSAdapter(TTSProviderAdapter):
         ))
 
     def _load_model(self, model_name: str, models_dir: str | None) -> Any:
+        # Compatibility shim: transformers>=5.x removed isin_mps_friendly.
+        # coqui-tts 0.27.x still imports it from transformers.pytorch_utils.
+        import transformers.pytorch_utils as _tpu
+        if not hasattr(_tpu, "isin_mps_friendly"):
+            import torch
+            _tpu.isin_mps_friendly = lambda e, t: torch.isin(e, t)
+
         from TTS.api import TTS
         tts = TTS(model_name=model_name, model_dir=models_dir, progress_bar=False)
         tts.to(self._device)
