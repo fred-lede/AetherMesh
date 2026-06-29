@@ -463,6 +463,7 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 | NVIDIA NIM | `providers/nvidia_nim_adapter.py` | chat, stream, responses, embeddings, rerank |
 | Ollama Cloud | `providers/ollama_cloud_adapter.py` | chat, stream, responses, embeddings, rerank |
 | XTTS-v2 (local) | `providers/xtts_adapter.py` | audio (TTS) |
+| faster-whisper (local) | `providers/faster_whisper_adapter.py` | audio (ASR) |
 
 All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 
@@ -508,11 +509,72 @@ Content-Type: application/json
 ```
 
 Available `response_format` values: `mp3` (default), `opus`, `wav`, `flac`.
-Language can be specified via an optional `language` field (e.g., `"zh-cn"`, `"ja"`).
-When omitted, the language is auto-detected from the input text.
+Language can be specified via an optional `language` field. When omitted, the
+language is auto-detected from the input text via `langdetect` (falls back to `en`).
+
+**Supported languages (17):**
+
+| Code | Language | Code | Language |
+|------|----------|------|----------|
+| `en` | English | `zh-cn` | 中文（簡體） |
+| `es` | Español | `fr` | Français |
+| `de` | Deutsch | `it` | Italiano |
+| `pt` | Português | `pl` | Polski |
+| `tr` | Türkçe | `ru` | Русский |
+| `nl` | Nederlands | `cs` | Čeština |
+| `ar` | العربية | `ja` | 日本語 |
+| `hu` | Magyar | `ko` | 한국어 |
+| `hi` | हिन्दी | | |
 
 > **Note:** Voice cloning requires a reference audio sample (any language).
 > The `conditioning_latents` are computed once and cached to disk for fast reloads.
+
+### Local ASR (faster-whisper)
+
+AetherMesh can run **faster-whisper** locally on your GPU for speech-to-text,
+exposed via OpenAI-compatible `/v1/audio/transcriptions` and
+`/v1/audio/translations` REST APIs.
+
+**Installation:**
+```bash
+pip install -r requirements-asr.txt   # installs faster-whisper
+```
+
+**Configuration (`.env`):**
+```bash
+AIIH_ASR_ENABLED=true                    # enable ASR feature
+AIIH_ASR_MODEL=large-v3                  # model size (tiny/base/small/medium/large-v3/turbo)
+AIIH_ASR_DEVICE=cuda                     # or "cpu" for CPU inference
+AIIH_ASR_COMPUTE_TYPE=float16            # or "int8_float16" for lower VRAM
+AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
+```
+
+**Transcription API:**
+```
+POST /v1/audio/transcriptions
+Content-Type: multipart/form-data
+
+file=@speech.wav
+model=whisper-large-v3
+language=ja             # optional — auto-detected if omitted
+prompt=専門用語         # optional — technical terms hint
+temperature=0.0
+```
+
+**Translation API** (transcribes + translates to English):
+```
+POST /v1/audio/translations
+Content-Type: multipart/form-data
+
+file=@speech.mp3
+model=whisper-large-v3
+```
+
+**Supported languages — Whisper supports 99 languages**
+(ISO 639-1 codes). Auto-detects from audio when `language` is omitted.
+See [Whisper's language list](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py#L10)
+for the full set (includes dialects like `yue` for Cantonese, `nan` for
+Southern Min / Taiwanese).
 
 ### Multi-Key Failover (Credential Pool)
 
@@ -560,6 +622,11 @@ the `CredentialPool` composite wrapper transparently rotates to the next key:
 | `AIIH_TTS_DEVICE` | `cuda` | Device for TTS inference (`cuda` or `cpu`) |
 | `AIIH_TTS_VOICES_DIR` | `data/voices` | Directory for cloned voice embeddings |
 | `AIIH_TTS_MODELS_DIR` | `data/tts_models` | Directory for TTS model cache |
+| `AIIH_ASR_ENABLED` | `false` | Enable local ASR (faster-whisper) feature |
+| `AIIH_ASR_MODEL` | `large-v3` | Whisper model size |
+| `AIIH_ASR_DEVICE` | `cuda` | Device for ASR inference |
+| `AIIH_ASR_COMPUTE_TYPE` | `float16` | Compute type (`float16` / `int8_float16`) |
+| `AIIH_ASR_MODELS_DIR` | — | Directory for ASR model cache |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
 | `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
 | `AIIH_ADMIN_EMAIL` | — | Admin email for first-run bootstrap (creates initial admin) |
