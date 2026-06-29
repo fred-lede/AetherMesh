@@ -15,9 +15,9 @@ from .http_client import get_session, post_with_retry
 class OpenAIAdapter(ProviderAdapter):
     provider_name = "openai"
 
-    def __init__(self) -> None:
-        self.base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
-        self.api_key = os.getenv("OPENAI_API_KEY", "")
+    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        self.base_url = (base_url or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")).rstrip("/")
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         if not self.api_key:
             raise ProviderError("OPENAI_API_KEY is not configured.")
 

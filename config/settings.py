@@ -324,6 +324,42 @@ class Settings:
         configured = os.getenv("AIIH_NODE_IP", "").strip()
         return configured or None
 
+    def cloud_credentials_for(self, provider: str) -> list[dict[str, Any]]:
+        """Return list of credential dicts for *provider* from ``config/credentials.json``.
+
+        Returns an empty list if the file or provider section is missing,
+        allowing the caller to fall back to single-key env-var configuration.
+        """
+        credentials_file = self.config_path("credentials.json")
+        if not credentials_file.exists():
+            return []
+        try:
+            data = json.loads(credentials_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        if not isinstance(data, dict):
+            return []
+        entries = data.get(provider, [])
+        if not isinstance(entries, list):
+            return []
+        return [e for e in entries if isinstance(e, dict) and e.get("api_key")]
+
+    def save_cloud_credentials(self, provider: str, credentials: list[dict[str, Any]]) -> None:
+        """Persist credential list for *provider* to ``config/credentials.json``."""
+        path = self.config_path("credentials.json")
+        existing: dict[str, list[dict[str, Any]]] = {}
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                existing = {}
+            if not isinstance(existing, dict):
+                existing = {}
+        existing[provider] = credentials
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(path)
+
     def sandbox_manager(self) -> Any:
         from runtime.security.sandbox.manager import SandboxManager
         from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles

@@ -18,9 +18,9 @@ class NvidiaNIMAdapter(ProviderAdapter):
     _queue_lock = threading.Lock()
     _next_request_at = 0.0
 
-    def __init__(self) -> None:
-        self.base_url = os.getenv("NVIDIA_NIM_API_BASE", "https://integrate.api.nvidia.com/v1").rstrip("/")
-        self.api_key = os.getenv("NVIDIA_NIM_API_KEY", "")
+    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        self.base_url = (base_url or os.getenv("NVIDIA_NIM_API_BASE", "https://integrate.api.nvidia.com/v1")).rstrip("/")
+        self.api_key = api_key or os.getenv("NVIDIA_NIM_API_KEY", "")
         self.timeout_s = int(os.getenv("NVIDIA_NIM_TIMEOUT", "12"))
         self.min_interval_s = float(os.getenv("NVIDIA_NIM_MIN_INTERVAL", "1.5"))
         self.max_retries = int(os.getenv("NVIDIA_NIM_MAX_RETRIES", "2"))

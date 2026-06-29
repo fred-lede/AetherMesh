@@ -23,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
+from runtime.orchestration.provider_router import credential_pool_status, reload_credential_pools
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
@@ -946,6 +947,33 @@ async def events(request: Request):
 def providers_health() -> dict[str, Any]:
     """Check health of all cloud providers."""
     return {"providers": _check_cloud_providers()}
+
+
+@api.get("/credentials/{provider}")
+def credentials_get(provider: str) -> list[dict[str, Any]]:
+    """Return credential list for a cloud provider."""
+    return settings.cloud_credentials_for(provider)
+
+
+@api.get("/credentials/{provider}/status")
+def credentials_status(provider: str) -> list[dict[str, Any]]:
+    """Return credential cooldown status for a cloud provider."""
+    all_status = credential_pool_status()
+    return all_status.get(provider, [])
+
+
+@api.put("/credentials/{provider}")
+def credentials_put(provider: str, body: list[Any] = Body(...)) -> dict[str, Any]:
+    """Save credential list for a cloud provider."""
+    valid = [
+        {"api_key": str(e["api_key"]), "label": str(e.get("label", "")),
+         "base_url": str(e["base_url"]) if e.get("base_url") else "",
+         "cooldown_s": int(e["cooldown_s"]) if e.get("cooldown_s") else None}
+        for e in body if isinstance(e, dict) and e.get("api_key")
+    ]
+    settings.save_cloud_credentials(provider, valid)
+    reload_credential_pools()
+    return {"ok": True, "provider": provider, "count": len(valid)}
 
 
 @api.get("/web-search/status")

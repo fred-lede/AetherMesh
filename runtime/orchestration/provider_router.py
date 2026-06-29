@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from config.settings import settings
+from providers.credential_pool import Credential, CredentialPool
 from providers.gemini_adapter import GeminiAdapter
 from providers.nvidia_nim_adapter import NvidiaNIMAdapter
 from providers.ollama_adapter import OllamaAdapter
@@ -14,12 +15,68 @@ NVIDIA_PREFIXES = (
     "deepseek/", "upstage/", "snowflake/", "ibm/", "yola/", "writer/", "z-ai/",
 )
 
+_CLOUD_ADAPTERS: dict[str, type] = {
+    "nvidia_nim": NvidiaNIMAdapter,
+    "openai": OpenAIAdapter,
+    "gemini": GeminiAdapter,
+    "ollama_cloud": OllamaCloudAdapter,
+}
+
+_credential_pools: dict[str, CredentialPool] = {}
+
+
+def _cloud_pool(provider: str) -> CredentialPool | None:
+    """Return a cached CredentialPool for *provider*, or None if none configured."""
+    if provider not in _CLOUD_ADAPTERS:
+        return None
+    existing = _credential_pools.get(provider)
+    if existing is not None:
+        return existing
+
+    cred_configs = settings.cloud_credentials_for(provider)
+    if not cred_configs:
+        return None
+
+    credentials = [
+        Credential(
+            api_key=c["api_key"],
+            base_url=c.get("base_url"),
+            label=c.get("label", ""),
+            cooldown_s=c.get("cooldown_s"),
+        )
+        for c in cred_configs
+    ]
+    pool = CredentialPool(
+        adapter_cls=_CLOUD_ADAPTERS[provider],
+        credentials=credentials,
+    )
+    _credential_pools[provider] = pool
+    return pool
+
+
+def credential_pool_status() -> dict[str, list[dict[str, Any]]]:
+    """Return cooldown status for all active credential pools (for dashboard)."""
+    status: dict[str, list[dict[str, Any]]] = {}
+    for provider_name, pool in _credential_pools.items():
+        status[provider_name] = pool.get_cooldown_status()
+    return status
+
+
+def reload_credential_pools() -> None:
+    """Clear cached pools so they are re-created from config on next use."""
+    _credential_pools.clear()
+
 
 def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
     if provider == "ollama":
         if worker is None:
             raise ValueError("No worker was assigned for Ollama provider.")
         return OllamaAdapter(worker["base_url"], worker=worker)
+
+    pool = _cloud_pool(provider)
+    if pool is not None:
+        return pool
+
     if provider == "ollama_cloud":
         return OllamaCloudAdapter()
     if provider == "openai":

@@ -512,6 +512,9 @@
           return `<span class="pill"><strong>${cp.name}</strong><span class="${statusCls}">${cp.ok ? 'healthy' : cp.status}</span><span style="color: var(--muted); font-size: 0.85rem;">${detail}</span></span>`;
         }).join('');
       }
+      if (_isAdmin) {
+        renderCredentials(cloudList);
+      }
 
       if (_isAdmin) {
         const webSearchEl = document.getElementById('web-search-providers');
@@ -1264,6 +1267,113 @@
         await refresh();
       } catch (error) {
         setOperationStatus(`Failed to remove override for ${model}: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    }
+
+    function renderCredentials(cloudList) {
+      const section = document.getElementById('credential-section');
+      if (!section) return;
+
+      for (const name of ['nvidia_nim', 'openai', 'gemini', 'ollama_cloud']) {
+        const cloud = cloudList.find(c => c.name === name);
+        const sub = document.getElementById(`cred-sub-${name}`);
+        if (sub) sub.textContent = (cloud && cloud.ok) ? 'Connected' : (cloud ? cloud.status : 'Not configured');
+      }
+
+      loadCredentialKeys();
+    }
+
+    async function loadCredentialKeys() {
+      const providers = ['nvidia_nim', 'openai', 'gemini', 'ollama_cloud'];
+      for (const name of providers) {
+        let creds, statuses;
+        try {
+          const resp = await fetch(`/api/credentials/${name}`);
+          creds = resp.ok ? await resp.json() : [];
+          const sResp = await fetch(`/api/credentials/${name}/status`);
+          statuses = sResp.ok ? await sResp.json() : [];
+        } catch (e) {
+          creds = [];
+          statuses = [];
+        }
+
+        const statusMap = {};
+        for (const s of statuses) { statusMap[s.api_key] = s; }
+
+        let html;
+        if (creds.length === 0) {
+          html = '<div style="color:var(--muted);padding:6px 0;">No credentials configured.</div>';
+        } else {
+          html = creds.map((c, i) => {
+            const st = statusMap[c.api_key.slice(0, 8) + '...'] || {};
+            const cooldownHtml = st.on_cooldown
+              ? `<span class="bad" style="font-size:0.75rem;">cooldown ${st.cooldown_remaining_s}s</span>`
+              : `<span class="ok" style="font-size:0.75rem;">active</span>`;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:0.85rem;">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.label || c.api_key.slice(0, 12) + '...'}</span>
+              ${cooldownHtml}
+              <button class="btn btn-danger" style="padding:3px 8px;" onclick="removeCredential(event,'${name}',${i})">Remove</button>
+            </div>`;
+          }).join('');
+        }
+        const el = document.getElementById(`cred-keys-${name}`);
+        if (el) el.innerHTML = html;
+      }
+    }
+
+    async function addCredential(event, provider) {
+      console.log('addCredential called', provider, event);
+      const keyEl = document.getElementById(`cred-key-${provider}`);
+      const labelEl = document.getElementById(`cred-label-${provider}`);
+      if (!keyEl || !keyEl.value.trim()) {
+        setOperationStatus('API key is required.', 'bad');
+        return;
+      }
+      const restoreButton = setButtonBusy(event?.currentTarget, 'Adding...');
+      setOperationStatus(`Adding credential for ${provider}...`, 'warn');
+      try {
+        const existingResp = await fetch(`/api/credentials/${provider}`);
+        const existing = existingResp.ok ? await existingResp.json() : [];
+        existing.push({
+          api_key: keyEl.value.trim(),
+          label: (labelEl?.value || '').trim(),
+          base_url: '',
+          cooldown_s: null,
+        });
+        await mutateDashboard(`/api/credentials/${provider}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(existing),
+        });
+        keyEl.value = '';
+        if (labelEl) labelEl.value = '';
+        setOperationStatus(`Credential added for ${provider}.`, 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed to add credential: ${summarizeError(error)}`, 'bad');
+      } finally {
+        restoreButton();
+      }
+    }
+
+    async function removeCredential(event, provider, index) {
+      const restoreButton = setButtonBusy(event?.currentTarget, 'Removing...');
+      setOperationStatus(`Removing credential ${index} from ${provider}...`, 'warn');
+      try {
+        const existingResp = await fetch(`/api/credentials/${provider}`);
+        const existing = existingResp.ok ? await existingResp.json() : [];
+        existing.splice(index, 1);
+        await mutateDashboard(`/api/credentials/${provider}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(existing),
+        });
+        setOperationStatus(`Credential removed from ${provider}.`, 'ok');
+        await refresh();
+      } catch (error) {
+        setOperationStatus(`Failed to remove credential: ${summarizeError(error)}`, 'bad');
       } finally {
         restoreButton();
       }

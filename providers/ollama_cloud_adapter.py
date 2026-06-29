@@ -17,9 +17,9 @@ from .http_client import get_session, post_with_retry
 class OllamaCloudAdapter(ProviderAdapter):
     provider_name = "ollama_cloud"
 
-    def __init__(self) -> None:
-        self.base_url = os.getenv("OLLAMA_CLOUD_API_BASE", "https://ollama.com").rstrip("/")
-        self.api_key = os.getenv("OLLAMA_CLOUD_API_KEY", "")
+    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        self.base_url = (base_url or os.getenv("OLLAMA_CLOUD_API_BASE", "https://ollama.com")).rstrip("/")
+        self.api_key = api_key or os.getenv("OLLAMA_CLOUD_API_KEY", "")
         if not self.api_key:
             raise ProviderError("OLLAMA_CLOUD_API_KEY is not configured.")
 

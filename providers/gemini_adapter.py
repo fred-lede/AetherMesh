@@ -17,11 +17,13 @@ from .http_client import get_session, post_with_retry
 class GeminiAdapter(ProviderAdapter):
     provider_name = "gemini"
 
-    def __init__(self) -> None:
-        self.api_key = os.getenv("GEMINI_API_KEY", "")
-        self.base_url = os.getenv(
-            "GEMINI_API_BASE",
-            "https://generativelanguage.googleapis.com/v1beta",
+    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
+        self.base_url = (
+            base_url or os.getenv(
+                "GEMINI_API_BASE",
+                "https://generativelanguage.googleapis.com/v1beta",
+            )
         ).rstrip("/")
         if not self.api_key:
             raise ProviderError("GEMINI_API_KEY is not configured.")

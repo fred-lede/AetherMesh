@@ -658,6 +658,26 @@
       <div class="subsection-title">Provider Telemetry</div>
       <div id="providers"></div>
       <div id="cloud-providers" style="margin-top: 8px;"></div>
+      <div id="credential-section" style="margin-top: 14px;">
+        <div class="subsection-title">Cloud Credentials</div>
+        <div style="color: var(--muted); font-size: 0.85rem; margin-bottom: 8px;">Manage API keys for cloud providers. Keys are stored in config/credentials.json.</div>
+        <div id="credential-grid" class="provider-grid">{% for prov in ["nvidia_nim", "openai", "gemini", "ollama_cloud"] %}
+          <div class="provider-card" id="cred-card-{{ prov }}">
+            <div class="provider-top">
+              <div>
+                <div class="provider-name">{{ prov }}</div>
+                <div class="provider-sub" id="cred-sub-{{ prov }}">Checking...</div>
+              </div>
+            </div>
+            <div id="cred-keys-{{ prov }}" style="font-size:0.85rem;color:var(--muted);padding:6px 0;">Loading credentials...</div>
+            <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);">
+              <input id="cred-key-{{ prov }}" class="control-input" type="password" placeholder="API key" style="flex:1;min-width:0;font-size:0.8rem;">
+              <input id="cred-label-{{ prov }}" class="control-input" type="text" placeholder="Label" style="width:100px;font-size:0.8rem;">
+              <button class="btn btn-primary" style="white-space:nowrap;" onclick="addCredential(event,'{{ prov }}')">Add</button>
+            </div>
+          </div>{% endfor %}
+        </div>
+      </div>
       <div id="web-search-providers" style="margin-top: 6px;"></div>
       <div class="subsection-title">Request Metrics</div>
       <div id="request-metrics-summary" class="muted-line">Tracking requests via Anthropic router</div>
@@ -908,6 +928,6 @@
       }
     }
   </script>
-  <script src="/static/dashboard.js"></script>
+  <script src="/static/dashboard.js?v={{ range(1, 99999) | random }}"></script>
 </body>
 </html>

@@ -465,6 +465,29 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 
 All adapters follow the `ProviderAdapter` interface in `providers/base.py`.
 
+### Multi-Key Failover (Credential Pool)
+
+All cloud adapters support **multiple API keys** via `providers/credential_pool.py`.
+When a key is rate-limited (429), unauthorized (401/403), or hits a server error,
+the `CredentialPool` composite wrapper transparently rotates to the next key:
+
+- Failed keys are placed on **cooldown** (default 300s)
+- Keys are tracked per-provider in `config/credentials.json`
+- No changes to the existing single-key env-var config — backward compatible
+- Dashboard provides a **Cloud Credentials** UI for key management
+
+```json
+{
+  "nvidia_nim": [
+    {"api_key": "nvapi-xxx", "label": "Primary"},
+    {"api_key": "nvapi-yyy", "label": "Backup"}
+  ],
+  "openai": [
+    {"api_key": "sk-xxx", "label": "Default"}
+  ]
+}
+```
+
 ## Configuration
 
 ### Key Environment Variables
@@ -506,6 +529,9 @@ the same debug and provider variables.
   selects the best available worker by GPU tier (5090 > 4070 > P40), queue depth,
   GPU utilization, and model affinity. Dead or overloaded workers are skipped
   automatically — no manual failover needed.
+- `config/credentials.json` — multi-key credentials for cloud providers
+  (NVIDIA NIM, OpenAI, Gemini, Ollama Cloud). Managed via Dashboard or manual
+  editing. Falls back to single-key env vars if not present.
 - `config/cluster.yaml` — cluster topology and node addressing
   `node_hosts` maps each `node_id` to its LAN IP address. This must match the
   IP the worker process uses when registering with the control plane (visible
@@ -662,6 +688,7 @@ Dashboard at `http://localhost:9001`:
 - Provider health, request metrics, local-only mode, model overrides, routing audit log
 - **Model Alias Map**: gateway model → AIIH alias → target model → provider → worker
 - **Cloud Providers**: connection status, model count, latency for NVIDIA NIM, Ollama Cloud, OpenAI, Gemini
+- **Cloud Credentials**: add/remove API keys per provider, view cooldown status (admin only)
 - **Charts**: latency trends, request rates, GPU utilization, model usage, worker load, tokens/sec, TTFT, GPU memory
 
 All dashboard API endpoints (`/api/*`) are consolidated under a single `APIRouter(prefix="/api")`

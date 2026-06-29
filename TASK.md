@@ -219,6 +219,7 @@
 | 2026-06-21 | Phase 23g | Responses circuit resilience: reroute streaming requests away from an open Ollama worker circuit |
 | 2026-06-21 | Phase 23h | Chat streaming circuit resilience: apply the same pre-stream Ollama reroute for Codex clients |
 | 2026-06-21 | Phase 23i | Codex tool ownership: return client function calls without AIIH executing noop handlers |
+| 2026-06-29 | Phase 24 | Multi-Key Credential Pool: `providers/credential_pool.py` Composite Provider with automatic failover on 429/401/403, per-key cooldown tracking, transparent key rotation. 4 cloud adapters accept optional `api_key`/`base_url` params. Dashboard Cloud Credentials UI for add/remove keys. `config/credentials.json` config. SSE streaming hang fix: synchronous card rendering, async data loading. |
 
 ## Phase 23 - Responses Client Compatibility (2026-05-25)
 - [x] Accept bare Responses content parts such as `input_text` and plain `text` dictionaries as user input.
