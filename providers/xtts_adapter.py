@@ -66,8 +66,6 @@ class XTTSAdapter(TTSProviderAdapter):
         ))
 
     def _load_model(self, model_name: str, models_dir: str | None) -> Any:
-        # Compatibility shim: transformers>=5.x removed isin_mps_friendly.
-        # coqui-tts 0.27.x still imports it from transformers.pytorch_utils.
         import transformers.pytorch_utils as _tpu
         if not hasattr(_tpu, "isin_mps_friendly"):
             import torch
@@ -79,6 +77,26 @@ class XTTSAdapter(TTSProviderAdapter):
         os.environ.setdefault("COQUI_TOS_AGREED", "1")
         if models_dir:
             os.environ["TTS_HOME"] = os.path.abspath(models_dir)
+
+        if sf is not None:
+            try:
+                import torchaudio as _ta
+                _orig_load = getattr(_ta, "load", None)
+                if _orig_load is not None:
+                    def _safe_load(uri, *args, **kwargs):
+                        try:
+                            return _orig_load(uri, *args, **kwargs)
+                        except Exception:
+                            import torch as _torch
+                            data, sr = sf.read(uri, dtype="float32")
+                            if data.ndim == 1:
+                                data = data.reshape(1, -1)
+                            else:
+                                data = data.T
+                            return _torch.from_numpy(data), sr
+                    _ta.load = _safe_load
+            except Exception:
+                pass
 
         from TTS.api import TTS
         tts = TTS(model_name=model_name, progress_bar=False)
@@ -103,19 +121,36 @@ class XTTSAdapter(TTSProviderAdapter):
         voice_id = payload["voice"]
         text = payload["input"]
         language = payload.get("language")
+        if not language:
+            try:
+                meta = json.loads((self._voice_path(voice_id) / "meta.json").read_text())
+                language = meta.get("language") or ""
+            except Exception:
+                pass
         if not language and _detect_lang is not None:
             try:
                 detected = _detect_lang(text)
-                language = _LANG_MAP.get(detected, detected)
+                language = _LANG_MAP.get(detected)
             except Exception:
                 language = "en"
         language = language or "en"
+        if language not in _LANG_MAP.values():
+            language = "en"
         speed = payload.get("speed", 1.0)
 
         gpt_cond, speaker_embed = self._load_embedding(voice_id)
         import torch
-        if "cuda" in self._device:
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
+        try:
+            if "cuda" in self._device:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    output = self._model.synthesizer.tts_model.inference(
+                        text=text,
+                        gpt_cond_latent=gpt_cond,
+                        speaker_embedding=speaker_embed,
+                        language=language,
+                        speed=speed,
+                    )
+            else:
                 output = self._model.synthesizer.tts_model.inference(
                     text=text,
                     gpt_cond_latent=gpt_cond,
@@ -123,14 +158,14 @@ class XTTSAdapter(TTSProviderAdapter):
                     language=language,
                     speed=speed,
                 )
-        else:
-            output = self._model.synthesizer.tts_model.inference(
-                text=text,
-                gpt_cond_latent=gpt_cond,
-                speaker_embedding=speaker_embed,
-                language=language,
-                speed=speed,
-            )
+        except TTSProviderError:
+            raise
+        except Exception as e:
+            oom = type(e).__name__ == "OutOfMemoryError"
+            raise TTSProviderError(
+                "CUDA out of memory" if oom else f"TTS inference failed: {e}",
+                status_code=503 if oom else 500,
+            ) from e
         wav: np.ndarray = output["wav"]
         if wav.dtype == np.float16:
             wav = wav.astype(np.float32)
@@ -172,9 +207,16 @@ class XTTSAdapter(TTSProviderAdapter):
         ref_path = vp / "reference.wav"
         ref_path.write_bytes(audio_data)
 
-        gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
-            audio_path=str(ref_path)
-        )
+        try:
+            import torch
+            with torch.no_grad():
+                gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
+                    audio_path=str(ref_path)
+                )
+        except Exception as e:
+            import shutil
+            shutil.rmtree(vp, ignore_errors=True)
+            raise TTSProviderError(f"Voice encoding failed: {e}", status_code=422) from e
         import torch
         torch.save(
             {"gpt_cond_latent": gpt_cond, "speaker_embedding": speaker_embed},
@@ -182,6 +224,8 @@ class XTTSAdapter(TTSProviderAdapter):
         )
 
         duration = self._get_audio_duration(audio_data)
+        if not language:
+            language = "en"
         meta = {
             "voice_id": voice_id,
             "name": name,
@@ -206,8 +250,11 @@ class XTTSAdapter(TTSProviderAdapter):
                 return round(float(result.stdout.strip()), 2)
             except Exception:
                 if sf is not None:
-                    info = sf.info(str(tmp))
-                    return round(info.duration, 2)
+                    try:
+                        info = sf.info(str(tmp))
+                        return round(info.duration, 2)
+                    except Exception:
+                        pass
                 return 0.0
         finally:
             tmp.unlink(missing_ok=True)

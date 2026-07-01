@@ -54,13 +54,20 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools]
-
-  - name: glm-4.7-flash:q4_K_M
+    
+  - name: north-mini-code-1.0:q4_K_M
     provider: ollama
     worker_bindings:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools]
+    
+  - name: medgemma:27b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, vision]
 
   # ── RTX 4070 Ti SUPER (16GB, tier A) — vision / specialist ──
   - name: gemma4:12b
@@ -78,7 +85,7 @@ models:
         port: 11435
         ollama_options:
           num_ctx: 16384
-    capabilities: [chat, thinking, tools, vision]
+    capabilities: [chat, thinking, tools, vision, audio]
     ollama_options:
       num_ctx: 32768
     
@@ -91,7 +98,7 @@ models:
         port: 11434
       - node_id: node-p40-01
         port: 11435
-    capabilities: [chat, thinking, tools, vision]
+    capabilities: [chat, thinking, tools, vision, audio]
 
   - name: qwen3-vl:8b
     provider: ollama

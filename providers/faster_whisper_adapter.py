@@ -66,7 +66,7 @@ class FasterWhisperAdapter(ASRProviderAdapter):
         except ValueError as e:
             raise ASRProviderError(str(e), status_code=400) from e
         except Exception as e:
-            raise ASRProviderError(str(e), status_code=500) from e
+            raise ASRProviderError(f"ASR transcription failed: {e}", status_code=503) from e
         finally:
             try:
                 os.unlink(tmp.name)

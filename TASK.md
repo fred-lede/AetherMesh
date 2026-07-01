@@ -188,7 +188,7 @@
 - [x] 全部 import 驗證通過
 
 ### 待完成
-- [ ] 端對端測試驗證 `/v1/responses` with tools → tool execution → completed
+- [x] 端對端測試驗證 `/v1/responses` with tools → tool execution → completed (2026-07-01)
 
 ---
 
@@ -236,3 +236,71 @@
 - [x] Apply open-circuit Ollama rerouting to `/v1/chat/completions` streams used by Codex.
 - [x] Return client-owned Responses function calls to Codex instead of executing temporary noop handlers in AIIH.
 - [x] Added regression coverage for bare input parts and streaming completed output.
+
+## Phase 25 — Local TTS + ASR (XTTS-v2 + faster-whisper) ✅ (2026-07-01)
+### TTS (XTTS-v2)
+- [x] `providers/tts_base.py` — ABC + TTSProviderError
+- [x] `providers/xtts_adapter.py` — XTTSAdapter with voice CRUD, FP16, language auto-detect, TTS_HOME
+- [x] `router/audio_router.py` — OpenAI-compatible `/v1/audio/speech`, `/v1/voices` (list/register/delete)
+- [x] `provider_router.py` — xtts adapter factory + singleton
+- [x] `config/settings.py` — tts_enabled, tts_model, tts_device, tts_models_dir
+- [x] `config/models.yaml` — xtts-v2 on node-01:11435
+- [x] 11 TTS tests (adapter + router)
+
+### ASR (faster-whisper)
+- [x] `providers/asr_base.py` — ABC + ASRProviderError
+- [x] `providers/faster_whisper_adapter.py` — FasterWhisperAdapter with download_root
+- [x] `router/audio_router.py` — `/v1/audio/transcriptions`, `/v1/audio/translations`
+- [x] `provider_router.py` — asr adapter factory + singleton + ROUTE_PREFIXES
+- [x] `config/settings.py` — asr_enabled, asr_model, asr_device, asr_compute_type, asr_models_dir
+- [x] `config/models.yaml` — whisper-large-v3 on node-01:11435
+- [x] 5 ASR endpoint tests + 10 adapter tests
+
+### Error Handling Fix (2026-07-01)
+- [x] TTS inference exceptions now wrapped in TTSProviderError (was raw 500)
+- [x] OOM detection via class name (`OutOfMemoryError` → 503, others → 500)
+- [x] ASR internal errors return 503 instead of 500
+- [x] `register_voice` errors wrapped in TTSProviderError(422), auto-cleanup invalid dirs
+- [x] `register_voice` router endpoint catches TTSProviderError → HTTPException
+- [x] Fixed `TTSProviderError.message` → `str(e)` (RuntimeError uses args, not .message)
+- [x] 2 new tests: `test_tts_inference_error_wrapped`, `test_tts_oom_error_returns_503`
+
+### torchaudio/FFmpeg Compatibility Fix (2026-07-01)
+- [x] `torchaudio.load()` monkey-patched with soundfile fallback (torchcodec needs FFmpeg shared DLLs)
+- [x] `get_conditioning_latents` calls audio load via patched `torchaudio.load`
+- [x] FFmpeg static build (`C:\mytools\ffmpeg`) works for FFmpeg output format conversion, but not for torchcodec DLL loading
+
+### FP16 Conditioning Latent Fix (2026-07-01)
+- [x] Root cause: `torch.autocast(dtype=float16)` on `get_conditioning_latents()` produces NaN in gpt_cond_latent → corrupted embedding → `torch.multinomial` assertion `input[0] != 0` crash
+- [x] Fix: `register_voice()` now calls `get_conditioning_latents()` inside `torch.no_grad()` (FP32), no autocast — latents saved as FP32
+- [x] Inference still uses autocast (model weights are FP16, latent arithmetic is fine)
+- [x] Deleted corrupted voice `2982f022-e1ef-4220-97ac-495f3c77c4e5` (NaN in gpt_cond_latent from broken autocast)
+- [x] Re-registered voice `075f432f` (TW-HsiaoChen) with FP32 latents → no NaN → TTS SUCCESS on CUDA
+- [x] Also fixes: `transformers 4.57` `_sample` multinomial crash was symptom of NaN probs, not a transformers bug
+
+### Verified Working
+- [x] TTS with real voice: 200 OK, 48KB WAV audio returned
+- [x] Voice registration: 200 OK with no-autocast fix
+- [x] ASR endpoint: 200 OK (returns text)
+- [x] Full TTS→ASR round-trip: TTS generates audio → ASR transcribes back correctly
+- [x] CUDA TTS inference: `Hello, this is a test` → WAV shape (44544,), max 0.8174 — SUCCESS
+- [x] All 41 audio tests passing
+
+### Adapter Resilience (2026-07-01)
+- [x] `provider_router.py`: TTS + ASR adapter factories now catch creation exceptions, return `None` instead of crashing
+- [x] 30-second cooldown: failed adapter creation won't retry for 30s (prevents GPU hammering on broken state)
+- [x] `audio_router.py`: `_resolve_adapter()` / `_resolve_asr_adapter()` return 503 when adapter is `None`
+- [x] `_get_audio_duration()`: `sf.info()` fallback wrapped in try/catch (invalid WAV data → 0.0s instead of crash)
+- [x] 4 new tests: `TestAdapterInitFailure` (2) + `TestProviderRouterResilience` (2)
+- [x] Error responses now include detail messages (was empty 500 before)
+
+### E2E Responses Tests (2026-07-01)
+- [x] `tests/test_responses_e2e.py` — 6 tests covering full `/v1/responses` lifecycle
+  - `TestResponsesE2EToolLoop` (3): router-level tests with mocked service/adapter
+    - `test_with_tools_returns_function_call_to_client`: POST with tools → 200, status=completed
+    - `test_no_tools_direct_completion`: POST without tools → 200, direct text response
+    - `test_follow_up_with_function_call_output`: POST with prior function_call_output in input → completed with text
+  - `TestResponsesToolLoopDirectExecution` (3): tool loop `run()` with real ToolExecutor
+    - `test_run_single_tool_execution`: get_weather tool → executed → sunny in output
+    - `test_run_multi_turn_tool_execution`: get_weather → calculate → 3 adapter calls
+    - `test_run_unknown_tool_returns_error`: nonexistent tool → error result → model retries → completed

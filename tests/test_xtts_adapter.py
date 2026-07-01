@@ -105,6 +105,25 @@ class TestXTTSAdapterTTS:
         adapter.tts({"voice": "x", "input": "hi", "speed": 1.5})
         assert applied == [1.5]
 
+    def test_tts_inference_error_wrapped(self, adapter: MagicMock) -> None:
+        adapter._load_embedding = MagicMock(  # type: ignore[method-assign]
+            return_value=(np.zeros((1, 1024)), np.zeros((1, 256)))
+        )
+        adapter._model.synthesizer.tts_model.inference.side_effect = RuntimeError("CUDA error")
+        with pytest.raises(TTSProviderError) as exc:
+            adapter.tts({"voice": "x", "input": "hi"})
+        assert exc.value.status_code == 500
+
+    def test_tts_oom_error_returns_503(self, adapter: MagicMock) -> None:
+        adapter._load_embedding = MagicMock(  # type: ignore[method-assign]
+            return_value=(np.zeros((1, 1024)), np.zeros((1, 256)))
+        )
+        OOMError = type("OutOfMemoryError", (RuntimeError,), {})
+        adapter._model.synthesizer.tts_model.inference.side_effect = OOMError("OOM")
+        with pytest.raises(TTSProviderError) as exc:
+            adapter.tts({"voice": "x", "input": "hi"})
+        assert exc.value.status_code == 503
+
 
 class TestXTTSAdapterVoiceCRUD:
     def test_register_and_list(self, adapter: MagicMock) -> None:

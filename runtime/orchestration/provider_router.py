@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from config.settings import settings
@@ -9,6 +11,8 @@ from providers.nvidia_nim_adapter import NvidiaNIMAdapter
 from providers.ollama_adapter import OllamaAdapter
 from providers.ollama_cloud_adapter import OllamaCloudAdapter
 from providers.openai_adapter import OpenAIAdapter
+
+logger = logging.getLogger("runtime.orchestration.provider_router")
 
 try:
     from providers.xtts_adapter import XTTSAdapter
@@ -107,11 +111,21 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
 
 
 _tts_adapter: Any | None = None
+_tts_adapter_failed_at: float = 0.0
+_ADAPTER_RETRY_COOLDOWN = 30.0
 
 
 def _get_tts_adapter() -> Any:
-    global _tts_adapter
-    if _tts_adapter is None and settings.tts_enabled:
+    global _tts_adapter, _tts_adapter_failed_at
+    if _tts_adapter is not None:
+        return _tts_adapter
+    if not settings.tts_enabled:
+        return None
+    if _tts_adapter_failed_at and (time.monotonic() - _tts_adapter_failed_at < _ADAPTER_RETRY_COOLDOWN):
+        logger.warning("TTS adapter recently failed, retrying after cooldown (%.0fs remaining)",
+                       _ADAPTER_RETRY_COOLDOWN - (time.monotonic() - _tts_adapter_failed_at))
+        return None
+    try:
         _tts_adapter = XTTSAdapter(
             model_name=settings.tts_model_name,
             device=settings.tts_device,
@@ -119,22 +133,41 @@ def _get_tts_adapter() -> Any:
             models_dir=settings.tts_models_dir,
             dtype=settings.tts_dtype,
         )
-    return _tts_adapter
+        _tts_adapter_failed_at = 0.0
+        return _tts_adapter
+    except Exception:
+        _tts_adapter_failed_at = time.monotonic()
+        logger.exception("TTS adapter creation failed")
+        return None
 
 
 _asr_adapter: Any | None = None
+_asr_adapter_failed_at: float = 0.0
 
 
 def _get_asr_adapter() -> Any:
-    global _asr_adapter
-    if _asr_adapter is None and settings.asr_enabled:
+    global _asr_adapter, _asr_adapter_failed_at
+    if _asr_adapter is not None:
+        return _asr_adapter
+    if not settings.asr_enabled:
+        return None
+    if _asr_adapter_failed_at and (time.monotonic() - _asr_adapter_failed_at < _ADAPTER_RETRY_COOLDOWN):
+        logger.warning("ASR adapter recently failed, retrying after cooldown (%.0fs remaining)",
+                       _ADAPTER_RETRY_COOLDOWN - (time.monotonic() - _asr_adapter_failed_at))
+        return None
+    try:
         _asr_adapter = FasterWhisperAdapter(
             model_name=settings.asr_model,
             device=settings.asr_device,
             compute_type=settings.asr_compute_type,
             download_dir=settings.asr_models_dir,
         )
-    return _asr_adapter
+        _asr_adapter_failed_at = 0.0
+        return _asr_adapter
+    except Exception:
+        _asr_adapter_failed_at = time.monotonic()
+        logger.exception("ASR adapter creation failed")
+        return None
 
 
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:

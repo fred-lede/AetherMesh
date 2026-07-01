@@ -24,7 +24,10 @@ AUDIO_CONTENT_TYPES = {
 def _resolve_adapter():
     if not settings.tts_enabled:
         raise HTTPException(status_code=503, detail="TTS is not enabled")
-    return get_adapter("xtts")
+    adapter = get_adapter("xtts")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="TTS adapter unavailable (model load failed or cooling down)")
+    return adapter
 
 
 @router.post("/v1/audio/speech")
@@ -54,6 +57,8 @@ async def create_speech(payload: dict[str, Any]) -> Response:
         })
     except TTSProviderError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {e}")
 
     if fmt != "wav":
         audio_bytes = _convert_format(audio_bytes, fmt)
@@ -94,12 +99,15 @@ async def register_voice(
 ) -> dict[str, Any]:
     audio_data = await file.read()
     adapter = _resolve_adapter()
-    return adapter.register_voice(
-        name=name,
-        audio_data=audio_data,
-        language=language,
-        content_type=file.content_type or "audio/wav",
-    )
+    try:
+        return adapter.register_voice(
+            name=name,
+            audio_data=audio_data,
+            language=language,
+            content_type=file.content_type or "audio/wav",
+        )
+    except TTSProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
 
 
 @router.delete("/v1/voices/{voice_id}", status_code=204)
@@ -117,7 +125,10 @@ async def delete_voice(voice_id: str) -> Response:
 def _resolve_asr_adapter():
     if not settings.asr_enabled:
         raise HTTPException(status_code=503, detail="ASR is not enabled")
-    return get_adapter("asr")
+    adapter = get_adapter("asr")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="ASR adapter unavailable (model load failed or cooling down)")
+    return adapter
 
 
 @router.post("/v1/audio/transcriptions")

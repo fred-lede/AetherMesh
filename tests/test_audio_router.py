@@ -194,3 +194,71 @@ class TestASR:
         )
         assert resp.status_code == 400
         assert "bad audio" in resp.text
+
+
+class TestAdapterInitFailure:
+    def test_tts_adapter_unavailable(self) -> None:
+        with patch("router.audio_router.settings.tts_enabled", True):
+            with patch("router.audio_router.get_adapter", return_value=None):
+                from router.audio_router import router
+                app = FastAPI()
+                app.include_router(router)
+                c = TestClient(app)
+                resp = c.post("/v1/audio/speech", json={
+                    "model": "xtts-v2", "input": "hi", "voice": "v1",
+                })
+                assert resp.status_code == 503
+                assert "unavailable" in resp.text.lower()
+
+    def test_asr_adapter_unavailable(self) -> None:
+        with patch("router.audio_router.settings.tts_enabled", False):
+            with patch("router.audio_router.settings.asr_enabled", True):
+                with patch("router.audio_router.get_adapter", return_value=None):
+                    from router.audio_router import router
+                    app = FastAPI()
+                    app.include_router(router)
+                    c = TestClient(app)
+                    resp = c.post(
+                        "/v1/audio/transcriptions",
+                        files={"file": ("test.wav", b"data", "audio/wav")},
+                    )
+                    assert resp.status_code == 503
+                    assert "unavailable" in resp.text.lower()
+
+
+class TestProviderRouterResilience:
+    def test_asr_factory_cooldown(self) -> None:
+        from runtime.orchestration import provider_router as pr
+        import importlib
+        importlib.reload(pr)
+        pr._asr_adapter = None
+        pr._asr_adapter_failed_at = 0.0
+        with patch.object(pr.settings, "asr_enabled", True):
+            with patch.object(pr, "FasterWhisperAdapter", side_effect=RuntimeError("CUDA error")):
+                result = pr._get_asr_adapter()
+                assert result is None
+                assert pr._asr_adapter_failed_at > 0
+                pr._ADAPTER_RETRY_COOLDOWN = 9999.0
+                result2 = pr._get_asr_adapter()
+                assert result2 is None
+                pr._ADAPTER_RETRY_COOLDOWN = 30.0
+        pr._asr_adapter = None
+        pr._asr_adapter_failed_at = 0.0
+
+    def test_tts_factory_cooldown(self) -> None:
+        from runtime.orchestration import provider_router as pr
+        import importlib
+        importlib.reload(pr)
+        pr._tts_adapter = None
+        pr._tts_adapter_failed_at = 0.0
+        with patch.object(pr.settings, "tts_enabled", True):
+            with patch.object(pr, "XTTSAdapter", side_effect=RuntimeError("CUDA error")):
+                result = pr._get_tts_adapter()
+                assert result is None
+                assert pr._tts_adapter_failed_at > 0
+                pr._ADAPTER_RETRY_COOLDOWN = 9999.0
+                result2 = pr._get_tts_adapter()
+                assert result2 is None
+                pr._ADAPTER_RETRY_COOLDOWN = 30.0
+        pr._tts_adapter = None
+        pr._tts_adapter_failed_at = 0.0
