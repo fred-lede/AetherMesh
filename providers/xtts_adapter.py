@@ -387,7 +387,7 @@ class XTTSAdapter(TTSProviderAdapter):
             try:
                 subprocess.run(
                     ["ffmpeg", "-i", str(ref_path), "-t", str(self._max_ref_seconds),
-                     "-c", "copy", str(trimmed)],
+                     "-acodec", "pcm_s16le", "-f", "wav", str(trimmed)],
                     check=True, capture_output=True, timeout=30,
                 )
                 ref_path.unlink()
