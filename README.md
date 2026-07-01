@@ -870,6 +870,7 @@ Dashboard at `http://localhost:9001`:
 - **Cloud Providers**: connection status, model count, latency for NVIDIA NIM, Ollama Cloud, OpenAI, Gemini
 - **Cloud Credentials**: add/remove API keys per provider, view cooldown status (admin only)
 - **Charts**: latency trends, request rates, GPU utilization, model usage, worker load, tokens/sec, TTFT, GPU memory
+- **Audio**: TTS/ASR settings overview, voice management (register, edit, delete, preview) (admin only)
 
 All dashboard API endpoints (`/api/*`) are consolidated under a single `APIRouter(prefix="/api")`
 in `dashboard/dashboard_server.py`, with the dashboard static JS extracted to
