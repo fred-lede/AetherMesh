@@ -177,10 +177,20 @@ def _worker_main(
                 audio_path = req["audio_path"]
                 embedding_path = req["embedding_path"]
 
-                with _torch.no_grad():
-                    gpt_cond, speaker_embed = tts.synthesizer.tts_model.get_conditioning_latents(
-                        audio_path=str(audio_path),
-                    )
+                was_fp16 = dtype == "fp16"
+                if was_fp16:
+                    for component in tts.synthesizer.components:
+                        component.float()
+
+                try:
+                    with _torch.no_grad():
+                        gpt_cond, speaker_embed = tts.synthesizer.tts_model.get_conditioning_latents(
+                            audio_path=str(audio_path),
+                        )
+                finally:
+                    if was_fp16:
+                        for component in tts.synthesizer.components:
+                            component.half()
 
                 gpt_cond = gpt_cond.float()
                 speaker_embed = speaker_embed.float()
