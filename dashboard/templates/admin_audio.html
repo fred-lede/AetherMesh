@@ -90,6 +90,8 @@
     .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
     .btn-danger { background: var(--bad); color: #fff; }
     .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 0.75; } }
     .table {
       width: 100%;
       border-collapse: collapse;

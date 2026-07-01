@@ -91,6 +91,18 @@
     }
   }
 
+  function _findBtn(label) {
+    var btns = document.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].textContent.trim() === label) return btns[i];
+    }
+    return null;
+  }
+
+  function _idShort(id) {
+    return id ? id.slice(0, 8) + '…' : '—';
+  }
+
   window.registerVoice = async function() {
     var nameEl = document.getElementById('voice-name');
     var langEl = document.getElementById('voice-language');
@@ -100,7 +112,9 @@
     var file = fileEl.files && fileEl.files[0];
     if (!name) { alert('Voice name is required.'); return; }
     if (!file) { alert('Audio file is required.'); return; }
-    setOperationStatus('Registering voice...', 'warn');
+    var btn = _findBtn('Register');
+    var restoreBtn = setButtonBusy(btn, 'Registering…');
+    setOperationStatus('Registering voice ' + name + '…', 'warn');
     try {
       var fd = new FormData();
       fd.append('name', name);
@@ -112,7 +126,7 @@
         throw new Error(err.detail || 'Registration failed');
       }
       var result = await resp.json();
-      setOperationStatus('Voice registered: ' + (result.voice_id || '').slice(0, 8) + '…', 'ok');
+      setOperationStatus('Voice registered: ' + _idShort(result.voice_id), 'ok');
       nameEl.value = '';
       langEl.value = '';
       fileEl.value = '';
@@ -120,6 +134,8 @@
       loadTtsSettings();
     } catch(error) {
       setOperationStatus('Failed: ' + summarizeError(error), 'bad');
+    } finally {
+      restoreBtn();
     }
   };
 
@@ -131,7 +147,9 @@
     var body = {};
     if (nameInput) body.name = nameInput.value;
     if (langInput) body.language = langInput.value;
-    setOperationStatus('Updating voice...', 'warn');
+    var btn = row.querySelector('.btn-secondary');
+    var restoreBtn = setButtonBusy(btn, 'Saving…');
+    setOperationStatus('Updating voice…', 'warn');
     try {
       var resp = await fetch('/api/audio/voices/' + voiceId, {
         method: 'PATCH',
@@ -146,12 +164,17 @@
       loadVoices();
     } catch(error) {
       setOperationStatus('Failed: ' + summarizeError(error), 'bad');
+    } finally {
+      restoreBtn();
     }
   };
 
   window.deleteVoice = async function(voiceId) {
-    if (!confirm('Delete voice ' + voiceId.slice(0, 8) + '…? This cannot be undone.')) return;
-    setOperationStatus('Deleting voice...', 'warn');
+    if (!confirm('Delete voice ' + _idShort(voiceId) + '? This cannot be undone.')) return;
+    var row = document.querySelector('tr[data-vid="' + voiceId + '"]');
+    var btn = row ? row.querySelector('.btn-danger') : null;
+    var restoreBtn = setButtonBusy(btn, 'Deleting…');
+    setOperationStatus('Deleting voice…', 'warn');
     try {
       var resp = await fetch('/api/audio/voices/' + voiceId, { method: 'DELETE' });
       if (!resp.ok && resp.status !== 204) {
@@ -163,6 +186,8 @@
       loadTtsSettings();
     } catch(error) {
       setOperationStatus('Failed: ' + summarizeError(error), 'bad');
+    } finally {
+      restoreBtn();
     }
   };
 
