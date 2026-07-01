@@ -272,10 +272,12 @@
 
 ### FP16 Conditioning Latent Fix (2026-07-01)
 - [x] Root cause: `torch.autocast(dtype=float16)` on `get_conditioning_latents()` produces NaN in gpt_cond_latent → corrupted embedding → `torch.multinomial` assertion `input[0] != 0` crash
-- [x] Fix: `register_voice()` now calls `get_conditioning_latents()` inside `torch.no_grad()` (FP32), no autocast — latents saved as FP32
+- [x] Fix: `register_voice()` uses autocast only inside `get_conditioning_latents()` for FP16 model compat, then converts output back to FP32 and replaces NaN with zeros
+- [x] `_load_embedding()`: auto-converts FP32 latents to FP16 when `dtype="fp16"` for inference compat
 - [x] Inference still uses autocast (model weights are FP16, latent arithmetic is fine)
 - [x] Deleted corrupted voice `2982f022-e1ef-4220-97ac-495f3c77c4e5` (NaN in gpt_cond_latent from broken autocast)
 - [x] Re-registered voice `075f432f` (TW-HsiaoChen) with FP32 latents → no NaN → TTS SUCCESS on CUDA
+- [x] Fixed FP16 `register_voice` type mismatch: model is HalfTensor but `get_conditioning_latents` inputs are FloatTensor — now uses autocast + NaN cleanup + FP32 save
 - [x] Also fixes: `transformers 4.57` `_sample` multinomial crash was symptom of NaN probs, not a transformers bug
 
 ### Verified Working

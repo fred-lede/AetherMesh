@@ -115,7 +115,12 @@ class XTTSAdapter(TTSProviderAdapter):
             raise TTSProviderError(f"Voice {voice_id} not found", status_code=404)
         import torch
         data = torch.load(str(emb_path), map_location=self._device, weights_only=True)
-        return data["gpt_cond_latent"], data["speaker_embedding"]
+        gpt_cond = data["gpt_cond_latent"]
+        speaker_embed = data["speaker_embedding"]
+        if self._dtype == "fp16":
+            gpt_cond = gpt_cond.half()
+            speaker_embed = speaker_embed.half()
+        return gpt_cond, speaker_embed
 
     def tts(self, payload: dict[str, Any]) -> bytes:
         voice_id = payload["voice"]
@@ -210,9 +215,21 @@ class XTTSAdapter(TTSProviderAdapter):
         try:
             import torch
             with torch.no_grad():
-                gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
-                    audio_path=str(ref_path)
-                )
+                if "cuda" in self._device and self._dtype == "fp16":
+                    with torch.autocast(device_type="cuda", dtype=torch.float16):
+                        gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
+                            audio_path=str(ref_path)
+                        )
+                    gpt_cond = gpt_cond.float()
+                    speaker_embed = speaker_embed.float()
+                    has_nan = torch.isnan(gpt_cond).any().item() or torch.isnan(speaker_embed).any().item()
+                    if has_nan:
+                        gpt_cond = torch.where(torch.isnan(gpt_cond), torch.zeros_like(gpt_cond), gpt_cond)
+                        speaker_embed = torch.where(torch.isnan(speaker_embed), torch.zeros_like(speaker_embed), speaker_embed)
+                else:
+                    gpt_cond, speaker_embed = self._model.synthesizer.tts_model.get_conditioning_latents(
+                        audio_path=str(ref_path)
+                    )
         except Exception as e:
             import shutil
             shutil.rmtree(vp, ignore_errors=True)
