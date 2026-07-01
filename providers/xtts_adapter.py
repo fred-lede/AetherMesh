@@ -382,19 +382,21 @@ class XTTSAdapter(TTSProviderAdapter):
                     duration = round(info.duration, 2)
                 except Exception:
                     pass
-        if duration > self._max_ref_seconds:
-            trimmed = ref_path.with_suffix(".trimmed.wav")
-            try:
-                subprocess.run(
-                    ["ffmpeg", "-i", str(ref_path), "-t", str(self._max_ref_seconds),
-                     "-acodec", "pcm_s16le", "-f", "wav", str(trimmed)],
-                    check=True, capture_output=True, timeout=30,
-                )
-                ref_path.unlink()
-                trimmed.rename(ref_path)
+        trimmed = ref_path.with_suffix(".trimmed.wav")
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", str(ref_path),
+                "-acodec", "pcm_s16le", "-f", "wav",
+            ]
+            if duration > self._max_ref_seconds:
+                cmd.extend(["-t", str(self._max_ref_seconds)])
                 duration = self._max_ref_seconds
-            except Exception:
-                trimmed.unlink(missing_ok=True)
+            cmd.append(str(trimmed))
+            subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+            ref_path.unlink()
+            trimmed.rename(ref_path)
+        except Exception:
+            trimmed.unlink(missing_ok=True)
         return round(duration, 2)
 
     def register_voice(

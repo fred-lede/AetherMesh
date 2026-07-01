@@ -340,8 +340,21 @@ class TestTrimReference:
         ref.parent.mkdir(parents=True, exist_ok=True)
         ref.write_bytes(b"fake-wav")
         with patch("providers.xtts_adapter.subprocess.run") as mock_run:
-            mock_run.return_value.stdout = "5.0\n"
-            mock_run.return_value.returncode = 0
+            def _side(cmd, *args, **kwargs):
+                if "ffprobe" in str(cmd):
+                    m = MagicMock()
+                    m.stdout = "5.0\n"
+                    m.returncode = 0
+                    return m
+                if "ffmpeg" in str(cmd):
+                    trimmed = Path(cmd[-1])
+                    trimmed.parent.mkdir(parents=True, exist_ok=True)
+                    trimmed.write_bytes(b"normalized-wav")
+                    m = MagicMock()
+                    m.returncode = 0
+                    return m
+                return MagicMock()
+            mock_run.side_effect = _side
             duration = adapter._trim_reference(ref)
         assert duration == 5.0
         assert ref.exists()  # not deleted
