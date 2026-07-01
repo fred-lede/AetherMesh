@@ -178,25 +178,21 @@ def _worker_main(
                 embedding_path = req["embedding_path"]
 
                 with _torch.no_grad():
-                    if "cuda" in device and dtype == "fp16":
-                        with _torch.autocast(device_type="cuda", dtype=_torch.float16):
-                            gpt_cond, speaker_embed = tts.synthesizer.tts_model.get_conditioning_latents(
-                                audio_path=str(audio_path),
-                            )
-                        gpt_cond = gpt_cond.float()
-                        speaker_embed = speaker_embed.float()
-                        has_nan = _torch.isnan(gpt_cond).any().item() or _torch.isnan(speaker_embed).any().item()
-                        if has_nan:
-                            gpt_cond = _torch.where(
-                                _torch.isnan(gpt_cond), _torch.zeros_like(gpt_cond), gpt_cond,
-                            )
-                            speaker_embed = _torch.where(
-                                _torch.isnan(speaker_embed), _torch.zeros_like(speaker_embed), speaker_embed,
-                            )
-                    else:
-                        gpt_cond, speaker_embed = tts.synthesizer.tts_model.get_conditioning_latents(
-                            audio_path=str(audio_path),
-                        )
+                    gpt_cond, speaker_embed = tts.synthesizer.tts_model.get_conditioning_latents(
+                        audio_path=str(audio_path),
+                    )
+
+                gpt_cond = gpt_cond.float()
+                speaker_embed = speaker_embed.float()
+
+                has_nan = _torch.isnan(gpt_cond).any().item() or _torch.isnan(speaker_embed).any().item()
+                if has_nan:
+                    gpt_cond = _torch.where(
+                        _torch.isnan(gpt_cond), _torch.zeros_like(gpt_cond), gpt_cond,
+                    )
+                    speaker_embed = _torch.where(
+                        _torch.isnan(speaker_embed), _torch.zeros_like(speaker_embed), speaker_embed,
+                    )
 
                 _torch.save(
                     {"gpt_cond_latent": gpt_cond, "speaker_embedding": speaker_embed},
