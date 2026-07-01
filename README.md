@@ -481,9 +481,51 @@ pip install -r requirements-tts.txt   # installs TTS, torch, soundfile
 ```bash
 AIIH_TTS_ENABLED=true                      # enable TTS feature
 AIIH_TTS_MODEL_NAME=tts_models/multilingual/multi-dataset/xtts_v2
-AIIH_TTS_DEVICE=cuda                       # or "cpu" for CPU inference
+AIIH_TTS_DEVICE=cuda                       # or "cuda:0", "cpu" for CPU inference
+AIIH_TTS_DTYPE=fp16                        # fp16 (~2.4 GB VRAM, ~2x faster) or fp32
 AIIH_TTS_VOICES_DIR=data/voices            # cloned voice storage
 AIIH_TTS_MODELS_DIR=data/tts_models        # model cache directory
+```
+
+<details>
+<summary><strong>Dtype & device notes</strong></summary>
+
+- **`AIIH_TTS_DTYPE=fp16`**: loads model weights as half-precision (~2.4 GB VRAM). Inference
+  uses `torch.autocast`. Voice registration computes conditioning latents inside autocast then
+  converts back to FP32 with NaN cleanup before saving — this avoids the NaN → CUDA multinomial
+  crash that occurs when latents are computed purely in FP16.
+- **`AIIH_TTS_DTYPE=fp32`** (default): full precision (~4.8 GB VRAM). No autocast needed.
+- **`AIIH_TTS_DEVICE`**: accepts `cuda`, `cuda:0`, `cuda:1`, etc. for multi-GPU setups, or
+  `cpu` for CPU-only inference (much slower).
+- If FP16 inference produces garbled audio, switch to `fp32` — some GPU architectures
+  have numerical precision issues with XTTS-v2's small-vocab GPT sampling.
+</details>
+
+**Step 1: Register a voice (one-time per speaker):**
+```bash
+# Upload a reference audio sample (6–30 seconds of clean speech)
+curl -X POST http://localhost:8001/v1/voices \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "name=my-voice" \
+  -F "file=@reference.wav" \
+  -F "language=en"
+
+# Response:
+# {"voice_id": "abc123-...", "name": "my-voice", "language": "en", ...}
+```
+
+**Step 2: Generate speech:**
+```bash
+curl -X POST http://localhost:8001/v1/audio/speech \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1",
+    "input": "Hello, this is a test of the cloned voice.",
+    "voice": "abc123-...",
+    "response_format": "mp3"
+  }' \
+  -o output.mp3
 ```
 
 **Voice Management API:**
@@ -491,26 +533,19 @@ AIIH_TTS_MODELS_DIR=data/tts_models        # model cache directory
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/v1/voices` | GET | List registered voices |
-| `/v1/voices` | POST | Register a new voice (multipart: audio file + name) |
+| `/v1/voices` | POST | Register a new voice (multipart: audio file + name + language) |
 | `/v1/voices/{voice_id}` | DELETE | Remove a registered voice |
 
-**Text-to-Speech API:**
+**Request fields:**
 
-```
-POST /v1/audio/speech
-Content-Type: application/json
-{
-  "model": "xtts-v2",
-  "input": "Hello, this is a test of the cloned voice.",
-  "voice": "my_voice_id",
-  "response_format": "mp3",
-  "speed": 1.0
-}
-```
-
-Available `response_format` values: `mp3` (default), `opus`, `wav`, `flac`.
-Language can be specified via an optional `language` field. When omitted, the
-language is auto-detected from the input text via `langdetect` (falls back to `en`).
+| Field | Required | Description |
+|-------|----------|-------------|
+| `model` | yes | Use `"tts-1"` or `"xtts-v2"` — any value is accepted |
+| `input` | yes | Text to synthesize (max ~500 chars for best quality) |
+| `voice` | yes | Voice ID from `/v1/voices` (not a file — must be pre-registered) |
+| `response_format` | no | `mp3` (default), `wav`, `opus`, `flac` |
+| `language` | no | Language code (auto-detected from text when omitted, falls back to `en`) |
+| `speed` | no | Playback speed multiplier (default `1.0`, applied via FFmpeg post-process) |
 
 **Supported languages (17):**
 
@@ -526,8 +561,10 @@ language is auto-detected from the input text via `langdetect` (falls back to `e
 | `hu` | Magyar | `ko` | 한국어 |
 | `hi` | हिन्दी | | |
 
-> **Note:** Voice cloning requires a reference audio sample (any language).
-> The `conditioning_latents` are computed once and cached to disk for fast reloads.
+> **Important:** Voice cloning requires a reference audio sample (6–30 seconds, any supported
+> language). The `conditioning_latents` are computed once and cached to disk for fast reloads.
+> If you get a 422 error on voice registration, ensure the audio is a valid WAV/MP3 with clean
+> speech. If TTS returns garbled audio or CUDA errors, switch `AIIH_TTS_DTYPE` to `fp32`.
 
 ### Local ASR (faster-whisper)
 
@@ -544,31 +581,49 @@ pip install -r requirements-asr.txt   # installs faster-whisper
 ```bash
 AIIH_ASR_ENABLED=true                    # enable ASR feature
 AIIH_ASR_MODEL=large-v3                  # model size (tiny/base/small/medium/large-v3/turbo)
-AIIH_ASR_DEVICE=cuda                     # or "cpu" for CPU inference
-AIIH_ASR_COMPUTE_TYPE=float16            # or "int8_float16" for lower VRAM
+AIIH_ASR_DEVICE=cuda                     # "cuda" or "cpu" (use "cuda", NOT "cuda:0" — ctranslate2 format)
+AIIH_ASR_COMPUTE_TYPE=float16            # float16 (GPU), int8_float16 (lower VRAM), int8 (CPU)
 AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
 ```
 
-**Transcription API:**
-```
-POST /v1/audio/transcriptions
-Content-Type: multipart/form-data
+<details>
+<summary><strong>ASR device & compute notes</strong></summary>
 
-file=@speech.wav
-model=whisper-large-v3
-language=ja             # optional — auto-detected if omitted
-prompt=専門用語         # optional — technical terms hint
-temperature=0.0
+- **`AIIH_ASR_DEVICE`**: use `cuda` (not `cuda:0`). The `faster-whisper` backend (ctranslate2)
+  expects `cuda` or `cpu` — device indices like `cuda:0` will raise `ValueError`.
+- **`AIIH_ASR_COMPUTE_TYPE`**: `float16` for GPU (default), `int8_float16` for low-VRAM GPUs,
+  `int8` or `float32` for CPU inference.
+- **Model size trade-offs**: `tiny` (39M, fastest) → `large-v3` (3B, best accuracy) → `turbo`
+  (809M, good balance). Models are downloaded to `AIIH_ASR_MODELS_DIR` on first use.
+</details>
+
+**Transcription API:**
+```bash
+curl -X POST http://localhost:8001/v1/audio/transcriptions \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "file=@speech.wav" \
+  -F "model=whisper-1" \
+  -F "language=ja" \
+  -F "temperature=0.0"
 ```
 
 **Translation API** (transcribes + translates to English):
+```bash
+curl -X POST http://localhost:8001/v1/audio/translations \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "file=@speech.mp3" \
+  -F "model=whisper-1"
 ```
-POST /v1/audio/translations
-Content-Type: multipart/form-data
 
-file=@speech.mp3
-model=whisper-large-v3
-```
+**Request fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `file` | yes | Audio file (WAV, MP3, FLAC, OGG, etc.) |
+| `model` | yes | Use `"whisper-1"` — any value is accepted |
+| `language` | no | ISO 639-1 code (auto-detected if omitted) |
+| `prompt` | no | Technical terms hint to improve transcription accuracy |
+| `temperature` | no | Sampling temperature (default `0.0` = greedy) |
 
 **Supported languages — Whisper supports 99 languages**
 (ISO 639-1 codes). Auto-detects from audio when `language` is omitted.
@@ -619,13 +674,14 @@ the `CredentialPool` composite wrapper transparently rotates to the next key:
 | `AIIH_DEBUG_RESPONSES` | `false` | Emit compact `/v1/responses` conversion traces to `logs/openai_router.log` |
 | `AIIH_TTS_ENABLED` | `false` | Enable local TTS (XTTS-v2) feature |
 | `AIIH_TTS_MODEL_NAME` | `tts_models/multilingual/multi-dataset/xtts_v2` | TTS model to load |
-| `AIIH_TTS_DEVICE` | `cuda` | Device for TTS inference (`cuda` or `cpu`) |
+| `AIIH_TTS_DEVICE` | `cuda` | Device for TTS (`cuda`/`cuda:0`/`cuda:1`/`cpu`) |
+| `AIIH_TTS_DTYPE` | `fp32` | Model precision (`fp16` ~2.4 GB VRAM / ~2× faster, or `fp32` ~4.8 GB) |
 | `AIIH_TTS_VOICES_DIR` | `data/voices` | Directory for cloned voice embeddings |
 | `AIIH_TTS_MODELS_DIR` | `data/tts_models` | Directory for TTS model cache |
 | `AIIH_ASR_ENABLED` | `false` | Enable local ASR (faster-whisper) feature |
 | `AIIH_ASR_MODEL` | `large-v3` | Whisper model size |
-| `AIIH_ASR_DEVICE` | `cuda` | Device for ASR inference |
-| `AIIH_ASR_COMPUTE_TYPE` | `float16` | Compute type (`float16` / `int8_float16`) |
+| `AIIH_ASR_DEVICE` | `cuda` | Device for ASR (`cuda` or `cpu` — ctranslate2 does not accept `cuda:0`) |
+| `AIIH_ASR_COMPUTE_TYPE` | `float16` | Compute type (`float16` GPU / `int8_float16` low-VRAM / `int8` CPU) |
 | `AIIH_ASR_MODELS_DIR` | — | Directory for ASR model cache |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |
 | `AIIH_API_KEY` | — | Static API key(s) for router auth (comma-separated for multiple) |
