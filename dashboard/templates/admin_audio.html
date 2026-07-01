@@ -91,7 +91,10 @@
     .btn-danger { background: var(--bad); color: #fff; }
     .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; animation: pulse 1.2s ease-in-out infinite; }
-    @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 0.75; } }
+    .upload-msg-busy { animation: pulseText 1s ease-in-out infinite; }
+    .upload-msg-ok { color: var(--good); }
+    .upload-msg-bad { color: var(--bad); }
+    @keyframes pulseText { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
     .table {
       width: 100%;
       border-collapse: collapse;
@@ -238,7 +241,8 @@
             <option value="hi">hi</option>
           </select>
           <input type="file" id="voice-file" accept="audio/*">
-          <button class="btn btn-sm" onclick="window.registerVoice()">Register</button>
+          <button class="btn btn-sm" id="btn-register-voice" onclick="window.registerVoice()">Register</button>
+          <span id="voice-upload-msg" style="margin-left:8px;font-size:0.82rem;color:var(--muted)"></span>
         </div>
       </div>
       <div id="voices-panel"><span style="color:var(--muted)">Loading...</span></div>

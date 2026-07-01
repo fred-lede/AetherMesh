@@ -241,12 +241,10 @@ class XTTSAdapter(TTSProviderAdapter):
         )
 
         duration = self._get_audio_duration(audio_data)
-        if not language:
-            language = "en"
         meta = {
             "voice_id": voice_id,
             "name": name,
-            "language": language,
+            "language": language or "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "duration_seconds": duration,
         }

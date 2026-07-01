@@ -75,7 +75,7 @@
           return '<tr data-vid="' + escapeHtml(v.voice_id) + '">' +
             '<td><code title="' + escapeHtml(v.voice_id) + '">' + escapeHtml(idShort) + '…</code></td>' +
             '<td><input class="voice-name-edit" value="' + escapeHtml(v.name || '') + '" data-field="name"></td>' +
-            '<td><input class="voice-lang-edit" value="' + escapeHtml(v.language || '') + '" data-field="language"></td>' +
+            '<td><input class="voice-lang-edit" value="' + (v.language || 'auto') + '" data-field="language"></td>' +
             '<td>' + (v.duration_seconds != null ? v.duration_seconds + 's' : '—') + '</td>' +
             '<td>' + isoToShort(v.created_at) + '</td>' +
             '<td><audio class="audio-player" controls preload="none" src="/api/audio/voices/' + escapeHtml(v.voice_id) + '/preview"></audio></td>' +
@@ -91,16 +91,16 @@
     }
   }
 
-  function _findBtn(label) {
-    var btns = document.querySelectorAll('button');
-    for (var i = 0; i < btns.length; i++) {
-      if (btns[i].textContent.trim() === label) return btns[i];
-    }
-    return null;
-  }
-
   function _idShort(id) {
     return id ? id.slice(0, 8) + '…' : '—';
+  }
+
+  function _uploadMsg(msg, cls) {
+    var el = document.getElementById('voice-upload-msg');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'upload-msg-' + (cls || '');
+    el.style.display = 'inline';
   }
 
   window.registerVoice = async function() {
@@ -112,9 +112,9 @@
     var file = fileEl.files && fileEl.files[0];
     if (!name) { alert('Voice name is required.'); return; }
     if (!file) { alert('Audio file is required.'); return; }
-    var btn = _findBtn('Register');
+    var btn = document.getElementById('btn-register-voice');
     var restoreBtn = setButtonBusy(btn, 'Registering…');
-    setOperationStatus('Registering voice ' + name + '…', 'warn');
+    _uploadMsg('Uploading…', 'busy');
     try {
       var fd = new FormData();
       fd.append('name', name);
@@ -126,14 +126,14 @@
         throw new Error(err.detail || 'Registration failed');
       }
       var result = await resp.json();
-      setOperationStatus('Voice registered: ' + _idShort(result.voice_id), 'ok');
+      _uploadMsg('Registered: ' + _idShort(result.voice_id), 'ok');
       nameEl.value = '';
       langEl.value = '';
       fileEl.value = '';
       loadVoices();
       loadTtsSettings();
     } catch(error) {
-      setOperationStatus('Failed: ' + summarizeError(error), 'bad');
+      _uploadMsg('Failed: ' + summarizeError(error), 'bad');
     } finally {
       restoreBtn();
     }
