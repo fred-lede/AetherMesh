@@ -71,3 +71,14 @@ pytest tests/test_orchestration.py -x -v -k "memory"
 - Execution Environment Abstraction (process sandbox) — DONE. `runtime/security/sandbox/` with `SandboxProfile`, `PlatformSandbox` ABC, `MacSandbox` (subprocess + RLIMIT), `LinuxSandbox` (subprocess + unshare NEWNET), `SandboxManager` (policy vs process dispatch). `ToolExecutor` accepts optional `sandbox_manager`. `Settings.sandbox_profiles` + `sandbox_manager()` factory.
 - Vector Search / RAG — low priority, TF-IDF semantic memory sufficient
 - End-to-end test for `/v1/responses` with tools (Phase 22 item)
+
+## Recent Work (Jun 2026)
+- **CUDA assert auto-recovery**: Subprocess TTS Worker isolates GPU in `multiprocessing.Process` (`spawn`). `_worker_main()` in `xtts_adapter.py` loads XTTS model, runs warm-up inference, processes `tts`/`register` via `multiprocessing.Queue`. CUDA crash kills only subprocess; adapter detects death via `is_alive()`, restarts after 30s cooldown. `health_check()` returns `worker_alive` instead of `model_loaded`.
+- 27 new/updated XTTS adapter tests with `multiprocessing` mock pattern (no TTS/torch imports needed)
+- 57 total audio tests passing
+
+## Critical Gotchas (continued)
+- **XTTS subprocess**: Adapter no longer has `_model` attr. All GPU in `_worker_main()`. Do NOT call `_load_model()` or `_load_embedding()` from adapter — removed. Worker loads model at startup, caches across requests, dies on CUDA assert.
+- **`_send_worker_request()`**: Sends dict via `_request_queue`, awaits `_response_queue`. Returns `data[0]` for `("ok", data)`, `None` for `("ok",)`. 503 on worker death, 504 on timeout.
+- **`_ensure_worker()`**: Lazy-start worker, cooldown on repeated failures. Call before any queue op.
+- **Windows spawn**: `_worker_main` must be module-level (picklable). All GPU imports inside function body.
