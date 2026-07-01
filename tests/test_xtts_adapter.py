@@ -330,3 +330,67 @@ class TestXTTSAdapterVoiceCRUD:
     ) -> None:
         health = adapter.health_check()
         assert health["worker_alive"] is False
+
+
+class TestTrimReference:
+    def test_no_trim_when_under_limit(
+        self, adapter: MagicMock, voices_dir: Path
+    ) -> None:
+        ref = voices_dir / "v" / "reference.wav"
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"fake-wav")
+        with patch("providers.xtts_adapter.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "5.0\n"
+            mock_run.return_value.returncode = 0
+            duration = adapter._trim_reference(ref)
+        assert duration == 5.0
+        assert ref.exists()  # not deleted
+
+    def test_trims_when_over_limit(
+        self, adapter: MagicMock, voices_dir: Path
+    ) -> None:
+        ref = voices_dir / "v" / "reference.wav"
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"fake-wav")
+        with patch("providers.xtts_adapter.subprocess.run") as mock_run:
+            def _side(cmd, *args, **kwargs):
+                if "ffprobe" in str(cmd):
+                    m = MagicMock()
+                    m.stdout = "30.0\n"
+                    m.returncode = 0
+                    return m
+                if "ffmpeg" in str(cmd):
+                    trimmed = Path(cmd[-1])
+                    trimmed.parent.mkdir(parents=True, exist_ok=True)
+                    trimmed.write_bytes(b"trimmed-wav")
+                    m = MagicMock()
+                    m.returncode = 0
+                    return m
+                return MagicMock()
+            mock_run.side_effect = _side
+            duration = adapter._trim_reference(ref)
+        assert duration == 10.0
+
+    def test_register_voice_trims_long_audio(
+        self, adapter: MagicMock, voices_dir: Path,
+        _mock_multiprocessing: dict[str, MagicMock],
+    ) -> None:
+        _mock_multiprocessing["response_queue"].get.return_value = ("ok",)
+        with patch("providers.xtts_adapter.subprocess.run") as mock_run:
+            def _side(cmd, *args, **kwargs):
+                if "ffprobe" in str(cmd):
+                    m = MagicMock()
+                    m.stdout = "30.0\n"
+                    m.returncode = 0
+                    return m
+                if "ffmpeg" in str(cmd):
+                    trimmed = Path(cmd[-1])
+                    trimmed.parent.mkdir(parents=True, exist_ok=True)
+                    trimmed.write_bytes(b"trimmed-wav")
+                    m = MagicMock()
+                    m.returncode = 0
+                    return m
+                return MagicMock()
+            mock_run.side_effect = _side
+            meta = adapter.register_voice(name="long", audio_data=b"data" * 5000, language="en")
+        assert meta["duration_seconds"] == 10.0

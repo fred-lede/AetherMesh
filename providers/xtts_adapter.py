@@ -223,11 +223,13 @@ class XTTSAdapter(TTSProviderAdapter):
         voices_dir: str = "data/voices",
         models_dir: str | None = None,
         dtype: str = "fp32",
+        max_ref_seconds: float = 10.0,
     ) -> None:
         self._device = device
         self._dtype = dtype
         self._model_name = model_name
         self._models_dir = models_dir
+        self._max_ref_seconds = max_ref_seconds
         self._voices_dir = Path(voices_dir)
         self._voices_dir.mkdir(parents=True, exist_ok=True)
 
@@ -363,6 +365,38 @@ class XTTSAdapter(TTSProviderAdapter):
         except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return wav_bytes
 
+    def _trim_reference(self, ref_path: Path) -> float:
+        duration = 0.0
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries",
+                 "format=duration", "-of",
+                 "default=noprint_wrappers=1:nokey=1", str(ref_path)],
+                capture_output=True, text=True, check=True, timeout=10,
+            )
+            duration = round(float(result.stdout.strip()), 2)
+        except Exception:
+            if sf is not None:
+                try:
+                    info = sf.info(str(ref_path))
+                    duration = round(info.duration, 2)
+                except Exception:
+                    pass
+        if duration > self._max_ref_seconds:
+            trimmed = ref_path.with_suffix(".trimmed.wav")
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-i", str(ref_path), "-t", str(self._max_ref_seconds),
+                     "-c", "copy", str(trimmed)],
+                    check=True, capture_output=True, timeout=30,
+                )
+                ref_path.unlink()
+                trimmed.rename(ref_path)
+                duration = self._max_ref_seconds
+            except Exception:
+                trimmed.unlink(missing_ok=True)
+        return round(duration, 2)
+
     def register_voice(
         self,
         name: str,
@@ -376,6 +410,7 @@ class XTTSAdapter(TTSProviderAdapter):
 
         ref_path = vp / "reference.wav"
         ref_path.write_bytes(audio_data)
+        duration = self._trim_reference(ref_path)
         emb_path = vp / "speaker_embedding.pt"
 
         try:
@@ -388,7 +423,6 @@ class XTTSAdapter(TTSProviderAdapter):
             shutil.rmtree(vp, ignore_errors=True)
             raise TTSProviderError(f"Voice encoding failed: {e}", status_code=422) from e
 
-        duration = self._get_audio_duration(audio_data)
         meta = {
             "voice_id": voice_id,
             "name": name,

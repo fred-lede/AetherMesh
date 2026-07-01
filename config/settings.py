@@ -139,6 +139,7 @@ class Settings:
     tts_voices_dir: str = field(default_factory=lambda: os.getenv("AIIH_TTS_VOICES_DIR", "data/voices"))
     tts_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_TTS_MODELS_DIR"))
     tts_dtype: str = field(default_factory=lambda: os.getenv("AIIH_TTS_DTYPE", "fp32").strip().lower())
+    tts_max_ref_seconds: float = field(default_factory=lambda: float(os.getenv("AIIH_TTS_MAX_REF_SECONDS", "10")))
     asr_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_ASR_ENABLED", "false"))
     asr_model: str = field(default_factory=lambda: os.getenv("AIIH_ASR_MODEL", "large-v3"))
     asr_device: str = field(default_factory=lambda: os.getenv("AIIH_ASR_DEVICE", "cuda"))

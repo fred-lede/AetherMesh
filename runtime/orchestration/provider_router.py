@@ -132,6 +132,7 @@ def _get_tts_adapter() -> Any:
             voices_dir=settings.tts_voices_dir,
             models_dir=settings.tts_models_dir,
             dtype=settings.tts_dtype,
+            max_ref_seconds=settings.tts_max_ref_seconds,
         )
         _tts_adapter_failed_at = 0.0
         return _tts_adapter
