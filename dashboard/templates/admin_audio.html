@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Users — AetherMesh</title>
+  <title>Audio — AetherMesh</title>
   <style>
     :root {
       --bg: #07111a;
@@ -56,6 +56,7 @@
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 22px 24px;
+      margin-bottom: 20px;
     }
     .card h2 { margin: 0 0 16px; font-size: 1.05rem; letter-spacing: 0.02em; }
     .pill {
@@ -71,7 +72,8 @@
     }
     .pill.ok { background: rgba(52, 211, 153, 0.14); color: var(--good); }
     .pill.warn { background: rgba(245, 158, 11, 0.16); color: var(--warn); }
-    .pill.disabled { background: rgba(248, 113, 113, 0.14); color: var(--bad); }
+    .pill.bad { background: rgba(248, 113, 113, 0.14); color: var(--bad); }
+    .pill.disabled { background: rgba(255,255,255,0.05); color: var(--muted); }
     .btn {
       border: 0;
       border-radius: 8px;
@@ -87,6 +89,7 @@
     .btn:hover { opacity: 0.85; }
     .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
     .btn-danger { background: var(--bad); color: #fff; }
+    .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); }
     .table {
       width: 100%;
       border-collapse: collapse;
@@ -105,6 +108,12 @@
       text-transform: uppercase;
     }
     .table td { vertical-align: middle; }
+    .table code {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
     #operation-status {
       display: none;
       margin-bottom: 14px;
@@ -115,6 +124,71 @@
     .status-ok { background: rgba(52, 211, 153, 0.12); color: var(--good); }
     .status-warn { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
     .status-bad { background: rgba(248, 113, 113, 0.14); color: var(--bad); }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 140px 1fr auto;
+      gap: 10px 16px;
+      align-items: center;
+      font-size: 0.84rem;
+    }
+    .settings-grid .label { color: var(--muted); font-weight: 500; }
+    .settings-grid .value code {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+    }
+    .hint {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(96, 165, 250, 0.08);
+      color: var(--accent-2);
+      font-size: 0.8rem;
+    }
+    .upload-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .upload-row input[type="text"],
+    .upload-row select {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 6px 10px;
+      font: inherit;
+      font-size: 0.84rem;
+    }
+    .upload-row input[type="file"] {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+    .voice-name-edit {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 2px 6px;
+      font: inherit;
+      font-size: 0.82rem;
+      width: 120px;
+    }
+    .voice-lang-edit {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 2px 6px;
+      font: inherit;
+      font-size: 0.82rem;
+      width: 70px;
+    }
+    .actions { display: flex; gap: 6px; }
+    .audio-player { height: 28px; }
   </style>
 </head>
 <body>
@@ -122,8 +196,8 @@
     <nav class="nav">
       <a href="/">Dashboard</a>
       <a href="/admin/api-keys">API Keys</a>
-      <a href="/admin/audio">Audio</a>
-      <a href="/admin/users" class="active">Users</a>
+      <a href="/admin/audio" class="active">Audio</a>
+      <a href="/admin/users">Users</a>
       <a href="/profile">Profile</a>
       <span class="spacer"></span>
       <a href="/logout" class="logout">Logout</a>
@@ -132,12 +206,44 @@
     <div id="operation-status"></div>
 
     <div class="card">
-      <h2>Users</h2>
-      <div id="users-panel"><span class="mono" style="color:var(--muted)">Loading...</span></div>
+      <h2>TTS Settings</h2>
+      <div id="tts-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+    </div>
+
+    <div class="card">
+      <h2>ASR Settings</h2>
+      <div id="asr-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Voice Management</h2>
+      <div id="voice-upload-panel" style="display:none">
+        <div class="upload-row">
+          <input type="text" id="voice-name" placeholder="Voice name" size="16">
+          <select id="voice-language">
+            <option value="">Auto-detect</option>
+            <option value="en">en</option>
+            <option value="zh-cn">zh-cn</option>
+            <option value="ja">ja</option>
+            <option value="ko">ko</option>
+            <option value="es">es</option>
+            <option value="fr">fr</option>
+            <option value="de">de</option>
+            <option value="it">it</option>
+            <option value="pt">pt</option>
+            <option value="ru">ru</option>
+            <option value="ar">ar</option>
+            <option value="hi">hi</option>
+          </select>
+          <input type="file" id="voice-file" accept="audio/*">
+          <button class="btn btn-sm" onclick="window.registerVoice()">Register</button>
+        </div>
+      </div>
+      <div id="voices-panel"><span style="color:var(--muted)">Loading...</span></div>
     </div>
   </div>
 
   <script src="/static/shared.js"></script>
-  <script src="/static/admin_users.js"></script>
+  <script src="/static/admin_audio.js"></script>
 </body>
 </html>

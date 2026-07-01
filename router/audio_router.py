@@ -4,7 +4,7 @@ import subprocess
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from config.settings import settings
 from providers.tts_base import TTSProviderError
@@ -117,6 +117,27 @@ async def delete_voice(voice_id: str) -> Response:
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Voice {voice_id} not found")
     return Response(status_code=204)
+
+
+@router.patch("/v1/voices/{voice_id}")
+async def update_voice(voice_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    adapter = _resolve_adapter()
+    try:
+        return adapter.update_voice(voice_id, name=body.get("name"), language=body.get("language"))
+    except TTSProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+
+
+@router.get("/v1/voices/{voice_id}/preview")
+async def preview_voice(voice_id: str) -> FileResponse:
+    adapter = _resolve_adapter()
+    try:
+        ref_path = adapter.voice_ref_path(voice_id)
+    except TTSProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+    if not ref_path.exists():
+        raise HTTPException(status_code=404, detail="Reference audio not found")
+    return FileResponse(str(ref_path), media_type="audio/wav")
 
 
 # ── ASR ──────────────────────────────────────────────────────

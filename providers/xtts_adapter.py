@@ -291,6 +291,25 @@ class XTTSAdapter(TTSProviderAdapter):
         shutil.rmtree(vp)
         return True
 
+    def update_voice(self, voice_id: str, name: str | None = None, language: str | None = None) -> dict[str, Any]:
+        vp = self._voice_path(voice_id)
+        meta_path = vp / "meta.json"
+        if not meta_path.exists():
+            raise TTSProviderError(f"Voice {voice_id} not found", status_code=404)
+        meta = json.loads(meta_path.read_text())
+        if name is not None:
+            meta["name"] = name
+        if language is not None:
+            meta["language"] = language
+        meta_path.write_text(json.dumps(meta, indent=2))
+        return meta
+
+    def voice_ref_path(self, voice_id: str) -> Path:
+        vp = self._voice_path(voice_id)
+        if not vp.exists():
+            raise TTSProviderError(f"Voice {voice_id} not found", status_code=404)
+        return vp / "reference.wav"
+
     def health_check(self) -> dict[str, Any]:
         return {
             "provider": self.provider_name,

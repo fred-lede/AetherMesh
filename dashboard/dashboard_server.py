@@ -43,7 +43,7 @@ _ENV = Environment(loader=FileSystemLoader(_TEMPLATES_DIR))
 _ENV.cache = None
 
 _compiled_templates: dict[str, Template] = {}
-for _tpl_name in ("index.html", "login.html", "task_detail.html", "change_password.html", "profile.html", "admin_users.html", "admin_api_keys.html"):
+for _tpl_name in ("index.html", "login.html", "task_detail.html", "change_password.html", "profile.html", "admin_users.html", "admin_api_keys.html", "admin_audio.html"):
     _source, _filename, _uptodate = _ENV.loader.get_source(_ENV, _tpl_name)
     _compiled_templates[_tpl_name] = _ENV.from_string(_source)
 
@@ -830,6 +830,15 @@ def admin_api_keys_page(request: Request):
     )
 
 
+@app.get("/admin/audio", response_class=HTMLResponse)
+def admin_audio_page(request: Request):
+    _require_admin(request)
+    return templates.TemplateResponse(
+        "admin_audio.html",
+        {"request": request, "user_role": "admin"},
+    )
+
+
 def _build_overview() -> dict[str, Any]:
     overview_errors: list[dict[str, str]] = []
     nodes = _fetch_overview_json("/cluster/nodes", {"nodes": []}, overview_errors)
@@ -1402,7 +1411,7 @@ def admin_token_usage(
         db.close()
 
 
-@api.get("/admin/token-usage/summary")
+api.get("/admin/token-usage/summary")
 def admin_token_usage_summary(
     request: Request,
     from_: float | None = Query(None, alias="from"),
@@ -1416,6 +1425,127 @@ def admin_token_usage_summary(
         return JSONResponse(content=summary)
     finally:
         db.close()
+
+
+# ── Audio management routes (admin) ─────────────────────────────
+
+@api.get("/audio/status")
+def audio_status(request: Request) -> dict[str, Any]:
+    try:
+        _require_admin(request)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    from runtime.orchestration.provider_router import _tts_adapter, _asr_adapter
+    tts_info: dict[str, Any] = {"enabled": settings.tts_enabled}
+    asr_info: dict[str, Any] = {"enabled": settings.asr_enabled}
+    if settings.tts_enabled:
+        if _tts_adapter is not None:
+            try:
+                tts_info.update(_tts_adapter.health_check())
+            except Exception:
+                pass
+        else:
+            try:
+                vdir = Path(settings.tts_voices_dir)
+                if vdir.exists():
+                    tts_info["voices_count"] = sum(1 for e in vdir.iterdir() if e.is_dir())
+            except Exception:
+                pass
+        tts_info["model"] = settings.tts_model_name
+        tts_info["device"] = settings.tts_device
+        tts_info["dtype"] = settings.tts_dtype
+    if settings.asr_enabled:
+        if _asr_adapter is not None:
+            try:
+                asr_info.update(_asr_adapter.health_check())
+            except Exception:
+                pass
+        asr_info["model"] = settings.asr_model
+        asr_info["device"] = settings.asr_device
+        asr_info["device_index"] = settings.asr_device_index
+        asr_info["compute_type"] = settings.asr_compute_type
+    return {"tts": tts_info, "asr": asr_info}
+
+
+@api.get("/audio/voices")
+def audio_list_voices(request: Request) -> list[dict[str, Any]]:
+    _require_admin(request)
+    if not settings.tts_enabled:
+        raise HTTPException(status_code=503, detail="TTS not enabled")
+    from runtime.orchestration.provider_router import _tts_adapter
+    if _tts_adapter is not None:
+        return _tts_adapter.list_voices()
+    vdir = Path(settings.tts_voices_dir)
+    if not vdir.exists():
+        return []
+    voices: list[dict[str, Any]] = []
+    for entry in sorted(vdir.iterdir()):
+        meta_path = entry / "meta.json"
+        if meta_path.exists():
+            voices.append(json.loads(meta_path.read_text()))
+    return voices
+
+
+@api.post("/audio/voices")
+async def audio_register_voice(request: Request) -> dict[str, Any]:
+    _require_admin(request)
+    from runtime.orchestration.provider_router import adapter as _get_adapter
+    adapter = _get_adapter("xtts")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="TTS adapter unavailable")
+    from fastapi import Form, File, UploadFile
+    form = await request.form()
+    name = str(form.get("name", "")).strip()
+    language = str(form.get("language", "")).strip()
+    file = form.get("file")
+    if not name:
+        raise HTTPException(status_code=422, detail="name is required")
+    if file is None:
+        raise HTTPException(status_code=422, detail="file is required")
+    audio_data = await file.read()
+    content_type = getattr(file, "content_type", None) or "audio/wav"
+    from providers.tts_base import TTSProviderError
+    try:
+        return adapter.register_voice(name=name, audio_data=audio_data, language=language, content_type=content_type)
+    except TTSProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+
+
+@api.patch("/audio/voices/{voice_id}")
+def audio_update_voice(request: Request, voice_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _require_admin(request)
+    from runtime.orchestration.provider_router import adapter as _get_adapter
+    adapter = _get_adapter("xtts")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="TTS adapter unavailable")
+    from providers.tts_base import TTSProviderError
+    try:
+        return adapter.update_voice(voice_id, name=body.get("name"), language=body.get("language"))
+    except TTSProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+
+
+@api.delete("/audio/voices/{voice_id}")
+def audio_delete_voice(request: Request, voice_id: str) -> dict[str, Any]:
+    _require_admin(request)
+    from runtime.orchestration.provider_router import adapter as _get_adapter
+    adapter = _get_adapter("xtts")
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="TTS adapter unavailable")
+    deleted = adapter.delete_voice(voice_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Voice {voice_id} not found")
+    return {"ok": True}
+
+
+@app.get("/api/audio/voices/{voice_id}/preview")
+def audio_voice_preview(voice_id: str):
+    ref_path = Path(settings.tts_voices_dir) / voice_id / "reference.wav"
+    if not ref_path.exists():
+        raise HTTPException(status_code=404, detail="Reference audio not found")
+    return FileResponse(str(ref_path), media_type="audio/wav")
 
 
 app.include_router(api)
