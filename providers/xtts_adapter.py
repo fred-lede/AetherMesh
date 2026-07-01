@@ -179,8 +179,13 @@ def _worker_main(
 
                 was_fp16 = dtype == "fp16"
                 if was_fp16:
-                    for component in tts.synthesizer.components:
-                        component.float()
+                    _mods = [tts.synthesizer.tts_model]
+                    if hasattr(tts.synthesizer, "voice_encoder") and tts.synthesizer.voice_encoder is not None:
+                        _mods.append(tts.synthesizer.voice_encoder)
+                    if hasattr(tts.synthesizer, "vocoder_model") and tts.synthesizer.vocoder_model is not None:
+                        _mods.append(tts.synthesizer.vocoder_model)
+                    for _m in _mods:
+                        _m.float()
 
                 try:
                     with _torch.no_grad():
@@ -189,8 +194,8 @@ def _worker_main(
                         )
                 finally:
                     if was_fp16:
-                        for component in tts.synthesizer.components:
-                            component.half()
+                        for _m in _mods:
+                            _m.half()
 
                 gpt_cond = gpt_cond.float()
                 speaker_embed = speaker_embed.float()
