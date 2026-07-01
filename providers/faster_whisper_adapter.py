@@ -14,11 +14,13 @@ class FasterWhisperAdapter(ASRProviderAdapter):
         self,
         model_name: str = "large-v3",
         device: str = "cuda",
+        device_index: int = 0,
         compute_type: str = "float16",
         download_dir: str | None = None,
     ) -> None:
         self._model_name = model_name
         self._device = device
+        self._device_index = device_index
         self._compute_type = compute_type
         self._download_dir = download_dir
         self._model = self._load_model()
@@ -27,6 +29,7 @@ class FasterWhisperAdapter(ASRProviderAdapter):
         from faster_whisper import WhisperModel
         kwargs: dict[str, Any] = {
             "device": self._device,
+            "device_index": self._device_index,
             "compute_type": self._compute_type,
         }
         if self._download_dir:
@@ -78,4 +81,5 @@ class FasterWhisperAdapter(ASRProviderAdapter):
             "provider": self.provider_name,
             "model_loaded": self._model is not None,
             "device": self._device,
+            "device_index": self._device_index,
         }

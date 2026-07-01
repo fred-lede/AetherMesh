@@ -91,6 +91,7 @@ class TestFasterWhisperAdapterTranscribe:
         assert health["provider"] == "faster_whisper"
         assert health["model_loaded"] is True
         assert "device" in health
+        assert health["device_index"] == 0
 
 
 class TestFasterWhisperAdapterErrors:

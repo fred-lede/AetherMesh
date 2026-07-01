@@ -581,7 +581,8 @@ pip install -r requirements-asr.txt   # installs faster-whisper
 ```bash
 AIIH_ASR_ENABLED=true                    # enable ASR feature
 AIIH_ASR_MODEL=large-v3                  # model size (tiny/base/small/medium/large-v3/turbo)
-AIIH_ASR_DEVICE=cuda                     # "cuda" or "cpu" (use "cuda", NOT "cuda:0" — ctranslate2 format)
+AIIH_ASR_DEVICE=cuda                     # "cuda" or "cpu" (use "cuda", NOT "cuda:0")
+AIIH_ASR_DEVICE_INDEX=0                  # GPU index for multi-GPU (0=first, 1=second, etc.)
 AIIH_ASR_COMPUTE_TYPE=float16            # float16 (GPU), int8_float16 (lower VRAM), int8 (CPU)
 AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
 ```
@@ -590,7 +591,8 @@ AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
 <summary><strong>ASR device & compute notes</strong></summary>
 
 - **`AIIH_ASR_DEVICE`**: use `cuda` (not `cuda:0`). The `faster-whisper` backend (ctranslate2)
-  expects `cuda` or `cpu` — device indices like `cuda:0` will raise `ValueError`.
+  expects `cuda` or `cpu`. For multi-GPU, set `AIIH_ASR_DEVICE_INDEX` (0-based index).
+- **`AIIH_ASR_DEVICE_INDEX`**: GPU index when using `cuda` device. `0` = first GPU, `1` = second GPU, etc.
 - **`AIIH_ASR_COMPUTE_TYPE`**: `float16` for GPU (default), `int8_float16` for low-VRAM GPUs,
   `int8` or `float32` for CPU inference.
 - **Model size trade-offs**: `tiny` (39M, fastest) → `large-v3` (3B, best accuracy) → `turbo`
@@ -680,7 +682,8 @@ the `CredentialPool` composite wrapper transparently rotates to the next key:
 | `AIIH_TTS_MODELS_DIR` | `data/tts_models` | Directory for TTS model cache |
 | `AIIH_ASR_ENABLED` | `false` | Enable local ASR (faster-whisper) feature |
 | `AIIH_ASR_MODEL` | `large-v3` | Whisper model size |
-| `AIIH_ASR_DEVICE` | `cuda` | Device for ASR (`cuda` or `cpu` — ctranslate2 does not accept `cuda:0`) |
+| `AIIH_ASR_DEVICE` | `cuda` | Device for ASR (`cuda` or `cpu` — not `cuda:0`) |
+| `AIIH_ASR_DEVICE_INDEX` | `0` | GPU index for multi-GPU (0=first, 1=second, etc.) |
 | `AIIH_ASR_COMPUTE_TYPE` | `float16` | Compute type (`float16` GPU / `int8_float16` low-VRAM / `int8` CPU) |
 | `AIIH_ASR_MODELS_DIR` | — | Directory for ASR model cache |
 | `AIIH_DASHBOARD_AUTH_ENABLED` | `false` | Enable dashboard auth |

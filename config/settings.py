@@ -142,6 +142,7 @@ class Settings:
     asr_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_ASR_ENABLED", "false"))
     asr_model: str = field(default_factory=lambda: os.getenv("AIIH_ASR_MODEL", "large-v3"))
     asr_device: str = field(default_factory=lambda: os.getenv("AIIH_ASR_DEVICE", "cuda"))
+    asr_device_index: int = field(default_factory=lambda: int(os.getenv("AIIH_ASR_DEVICE_INDEX", "0")))
     asr_compute_type: str = field(default_factory=lambda: os.getenv("AIIH_ASR_COMPUTE_TYPE", "float16"))
     asr_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_ASR_MODELS_DIR"))
 

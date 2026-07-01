@@ -159,6 +159,7 @@ def _get_asr_adapter() -> Any:
         _asr_adapter = FasterWhisperAdapter(
             model_name=settings.asr_model,
             device=settings.asr_device,
+            device_index=settings.asr_device_index,
             compute_type=settings.asr_compute_type,
             download_dir=settings.asr_models_dir,
         )
