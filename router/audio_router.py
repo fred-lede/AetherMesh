@@ -226,11 +226,14 @@ def _verify_ws_api_key(api_key: str) -> bool:
 
 @router.websocket("/v1/audio/transcriptions/stream")
 async def websocket_asr_stream(websocket: WebSocket) -> None:
+    await websocket.accept()
+
     api_key = websocket.query_params.get("api_key", "")
     auth_header = websocket.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         api_key = api_key or auth_header[7:]
     if not api_key or not _verify_ws_api_key(api_key):
+        await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=4001)
         return
 
@@ -238,14 +241,12 @@ async def websocket_asr_stream(websocket: WebSocket) -> None:
     interim = websocket.query_params.get("interim", "false").lower() == "true"
 
     if not settings.asr_enabled:
-        await websocket.accept()
         await websocket.send_json({"type": "error", "message": "ASR is not enabled"})
         await websocket.close()
         return
 
     adapter = get_adapter("asr")
     if adapter is None:
-        await websocket.accept()
         await websocket.send_json({"type": "error", "message": "ASR adapter unavailable"})
         await websocket.close()
         return
@@ -255,28 +256,16 @@ async def websocket_asr_stream(websocket: WebSocket) -> None:
         language=language,
         interim=interim,
     )
-    await websocket.accept()
-
-    background_task: asyncio.Task[None] | None = None
 
     try:
-        async def _transcribe_loop() -> None:
+        while not stream._closed:
             try:
-                while not stream._closed:
-                    results = await stream.transcribe_if_ready()
-                    for r in results:
-                        try:
-                            await websocket.send_json(r)
-                        except Exception:
-                            return
-                    await asyncio.sleep(0.1)
-            except Exception:
-                pass
-
-        background_task = asyncio.create_task(_transcribe_loop())
-
-        while True:
-            msg = await websocket.receive()
+                msg = await asyncio.wait_for(websocket.receive(), timeout=0.1)
+            except asyncio.TimeoutError:
+                results = await stream.transcribe_if_ready()
+                for r in results:
+                    await websocket.send_json(r)
+                continue
 
             if msg.get("text"):
                 data = json.loads(msg["text"])
@@ -290,19 +279,20 @@ async def websocket_asr_stream(websocket: WebSocket) -> None:
                         stream.set_language(data["language"])
             elif msg.get("bytes"):
                 await stream.add_audio(msg["bytes"])
+                results = await stream.transcribe_if_ready()
+                for r in results:
+                    await websocket.send_json(r)
 
     except WebSocketDisconnect:
         pass
-    except Exception:
-        logger.exception("WebSocket ASR error")
+    except Exception as exc:
+        logger.exception("WebSocket ASR error: %s", exc)
         try:
             await websocket.send_json({"type": "error", "message": "Internal server error"})
         except Exception:
             pass
     finally:
         stream._closed = True
-        if background_task is not None:
-            background_task.cancel()
         try:
             await websocket.close()
         except Exception:

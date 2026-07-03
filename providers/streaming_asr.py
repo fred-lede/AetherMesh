@@ -44,6 +44,11 @@ class StreamingASR:
 
     async def add_audio(self, pcm_bytes: bytes) -> None:
         async with self._lock:
+            if len(pcm_bytes) % 2 != 0:
+                logger.warning("add_audio odd length: %d bytes, truncating", len(pcm_bytes))
+                pcm_bytes = pcm_bytes[:-(len(pcm_bytes) % 2)]
+                if not pcm_bytes:
+                    return
             self._buffer.extend(pcm_bytes)
             self._last_audio_time = time.monotonic()
 
@@ -57,6 +62,7 @@ class StreamingASR:
             new_bytes = len(self._buffer) - self._processed_up_to
             new_samples = new_bytes // 2
             idle = time.monotonic() - self._last_audio_time
+            logger.debug("transcribe_if_ready: new_bytes=%d new_samples=%d idle=%.3f", new_bytes, new_samples, idle)
             if new_samples < self._window_samples and idle < self._idle_timeout:
                 return []
             if new_bytes < 320:
@@ -68,6 +74,8 @@ class StreamingASR:
     async def flush(self) -> list[dict[str, Any]]:
         async with self._lock:
             remaining = bytes(self._buffer[self._processed_up_to :])
+            logger.debug("flush: remaining=%d bytes, buffer_len=%d, processed_up_to=%d",
+                         len(remaining), len(self._buffer), self._processed_up_to)
             self._buffer.clear()
             self._processed_up_to = 0
             self._closed = True
@@ -78,6 +86,11 @@ class StreamingASR:
     async def _transcribe(self, audio_bytes: bytes) -> list[dict[str, Any]]:
         if len(audio_bytes) < 320:
             return []
+        if len(audio_bytes) % 2 != 0:
+            logger.warning("_transcribe odd length: %d bytes (from %s)", len(audio_bytes), type(audio_bytes).__name__)
+            audio_bytes = audio_bytes[:-(len(audio_bytes) % 2)]
+            if len(audio_bytes) < 320:
+                return []
         samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(samples ** 2)))
         if rms < self._vad_threshold:
@@ -94,9 +107,10 @@ class StreamingASR:
         for seg in seg_list:
             self._seg_counter += 1
             lang = getattr(seg, "language", None) or getattr(info, "language", None) or self._language
+            seg_text = seg.text.strip()
             results.append({
                 "type": "transcript",
-                "text": seg.text.strip(),
+                "text": seg_text,
                 "is_final": True,
                 "seg": self._seg_counter,
                 "language": lang or "",
