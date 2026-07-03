@@ -192,15 +192,25 @@ models:
     worker_ports: []
     capabilities: [chat, responses, embeddings, tools]
 
-  - name: z-ai/glm4.7
+  - name: minimaxai/minimax-m2.7
     provider: nvidia_nim
     worker_ports: []
-    capabilities: [chat, thinking, tools]
-
-  - name: z-ai/glm-5.1
+    capabilities: [chat, tools]
+    
+  - name:  moonshotai/kimi-k2.6
     provider: nvidia_nim
     worker_ports: []
-    capabilities: [chat, thinking, tools]
+    capabilities: [chat, vision, thinking, tools]
+    
+  - name:  google/diffusiongemma-26b-a4b-it
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, vision, thinking, tools]
+    
+  - name:  bytedance/seed-oss-36b-instruct
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, vision]
 
   - name: deepseek-ai/deepseek-v4-pro
     provider: nvidia_nim

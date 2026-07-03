@@ -67,23 +67,35 @@ class StreamingASR:
                 return []
             if new_bytes < 320:
                 return []
-            chunk = bytes(self._buffer[self._processed_up_to :])
-            self._processed_up_to = len(self._buffer)
-        return await self._transcribe(chunk)
+            is_idle = idle >= self._idle_timeout
+            if self._interim and is_idle:
+                chunk = bytes(self._buffer)
+                self._buffer.clear()
+                self._processed_up_to = 0
+                is_final = True
+            elif self._interim:
+                chunk = bytes(self._buffer[self._processed_up_to :])
+                self._processed_up_to = len(self._buffer)
+                is_final = False
+            else:
+                chunk = bytes(self._buffer[self._processed_up_to :])
+                self._processed_up_to = len(self._buffer)
+                is_final = True
+        return await self._transcribe(chunk, is_final=is_final)
 
-    async def flush(self) -> list[dict[str, Any]]:
+    async def flush(self, *, is_final: bool = True) -> list[dict[str, Any]]:
         async with self._lock:
-            remaining = bytes(self._buffer[self._processed_up_to :])
-            logger.debug("flush: remaining=%d bytes, buffer_len=%d, processed_up_to=%d",
-                         len(remaining), len(self._buffer), self._processed_up_to)
+            remaining = bytes(self._buffer)
+            logger.debug("flush: remaining=%d bytes, buffer_len=%d",
+                         len(remaining), len(self._buffer))
             self._buffer.clear()
             self._processed_up_to = 0
             self._closed = True
         if len(remaining) < 320:
             return []
-        return await self._transcribe(remaining)
+        return await self._transcribe(remaining, is_final=is_final)
 
-    async def _transcribe(self, audio_bytes: bytes) -> list[dict[str, Any]]:
+    async def _transcribe(self, audio_bytes: bytes, *, is_final: bool = True) -> list[dict[str, Any]]:
         if len(audio_bytes) < 320:
             return []
         if len(audio_bytes) % 2 != 0:
@@ -111,7 +123,7 @@ class StreamingASR:
             results.append({
                 "type": "transcript",
                 "text": seg_text,
-                "is_final": True,
+                "is_final": is_final,
                 "seg": self._seg_counter,
                 "language": lang or "",
             })

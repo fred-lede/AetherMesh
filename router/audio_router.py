@@ -277,6 +277,10 @@ async def websocket_asr_stream(websocket: WebSocket) -> None:
                 elif data.get("type") == "config":
                     if "language" in data:
                         stream.set_language(data["language"])
+                    elif "lang" in data:
+                        stream.set_language(data["lang"])
+                    if "interim" in data:
+                        stream._interim = bool(data["interim"])
             elif msg.get("bytes"):
                 await stream.add_audio(msg["bytes"])
                 results = await stream.transcribe_if_ready()

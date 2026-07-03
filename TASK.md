@@ -306,3 +306,18 @@
     - `test_run_single_tool_execution`: get_weather tool → executed → sunny in output
     - `test_run_multi_turn_tool_execution`: get_weather → calculate → 3 adapter calls
     - `test_run_unknown_tool_returns_error`: nonexistent tool → error result → model retries → completed
+
+### Streaming WebSocket ASR (2026-07-03)
+- [x] `providers/streaming_asr.py` — `StreamingASR` class: async ring buffer, energy VAD, sliding window Whisper via thread pool
+- [x] `router/audio_router.py` — WebSocket endpoint at `/v1/audio/transcriptions/stream`, auth via `?api_key=` / `Authorization: Bearer`
+- [x] WebSocket accept-before-auth fix (avoid HTTP 400)
+- [x] Odd-length PCM guard in `add_audio()` and `_transcribe()`
+- [x] No background task — inline `transcribe_if_ready()` with `wait_for` timeout loop
+- [x] Auth bypass path in middleware for WS route
+- [x] `tests/test_streaming_asr.py` — 12 tests (buffer, VAD, idle trigger, flush, concurrency)
+- [x] `tests/test_ws_client.py` — sine-wave PCM streaming test script (supports `ws://`/`wss://`)
+- [x] 白龍馬 protocol compatibility:
+  - [x] Config frame `{"type":"config","provider":"aethermesh","lang":"zh"}` accepted as first message
+  - [x] `lang` alias for `language` in config frames
+  - [x] `is_final` field in transcript messages (interim=`false`, final=`true`)
+  - [x] Interim results: window fill → `is_final: false`; idle timeout/flush → `is_final: true`
