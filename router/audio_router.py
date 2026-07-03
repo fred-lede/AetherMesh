@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import subprocess
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 
 from config.settings import settings
-from providers.tts_base import TTSProviderError
 from providers.asr_base import ASRProviderError
+from providers.streaming_asr import StreamingASR
+from providers.tts_base import TTSProviderError
 from runtime.orchestration.provider_router import adapter as get_adapter
+from runtime.security.auth.api_key import validate_api_key
+from runtime.security.database import SessionLocal
 
+logger = logging.getLogger("router.audio")
 router = APIRouter(tags=["audio"])
 
 AUDIO_CONTENT_TYPES = {
@@ -198,3 +205,105 @@ async def create_translation(
         )
     except ASRProviderError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+def _verify_ws_api_key(api_key: str) -> bool:
+    if not api_key:
+        return False
+    env_keys = __import__("os").getenv("AIIH_API_KEY", "").strip()
+    if env_keys:
+        if api_key in [k.strip() for k in env_keys.split(",") if k.strip()]:
+            return True
+    try:
+        db = SessionLocal()
+        try:
+            return validate_api_key(db, api_key) is not None
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
+@router.websocket("/v1/audio/transcriptions/stream")
+async def websocket_asr_stream(websocket: WebSocket) -> None:
+    api_key = websocket.query_params.get("api_key", "")
+    auth_header = websocket.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        api_key = api_key or auth_header[7:]
+    if not api_key or not _verify_ws_api_key(api_key):
+        await websocket.close(code=4001)
+        return
+
+    language = websocket.query_params.get("language", "")
+    interim = websocket.query_params.get("interim", "false").lower() == "true"
+
+    if not settings.asr_enabled:
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "message": "ASR is not enabled"})
+        await websocket.close()
+        return
+
+    adapter = get_adapter("asr")
+    if adapter is None:
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "message": "ASR adapter unavailable"})
+        await websocket.close()
+        return
+
+    stream = StreamingASR(
+        model=adapter._model,
+        language=language,
+        interim=interim,
+    )
+    await websocket.accept()
+
+    background_task: asyncio.Task[None] | None = None
+
+    try:
+        async def _transcribe_loop() -> None:
+            try:
+                while not stream._closed:
+                    results = await stream.transcribe_if_ready()
+                    for r in results:
+                        try:
+                            await websocket.send_json(r)
+                        except Exception:
+                            return
+                    await asyncio.sleep(0.1)
+            except Exception:
+                pass
+
+        background_task = asyncio.create_task(_transcribe_loop())
+
+        while True:
+            msg = await websocket.receive()
+
+            if msg.get("text"):
+                data = json.loads(msg["text"])
+                if data.get("type") == "flush":
+                    results = await stream.flush()
+                    for r in results:
+                        await websocket.send_json(r)
+                    break
+                elif data.get("type") == "config":
+                    if "language" in data:
+                        stream.set_language(data["language"])
+            elif msg.get("bytes"):
+                await stream.add_audio(msg["bytes"])
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("WebSocket ASR error")
+        try:
+            await websocket.send_json({"type": "error", "message": "Internal server error"})
+        except Exception:
+            pass
+    finally:
+        stream._closed = True
+        if background_task is not None:
+            background_task.cancel()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
