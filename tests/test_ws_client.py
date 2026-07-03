@@ -21,10 +21,26 @@ def _generate_test_pcm(duration_sec: float = 2.0, sample_rate: int = 16000) -> b
 
 
 async def main() -> None:
-    host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1:8001"
+    raw = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1:8001"
     api_key = sys.argv[2] if len(sys.argv) > 2 else "ak_aiih_xxx"
 
-    uri = f"ws://{host}/v1/audio/transcriptions/stream?api_key={api_key}"
+    scheme = "ws"
+    hostpart = raw
+    if raw.startswith("ws://"):
+        hostpart = raw.removeprefix("ws://")
+    elif raw.startswith("wss://"):
+        scheme = "wss"
+        hostpart = raw.removeprefix("wss://")
+
+    if ":" in hostpart:
+        host, port = hostpart.rsplit(":", 1)
+        if not port.isdigit():
+            host, port = hostpart, "443" if scheme == "wss" else "80"
+    else:
+        host = hostpart
+        port = "443" if scheme == "wss" else "80"
+
+    uri = f"{scheme}://{host}:{port}/v1/audio/transcriptions/stream?api_key={api_key}"
 
     try:
         import websockets
