@@ -4,3 +4,5 @@ torchaudio
 torchcodec
 langdetect
 pypinyin
+cutlet
+unidic-lite

@@ -89,6 +89,16 @@ def _worker_main(
         except Exception:
             pass
 
+    # fugashi needs a MeCab dictionary; use unidic-lite if installed
+    try:
+        import importlib as _il_mod
+        if _il_mod.util.find_spec("unidic_lite") is not None:
+            import unidic_lite as _ul_mod
+            _ul_dir = os.path.dirname(os.path.abspath(_ul_mod.__file__))
+            os.environ.setdefault("MECABRC", _ul_dir)
+    except Exception:
+        pass
+
     import numpy as _np
 
     from TTS.api import TTS
