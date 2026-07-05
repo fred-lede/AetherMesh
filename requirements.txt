@@ -16,4 +16,5 @@ python-pptx
 pytesseract
 soundfile
 python-multipart
+websockets
 
