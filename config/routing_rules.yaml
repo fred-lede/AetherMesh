@@ -9,7 +9,6 @@ model_aliases:
   # alias to the actual model name before routing.
   alias_prefix: AIIH
   entries:
-    z-ai/glm4.7: z-ai/glm4.7
     minimaxai/minimax-m2.7: minimaxai/minimax-m2.7
     moonshotai/kimi-k2.6: moonshotai/kimi-k2.6
     google/diffusiongemma-26b-a4b-it: google/diffusiongemma-26b-a4b-it
