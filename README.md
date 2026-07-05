@@ -925,6 +925,132 @@ curl http://127.0.0.1:8001/v1/chat/completions \
   -d '{"model":"qwen3.5:27b","async":true,"messages":[{"role":"user","content":"run async"}]}'
 ```
 
+## Project Relocation
+
+When moving AetherMesh to a different directory or drive, the `.venv` contains
+hardcoded absolute paths and must be recreated. Additional config files reference
+the old path and need updating.
+
+### Step-by-Step Relocation
+
+```bash
+# 1. Stop all running services
+python -m runtime.launcher stop
+
+# 2. Move the project directory (e.g., D:\Ai\AetherMesh → C:\ai\AetherMesh)
+# Use your OS file manager or:
+#   Windows:  move D:\Ai\AetherMesh C:\ai\AetherMesh
+#   Linux:    mv /old/path/AetherMesh /new/path/AetherMesh
+#   macOS:    mv /old/path/AetherMesh /new/path/AetherMesh
+
+# 3. Delete the old virtual environment (hardcoded paths)
+rmdir /s .venv                  # Windows
+# rm -rf .venv                  # Linux/macOS
+
+# 4. Create new virtual environment at the new location
+python -m venv .venv
+# .venv\Scripts\activate        # Windows
+# source .venv/bin/activate     # Linux/macOS
+
+# 5. Install all dependencies
+pip install -r requirements.txt
+pip install -r requirements-tts.txt   # if TTS is used
+pip install -r requirements-asr.txt   # if ASR is used
+```
+
+> **CUDA torch**: If using GPU TTS, reinstall torch with CUDA support after
+> the initial install (see [Local TTS section](#local-tts-xtts-v2)):
+> ```bash
+> uv pip install "torch==2.11.0+cu128" --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+> ```
+
+### Config Files to Update
+
+| File | What to change |
+|------|----------------|
+| `.env` | Verify `AIIH_TTS_VOICES_DIR`, `AIIH_TTS_MODELS_DIR`, `AIIH_ASR_MODELS_DIR`, `AIIH_DB_PATH` are absolute or relative to the new location |
+| `systemd/aiih-launcher.service` | Replace `__ROOT_DIR__` with the new absolute path |
+| `systemd/aiih-worker.service` | Replace `__ROOT_DIR__` with the new absolute path |
+| `launchd/com.aiih.launcher.plist.example` | Replace `__ROOT_DIR__` with the new absolute path |
+| `launchd/com.aiih.worker.plist.example` | Replace `__ROOT_DIR__` with the new absolute path |
+| `scripts/start_launcher.bat` | Update the `cd /d` path and `.venv\Scripts\python.exe` path |
+
+### Boot Startup (Windows Task Scheduler)
+
+The scheduled task has hardcoded paths. Recreate it with the new path:
+
+```batch
+schtasks /Change /TN "AetherMesh" /DISABLE
+schtasks /Delete /TN "AetherMesh" /F
+schtasks /Create /SC ONSTART /TN "AetherMesh" /TR "C:\new\path\AetherMesh\.venv\Scripts\python.exe -m runtime.launcher" /RU SYSTEM /RL HIGHEST
+```
+
+Replace `C:\new\path\AetherMesh` with the actual new directory. If a worker
+task exists, update it similarly:
+
+```batch
+schtasks /Change /TN "AetherMesh-Worker" /DISABLE
+schtasks /Delete /TN "AetherMesh-Worker" /F
+schtasks /Create /SC ONSTART /TN "AetherMesh-Worker" /TR "C:\new\path\AetherMesh\.venv\Scripts\python.exe -m runtime.launcher start node_agent worker_agent" /RU SYSTEM /RL HIGHEST
+```
+
+### Boot Startup (Ubuntu systemd / macOS launchd)
+
+Edit the service files to point `WorkingDirectory` / `cd` to the new path,
+then reload:
+
+```bash
+# Ubuntu
+sudo systemctl daemon-reload
+sudo systemctl restart aiih-launcher
+
+# macOS
+launchctl unload ~/Library/LaunchAgents/com.aiih.launcher.plist
+launchctl load ~/Library/LaunchAgents/com.aiih.launcher.plist
+```
+
+### Data Files That Carry Over
+
+These are stored under the project directory and move with it (no
+re-downloading needed):
+
+- `data/voices/` — registered voice embeddings
+- `data/tts_models/` — TTS model cache
+- `data/asr_models/` — ASR model cache
+- `config/aiih.db` — SQLite database (users, API keys, sessions)
+- `config/routing_state.yaml` — runtime routing state (auto-regenerated if deleted)
+
+### Verification
+
+Run these checks to confirm the relocation succeeded:
+
+```bash
+# 1. Virtual environment is functional
+.venv\Scripts\python.exe --version
+
+# 2. Core dependencies import correctly
+.venv\Scripts\python.exe -c "import fastapi; import uvicorn; import yaml; print('Core OK')"
+
+# 3. All tests pass
+pytest tests/ -x -v
+
+# 4. Services start and respond
+python -m runtime.launcher start openai_router
+curl http://127.0.0.1:8001/v1/models
+python -m runtime.launcher stop
+
+# 5. (If TTS is configured) TTS dependencies import correctly
+.venv\Scripts\python.exe -c "from TTS.api import TTS; import torch; print('TTS OK')"
+
+# 6. (If ASR is configured) ASR dependencies import correctly
+.venv\Scripts\python.exe -c "from faster_whisper import WhisperModel; print('ASR OK')"
+
+# 7. Boot startup starts successfully
+# Windows:  Reboot and verify services start
+# Ubuntu:   sudo systemctl status aiih-launcher
+# macOS:    launchctl list | grep aiih
+```
+
 ---
 
 See `docs/` for architecture overview, evolution plan, and detailed API documentation.
