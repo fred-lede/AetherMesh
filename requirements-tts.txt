@@ -6,3 +6,4 @@ langdetect
 pypinyin
 cutlet
 unidic-lite
+scipy

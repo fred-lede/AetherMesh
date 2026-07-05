@@ -17,4 +17,5 @@ pytesseract
 soundfile
 python-multipart
 websockets
+numpy
 
