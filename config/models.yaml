@@ -6,6 +6,7 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools, vision, audio]
+    estimated_vram_mb:
 
   - name: qwen3.6:27b
     provider: ollama
@@ -13,6 +14,7 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
 
   - name: gemma4:31b-it-qat
     provider: ollama
@@ -22,7 +24,7 @@ models:
         ollama_options:
           num_ctx: 32768
     capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb: 19333
+    estimated_vram_mb:
     
   - name: qwen3-coder:30b
     provider: ollama
@@ -32,7 +34,7 @@ models:
         ollama_options:
           num_ctx: 32768
     capabilities: [chat, tools]
-    estimated_vram_mb: 18557
+    estimated_vram_mb:
 
   - name: gemma4:31b
     provider: ollama
@@ -40,6 +42,7 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools, vision, audio]
+    estimated_vram_mb:
 
   - name: qwen3.6:35b
     provider: ollama
@@ -47,6 +50,7 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
 
   - name: nemotron-cascade-2:30b
     provider: ollama
@@ -54,13 +58,27 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, thinking, tools]
+    estimated_vram_mb:
     
   - name: north-mini-code-1.0:q4_K_M
     provider: ollama
     worker_bindings:
       - node_id: node-01
         port: 11434
+        ollama_options:
+          num_ctx: 32768
     capabilities: [chat, thinking, tools]
+    estimated_vram_mb: 
+    
+  - name: ornith:35b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+        ollama_options:
+          num_ctx: 32768
+    capabilities: [chat, tools]
+    estimated_vram_mb: 
     
   - name: medgemma:27b
     provider: ollama
@@ -68,6 +86,7 @@ models:
       - node_id: node-01
         port: 11434
     capabilities: [chat, vision]
+    estimated_vram_mb:
 
   # ── RTX 4070 Ti SUPER (16GB, tier A) — vision / specialist ──
   - name: gemma4:12b
@@ -88,6 +107,7 @@ models:
     capabilities: [chat, thinking, tools, vision, audio]
     ollama_options:
       num_ctx: 32768
+    estimated_vram_mb:
     
   - name: gemma4:e4b
     provider: ollama
@@ -99,6 +119,7 @@ models:
       - node_id: node-p40-01
         port: 11435
     capabilities: [chat, thinking, tools, vision, audio]
+    estimated_vram_mb:
 
   - name: qwen3-vl:8b
     provider: ollama
@@ -106,6 +127,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
 
   - name: glm-ocr:bf16
     provider: ollama
@@ -113,6 +135,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [tools, vision]
+    estimated_vram_mb:
 
   - name: translategemma:12b
     provider: ollama
@@ -124,6 +147,7 @@ models:
       - node_id: node-p40-01
         port: 11435
     capabilities: [chat, vision]
+    estimated_vram_mb:
     
   - name: qwen3.5:0.8b
     provider: ollama
@@ -135,6 +159,7 @@ models:
       - node_id: node-p40-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
   - name: qwen3.5:9b
@@ -147,6 +172,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
 
   - name: qwen3-embedding:8b
     provider: ollama
@@ -158,6 +184,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [embeddings]
+    estimated_vram_mb:
 
   - name: nomic-embed-text-v2-moe:latest
     provider: ollama
@@ -169,6 +196,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [embeddings]
+    estimated_vram_mb:
 
   - name: nomic-embed-text:latest
     provider: ollama
@@ -180,6 +208,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [embeddings]
+    estimated_vram_mb:
 
   # ── Cloud providers ─────────────────────────────────────────
   - name: gpt-4.1-mini
@@ -239,6 +268,7 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [audio]
+    estimated_vram_mb:
 
   # ── Local ASR ──────────────────────────────────────────────
   - name: whisper-large-v3
@@ -247,3 +277,4 @@ models:
       - node_id: node-01
         port: 11435
     capabilities: [audio]
+    estimated_vram_mb:
