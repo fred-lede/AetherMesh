@@ -477,6 +477,12 @@ exposed via an OpenAI-compatible `/v1/audio/speech` REST API.
 pip install -r requirements-tts.txt   # installs TTS, torch, soundfile
 ```
 
+> **CUDA torch**: `requirements-tts.txt` installs the CPU-only torch by default. For GPU
+> inference, reinstall torch with CUDA support after the initial install:
+> ```bash
+> uv pip install "torch==2.11.0+cu128" --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+> ```
+
 **Configuration (`.env`):**
 ```bash
 AIIH_TTS_ENABLED=true                      # enable TTS feature
