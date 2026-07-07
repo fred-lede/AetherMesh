@@ -13,6 +13,13 @@ from runtime.orchestration.provider_router import adapter as get_adapter
 logger = logging.getLogger("router.image_gen")
 router = APIRouter(tags=["image_gen"])
 
+# ChatBox hardcodes OPENAI_IMAGE_MODEL_IDS = ["gpt-image-1", "gpt-image-1.5"]
+# Map to actual Ollama model names before calling the adapter
+MODEL_NAME_MAP: dict[str, str] = {
+    "gpt-image-1": "x/z-image-turbo:fp8",
+    "gpt-image-1.5": "x/z-image-turbo:fp8",
+}
+
 
 def _resolve_adapter():
     if not settings.image_gen_enabled:
@@ -29,6 +36,7 @@ def _generate(
     prompt: str,
     n: int,
 ) -> list[str]:
+    model = MODEL_NAME_MAP.get(model, model)
     return adapter.generate(model, prompt, n=n)
 
 

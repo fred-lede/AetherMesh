@@ -311,3 +311,14 @@ models:
         port: 11434
     capabilities: [image]
     estimated_vram_mb:
+
+  # ChatBox image generation dropdown uses hardcoded whitelist
+  # OPENAI_IMAGE_MODEL_IDS = ["gpt-image-1", "gpt-image-1.5"]
+  # Map to actual Ollama model name in image_router.py
+  - name: gpt-image-1
+    provider: image_gen
+    worker_bindings:
+      - node_id: node-mac-01
+        port: 11434
+    capabilities: [image]
+    estimated_vram_mb:
