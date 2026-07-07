@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
       <string>/bin/bash</string>
-      <string>__ROOT_DIR__/scripts/start-mac-node.sh</string>
+      <string>__ROOT_DIR__/scripts/start-mac-node-wrapper.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
