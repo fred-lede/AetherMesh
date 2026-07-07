@@ -146,6 +146,13 @@ class Settings:
     asr_device_index: int = field(default_factory=lambda: int(os.getenv("AIIH_ASR_DEVICE_INDEX", "0")))
     asr_compute_type: str = field(default_factory=lambda: os.getenv("AIIH_ASR_COMPUTE_TYPE", "float16"))
     asr_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_ASR_MODELS_DIR"))
+    image_gen_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_IMAGE_GEN_ENABLED", "false"))
+    image_gen_default_model: str = field(
+        default_factory=lambda: os.getenv("AIIH_IMAGE_GEN_DEFAULT_MODEL", "x/z-image-turbo:fp8")
+    )
+    image_gen_default_worker: str = field(
+        default_factory=lambda: os.getenv("AIIH_IMAGE_GEN_DEFAULT_WORKER", "http://192.168.1.100:11434")
+    )
 
     @property
     def tls_enabled(self) -> bool:

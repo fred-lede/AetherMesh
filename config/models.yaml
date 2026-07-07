@@ -278,3 +278,36 @@ models:
         port: 11435
     capabilities: [audio]
     estimated_vram_mb:
+
+  # ── Image Generation (Ollama, macOS node-mac-01) ─────────
+  - name: x/z-image-turbo:fp8
+    provider: image_gen
+    worker_bindings:
+      - node_id: node-mac-01
+        port: 11434
+    capabilities: [image]
+    estimated_vram_mb:
+
+  - name: x/z-image-turbo:bf16
+    provider: image_gen
+    worker_bindings:
+      - node_id: node-mac-01
+        port: 11434
+    capabilities: [image]
+    estimated_vram_mb:
+
+  - name: x/flux2-klein:9b
+    provider: image_gen
+    worker_bindings:
+      - node_id: node-mac-01
+        port: 11434
+    capabilities: [image]
+    estimated_vram_mb:
+
+  - name: x/flux2-klein:4b
+    provider: image_gen
+    worker_bindings:
+      - node_id: node-mac-01
+        port: 11434
+    capabilities: [image]
+    estimated_vram_mb:

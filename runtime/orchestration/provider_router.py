@@ -24,6 +24,11 @@ try:
 except ImportError:
     FasterWhisperAdapter = None  # type: ignore[assignment, misc]
 
+try:
+    from providers.image_gen_adapter import ImageGenAdapter
+except ImportError:
+    ImageGenAdapter = None  # type: ignore[assignment, misc]
+
 NVIDIA_PREFIXES = (
     "meta/", "mistralai/", "nvidia/", "google/", "microsoft/", "baichuan-inc/",
     "deepseek/", "upstage/", "snowflake/", "ibm/", "yola/", "writer/", "z-ai/",
@@ -107,6 +112,10 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
         if FasterWhisperAdapter is None:
             raise ValueError("ASR adapter not available (faster-whisper not installed)")
         return _get_asr_adapter()
+    if provider == "image_gen":
+        if ImageGenAdapter is None:
+            raise ValueError("ImageGen adapter not available")
+        return _get_image_gen_adapter()
     raise ValueError(f"Unsupported provider: {provider}")
 
 
@@ -172,11 +181,37 @@ def _get_asr_adapter() -> Any:
         return None
 
 
+_image_gen_adapter: Any | None = None
+_image_gen_adapter_failed_at: float = 0.0
+
+
+def _get_image_gen_adapter() -> Any:
+    global _image_gen_adapter, _image_gen_adapter_failed_at
+    if _image_gen_adapter is not None:
+        return _image_gen_adapter
+    if not settings.image_gen_enabled:
+        return None
+    if _image_gen_adapter_failed_at and (time.monotonic() - _image_gen_adapter_failed_at < _ADAPTER_RETRY_COOLDOWN):
+        logger.warning("ImageGen adapter recently failed, retrying after cooldown (%.0fs remaining)",
+                       _ADAPTER_RETRY_COOLDOWN - (time.monotonic() - _image_gen_adapter_failed_at))
+        return None
+    try:
+        adapter = ImageGenAdapter()
+        adapter.set_worker(settings.image_gen_default_worker)
+        _image_gen_adapter = adapter
+        _image_gen_adapter_failed_at = 0.0
+        return _image_gen_adapter
+    except Exception:
+        _image_gen_adapter_failed_at = time.monotonic()
+        logger.exception("ImageGen adapter creation failed")
+        return None
+
+
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     for prefix, hinted_provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
             stripped = model[len(prefix):]
-            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts", "asr"):
+            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts", "asr", "image_gen"):
                 return hinted_provider, None
             for item in registry.get("models", []):
                 if item.get("name") == stripped:
@@ -219,6 +254,7 @@ ROUTE_PREFIXES = {
     "gemini/": "gemini",
     "xtts/": "xtts",
     "asr/": "asr",
+    "image_gen/": "image_gen",
 }
 
 

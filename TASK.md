@@ -173,6 +173,22 @@
 - [x] Normalized Ollama and Ollama Cloud embedding response shapes: `embeddings`, legacy `embedding`, and OpenAI-style `data[].embedding`.
 - [x] Verified `nomic-embed-text-v2-moe:latest` remains an embeddings-only model path and returns non-empty 768-dimensional vectors through AetherMesh.
 
+## Phase 26 — Image Generation ✅ (2026-07-07)
+### Task 1-2: Adapter
+- [x] `providers/image_gen_adapter.py` — ImageGenAdapter with `generate(model, prompt, n)` via Ollama `/api/generate`
+- [x] Fixed: `async def` + `await session.post()` on sync `requests.Session` → sync `def` (root cause of 500 error)
+- [x] `tests/test_image_gen.py` — 3 adapter tests + 5 router tests (8 total)
+
+### Task 3-6: Full Integration
+- [x] `config/settings.py` — `image_gen_enabled`, `image_gen_default_model`, `image_gen_default_worker`
+- [x] `config/cluster.yaml` — `node-mac-01: 192.168.1.100`
+- [x] `.env` — `AIIH_IMAGE_GEN_ENABLED=true`
+- [x] `.env.example` — image gen env var section
+- [x] `config/models.yaml` — 4 image models (`x/z-image-turbo:fp8/bf16`, `x/flux2-klein:9b/4b`)
+- [x] `runtime/orchestration/provider_router.py` — import guard + `_get_image_gen_adapter()` singleton with cooldown + ROUTE_PREFIXES
+- [x] `router/image_router.py` — `POST /v1/images/generations` + `POST /v1/images/edits`
+- [x] `router/openai_router.py` — conditional `include_router(image_router)`
+
 ## Phase 22 — Responses API Multi-Turn Tool Loop 🟡 (2026-05-24)
 ### 已完成
 - [x] 建立計畫文件 `RESPONSES_TOOL_LOOP_PLAN.md`
@@ -321,3 +337,8 @@
   - [x] `lang` alias for `language` in config frames
   - [x] `is_final` field in transcript messages (interim=`false`, final=`true`)
   - [x] Interim results: window fill → `is_final: false`; idle timeout/flush → `is_final: true`
+
+| 2026-07-07 | Phase 26 | ImageGenAdapter: Ollama `/api/generate` wrapper + 3 tests |
+| 2026-07-07 | Phase 26 | Fixed: sync/async mismatch (root cause of 500), built full integration (router, settings, provider_router, models, cluster, tests) |
+| 2026-07-07 | Phase 26 | Cherry Studio AI_RetryError root cause: TCP keep-alive timeout (5s default) kills pooled connections between 70s image gen requests. Fixes: `Connection: close` header + `--timeout-keep-alive 300` in launcher. |
+| 2026-07-07 | Phase 26 | `/v1/images/edits` multipart/form-data support: Cherry Studio sends edits as form data with image file, not JSON. Handler now accepts `UploadFile` + `Form(...)`. All 8 tests passing. |

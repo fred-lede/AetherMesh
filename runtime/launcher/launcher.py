@@ -118,6 +118,8 @@ def _cmd_for(svc: dict[str, Any]) -> list[str]:
         str(_port(svc)),
         "--log-level",
         "info",
+        "--timeout-keep-alive",
+        "300",
     ]
     cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
     key = os.getenv("AIIH_SSL_KEYFILE", "").strip()

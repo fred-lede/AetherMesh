@@ -15,7 +15,7 @@ class ImageGenAdapter:
     def set_worker(self, base_url: str) -> None:
         self.base_url = base_url
 
-    async def generate(
+    def generate(
         self,
         model: str,
         prompt: str,
@@ -29,7 +29,7 @@ class ImageGenAdapter:
             "stream": False,
         }
         for _ in range(n):
-            resp = await session.post(
+            resp = session.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
                 timeout=300,

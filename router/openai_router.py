@@ -77,6 +77,10 @@ if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router
     app.include_router(audio_router)
 
+if settings.image_gen_enabled:
+    from router.image_router import router as image_router
+    app.include_router(image_router)
+
 
 def _error_type_for_status(status_code: int) -> str:
     if status_code == 429:
