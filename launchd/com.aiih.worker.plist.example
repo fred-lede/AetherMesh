@@ -21,7 +21,7 @@
     <key>EnvironmentVariables</key>
     <dict>
       <key>AIIH_CONTROL_IP</key>
-      <string>192.168.1.201</string>
+      <string>192.168.1.200</string>
       <key>PATH</key>
       <string>__ROOT_DIR__/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>

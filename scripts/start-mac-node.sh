@@ -6,7 +6,7 @@ set -euo pipefail
 
 AETHERMESH_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CLUSTER_YAML="$AETHERMESH_DIR/config/cluster.yaml"
-CONTROL_PLANE_IP="${AIIH_CONTROL_IP:-192.168.1.201}"
+CONTROL_PLANE_IP="${AIIH_CONTROL_IP:-192.168.1.200}"
 
 cd "$AETHERMESH_DIR"
 
