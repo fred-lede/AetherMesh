@@ -1,5 +1,13 @@
 models:
   # ── RTX 5090 (32GB, tier S) — flagship inference ─────────────
+  - name: gemma4:e2b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, tools, vision, audio]
+    estimated_vram_mb:
+
   - name: gemma4:26b
     provider: ollama
     worker_bindings:

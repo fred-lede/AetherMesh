@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -37,9 +39,21 @@ def _resolve_adapter():
     return adapter
 
 
+def _truncate_for_tts(text: str, max_chars: int = 150) -> str:
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    last_boundary = max(truncated.rfind("。"), truncated.rfind("！"),
+                        truncated.rfind("？"), truncated.rfind("."),
+                        truncated.rfind("!"), truncated.rfind("?"))
+    if last_boundary > max_chars // 2:
+        return text[:last_boundary + 1]
+    return truncated
+
+
 @router.post("/v1/audio/speech")
 async def create_speech(payload: dict[str, Any]) -> Response:
-    text = payload.get("input", "")
+    text = _truncate_for_tts(payload.get("input", ""))
     voice = payload.get("voice", "")
     response_format = payload.get("response_format", "wav")
     language = payload.get("language", "")
@@ -205,6 +219,129 @@ async def create_translation(
         )
     except ASRProviderError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+def _resolve_voice_id(voice: str) -> str:
+    if "/" in voice or "\\" in voice:
+        return voice
+    voices_dir = Path(settings.tts_voices_dir)
+    if not voices_dir.is_dir():
+        return voice
+    for entry in sorted(voices_dir.iterdir()):
+        meta_path = entry / "meta.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+                if meta.get("name") == voice:
+                    return str(meta.get("voice_id", entry.name))
+            except Exception:
+                pass
+    return voice
+
+
+@router.post("/v1/audio/chat")
+async def audio_chat(
+    file: UploadFile = File(...),
+    model: str = Form("gemma4:e2b"),
+    system_prompt: str = Form(default=""),
+    voice: str = Form(default=""),
+    language: str = Form(default=""),
+    temperature: float = Form(default=0.0),
+    max_tokens: int = Form(default=0),
+    response_format: str = Form(default="json"),
+    messages: str = Form(default=""),
+) -> Any:
+    audio_data = await file.read()
+
+    # Step 1: ASR (speech → text)
+    asr_adapter = _resolve_asr_adapter()
+    try:
+        transcript_result = asr_adapter.transcribe(
+            audio=audio_data,
+            task="transcribe",
+            language=language,
+            temperature=temperature,
+        )
+    except ASRProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+    transcript = transcript_result.get("text", "")
+    if not transcript:
+        raise HTTPException(status_code=400, detail="ASR returned empty transcript")
+
+    # Step 2: LLM (text → response)
+    from router.openai_router import service
+
+    chat_messages: list[dict[str, Any]] = []
+    if system_prompt:
+        chat_messages.append({"role": "system", "content": system_prompt})
+    if messages:
+        try:
+            history = json.loads(messages)
+            if isinstance(history, list):
+                chat_messages.extend(history)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    chat_messages.append({"role": "user", "content": transcript})
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": chat_messages,
+        "temperature": temperature,
+        "stream": False,
+    }
+    if max_tokens > 0:
+        payload["max_tokens"] = max_tokens
+
+    try:
+        result = service.handle_chat(payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM error: {e}")
+
+    response_text = ""
+    if isinstance(result, dict):
+        choices = result.get("choices", [])
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message", {})
+            response_text = message.get("content", "")
+
+    if not response_text:
+        raise HTTPException(status_code=500, detail="LLM returned empty response")
+
+    # Step 3: TTS (text → speech, optional)
+    audio_bytes: bytes | None = None
+    if voice:
+        resolved_voice = _resolve_voice_id(voice)
+        tts_adapter = _resolve_adapter()
+        tts_text = _truncate_for_tts(response_text)
+        try:
+            audio_bytes = tts_adapter.tts({
+                "model": "xtts-v2",
+                "input": tts_text,
+                "voice": resolved_voice,
+                "language": language or "",
+                "speed": 1.0,
+            })
+        except TTSProviderError as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e))
+        if response_format in ("mp3", "opus", "flac"):
+            audio_bytes = _convert_format(audio_bytes, response_format)
+
+    # Step 4: return
+    if response_format in ("wav", "mp3", "opus", "flac"):
+        if audio_bytes:
+            ct = AUDIO_CONTENT_TYPES.get(response_format, "audio/wav")
+            return Response(content=audio_bytes, media_type=ct)
+        return {"text": response_text, "transcript": transcript}
+
+    result_data: dict[str, Any] = {
+        "text": response_text,
+        "transcript": transcript,
+    }
+    if audio_bytes:
+        result_data["audio"] = base64.b64encode(audio_bytes).decode("ascii")
+
+    return result_data
 
 
 def _verify_ws_api_key(api_key: str) -> bool:

@@ -255,6 +255,7 @@ class OllamaCloudAdapter(ProviderAdapter):
         normalized: dict[str, Any] = {"role": str(message.get("role", "user"))}
         content = message.get("content", "")
         images: list[str] = list(message.get("images") or [])
+        audio_entries: list[dict[str, str]] = list(message.get("audio") or [])
 
         if isinstance(content, list):
             text_parts: list[str] = []
@@ -265,12 +266,17 @@ class OllamaCloudAdapter(ProviderAdapter):
                 image = self._content_part_image_for_ollama_cloud(part)
                 if image:
                     images.append(image)
+                extracted = self._content_part_audio_for_ollama_cloud(part)
+                if extracted:
+                    audio_entries.append(extracted)
             normalized["content"] = "\n".join(text_parts)
         else:
             normalized["content"] = "" if content is None else str(content)
 
         if images:
             normalized["images"] = images
+        if audio_entries:
+            normalized["audio"] = audio_entries
 
         tool_calls = message.get("tool_calls")
         if tool_calls:
@@ -307,6 +313,21 @@ class OllamaCloudAdapter(ProviderAdapter):
         if not url.startswith("data:"):
             return None
         return url.split(",", 1)[1] if "," in url else url
+
+    def _content_part_audio_for_ollama_cloud(self, part: Any) -> dict[str, str] | None:
+        if not isinstance(part, dict):
+            return None
+        part_type = part.get("type")
+        if part_type not in ("input_audio", "audio"):
+            return None
+        audio = part.get("input_audio") or part
+        if not isinstance(audio, dict):
+            return None
+        data = audio.get("data")
+        fmt = audio.get("format", "wav")
+        if not data:
+            return None
+        return {"data": str(data), "format": str(fmt)}
 
     def _to_openai_tool_calls_for_stream(self, raw_tool_calls: Any) -> list[dict[str, Any]]:
         if not isinstance(raw_tool_calls, list):

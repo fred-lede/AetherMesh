@@ -342,3 +342,5 @@
 | 2026-07-07 | Phase 26 | Fixed: sync/async mismatch (root cause of 500), built full integration (router, settings, provider_router, models, cluster, tests) |
 | 2026-07-07 | Phase 26 | Cherry Studio AI_RetryError root cause: TCP keep-alive timeout (5s default) kills pooled connections between 70s image gen requests. Fixes: `Connection: close` header + `--timeout-keep-alive 300` in launcher. |
 | 2026-07-07 | Phase 26 | `/v1/images/edits` multipart/form-data support: Cherry Studio sends edits as form data with image file, not JSON. Handler now accepts `UploadFile` + `Form(...)`. All 8 tests passing. |
+| 2026-07-07 | Phase 26 | ChatBox image gen mode fix: use built-in OpenAI provider (not custom provider) pointed to AetherMesh. No model alias needed. |
+| 2026-07-07 | Phase 26 | macOS cluster node: `scripts/start-mac-node.sh`, launchd plist with `AIIH_CONTROL_IP`, node_agent + worker_agent register with Windows control plane. |

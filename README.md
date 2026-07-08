@@ -380,6 +380,7 @@ apiKey: "local-dev-key"
 - `PATCH /v1/responses/{id}` — update response metadata
 - `GET /v1/models` — list available models
 - `POST /v1/embeddings` — text embeddings
+- `POST /v1/audio/chat` — voice chat pipeline (ASR → LLM → TTS, returns speech audio or JSON)
 - `POST /v1/rerank` — document reranking
 - `GET /v1/gpu/status` — GPU devices, VRAM, utilization, temperature
 - `POST /v1/gpu/models/load` — load a model to a device
@@ -638,6 +639,77 @@ curl -X POST http://localhost:8001/v1/audio/translations \
 See [Whisper's language list](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py#L10)
 for the full set (includes dialects like `yue` for Cantonese, `nan` for
 Southern Min / Taiwanese).
+
+### Voice Chat Pipeline (`POST /v1/audio/chat`)
+
+AetherMesh provides an **end-to-end voice chat** endpoint that chains ASR → LLM → TTS
+in a single request: upload an audio file, get a spoken response back.
+
+**Pipeline:**
+1. **ASR** (faster-whisper) — transcribes input audio to text
+2. **LLM** (Gemma 4 / any chat model) — generates a response via `handle_chat`
+3. **TTS** (XTTS-v2) — converts the response to speech using a cloned voice
+
+**Request:**
+```bash
+curl -X POST http://localhost:8001/v1/audio/chat \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "file=@question.wav" \
+  -F "model=gemma4:e2b" \
+  -F "system_prompt=請用繁體中文回答" \
+  -F "voice=zh-TW-HsiaoChen" \
+  -F "language=zh-cn" \
+  -F "response_format=wav" \
+  -o reply.wav
+```
+
+**Request fields:**
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `file` | yes | — | Audio file (WAV, MP3, FLAC, OGG, etc.) |
+| `model` | no | `gemma4:e2b` | LLM model for response generation |
+| `system_prompt` | no | `""` | System prompt for the LLM |
+| `voice` | no | `""` | Voice name or UUID for TTS output (omit for text-only reply) |
+| `language` | no | `""` | ISO 639-1 code for LLM input. TTS language auto-resolved from voice meta.json when empty |
+| `temperature` | no | `0.0` | LLM sampling temperature |
+| `max_tokens` | no | `0` | Max tokens for LLM response (0 = unlimited). Must be high for thinking models like Gemma 4 |
+| `response_format` | no | `json` | `json` (returns JSON with text + transcript + optional base64 audio), `wav`/`mp3`/`opus`/`flac` (returns raw audio file) |
+| `messages` | no | `""` | Optional JSON array of prior chat messages for multi-turn conversation |
+
+**Example responses:**
+
+With `response_format=json` and no voice:
+```json
+{"text": "...", "transcript": "..."}
+```
+
+With `response_format=json` and voice:
+```json
+{"text": "...", "transcript": "...", "audio": "<base64-wav>"}
+```
+
+With `response_format=wav` and voice — raw WAV binary stream (save to file).
+
+**XTTS token limit:** The XTTS model generates a maximum of ~400 audio tokens
+(~150 Chinese characters or ~300 English characters). Text beyond this limit is
+automatically truncated at the nearest sentence boundary before TTS synthesis.
+The full LLM response is always returned in the `text` field.
+
+**Available voices** (pre-registered in `data/voices/`):
+
+| Name | Language | UUID |
+|------|----------|------|
+| `zh-TW-HsiaoChen` | zh-cn | `075f432f-...` |
+| `zh-TW-YunJhe` | zh-cn | `72fb46fa-...` |
+| `zh-CN-Xiaoxiao` | zh-cn | `f95eec1d-...` |
+| `en-US-Andrew` | en | `ee8e7bbd-...` |
+| `en-HK-Yan` | en | `b665564e-...` |
+| `ja-JP-Nanami` | ja | `45d048b2-...` |
+| `ja-JP-Keita` | ja | `6f3f804b-...` |
+| `es-ES-Elvira` | es | `7b8575c2-...` |
+
+Voice names are resolved to UUIDs automatically; you can also pass the UUID directly.
 
 ### Multi-Key Failover (Credential Pool)
 

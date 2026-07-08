@@ -279,3 +279,19 @@ def _openai_audio_hint(part: dict[str, Any]) -> str:
         fmt = audio.get("format") or "audio"
         return f"[Audio: {fmt}]"
     return "[Audio]"
+
+
+def content_part_to_audio_data(part: Any) -> tuple[str | None, str | None]:
+    if not isinstance(part, dict):
+        return None, None
+    part_type = str(part.get("type", "")).lower()
+    if part_type not in {"input_audio", "audio"}:
+        return None, None
+    audio = part.get("input_audio") or part
+    if not isinstance(audio, dict):
+        return None, None
+    data = audio.get("data")
+    if not data:
+        return None, None
+    fmt = audio.get("format") or "wav"
+    return str(data), str(fmt)

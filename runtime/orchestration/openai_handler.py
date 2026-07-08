@@ -35,7 +35,7 @@ from runtime.tools.builtin.web_search import (
     latest_user_text,
     run_web_search,
 )
-from runtime.tools.content_blocks import content_part_to_text_and_images, normalize_image_ref, resolve_file_blocks
+from runtime.tools.content_blocks import content_part_to_audio_data, content_part_to_text_and_images, normalize_image_ref, resolve_file_blocks
 from runtime.tools.file_cleanup import get_file_cleanup_manager
 
 
@@ -1572,6 +1572,7 @@ class RouterService:
 
         text_parts: list[str] = []
         images: list[str] = list(normalized.get("images", [])) if isinstance(normalized.get("images"), list) else []
+        audio_data: list[tuple[str, str]] = []
 
         for part in content:
             text, extracted_images = self._extract_content_part(part)
@@ -1579,10 +1580,15 @@ class RouterService:
                 text_parts.append(text)
             if extracted_images:
                 images.extend(extracted_images)
+            extracted_audio = self._extract_audio_part(part)
+            if extracted_audio:
+                audio_data.append(extracted_audio)
 
         normalized["content"] = "\n".join(text_parts)
         if images:
             normalized["images"] = images
+        if audio_data:
+            normalized["audio"] = [{"data": d, "format": f} for d, f in audio_data]
         return normalized
 
     def _normalize_inbound_tool_calls_for_ollama(self, message: dict[str, Any]) -> None:
@@ -1630,6 +1636,12 @@ class RouterService:
 
     def _extract_content_part(self, part: Any) -> tuple[str, list[str]]:
         return content_part_to_text_and_images(part)
+
+    def _extract_audio_part(self, part: Any) -> tuple[str, str] | None:
+        data, fmt = content_part_to_audio_data(part)
+        if data and fmt:
+            return data, fmt
+        return None
 
     def _normalize_image_ref(self, value: str) -> str:
         return normalize_image_ref(value)

@@ -588,6 +588,8 @@ class ModelRoutingEngine:
             caps.append("vision")
         if any(kw in model.lower() for kw in ("thinking", "reason", "o1", "o3", "deepseek")):
             caps.append("thinking")
+        if any(kw in model.lower() for kw in ("audio", "gemma")):
+            caps.append("audio")
         if any(kw in model.lower() for kw in ("tool", "function")):
             caps.append("tools")
         return caps

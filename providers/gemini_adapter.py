@@ -269,6 +269,10 @@ class GeminiAdapter(ProviderAdapter):
                         gemini_part = self._image_url_to_gemini_inline(item)
                         if gemini_part:
                             parts.append(gemini_part)
+                    elif isinstance(item, dict) and item.get("type") in ("input_audio", "audio"):
+                        gemini_part = self._input_audio_to_gemini_inline(item)
+                        if gemini_part:
+                            parts.append(gemini_part)
             else:
                 parts.append({"text": str(content)})
             for img_data in images_from_field:
@@ -293,6 +297,18 @@ class GeminiAdapter(ProviderAdapter):
             if not data:
                 return None
         return {"inline_data": {"mime_type": mime_type, "data": data}}
+
+    @staticmethod
+    def _input_audio_to_gemini_inline(part: dict[str, Any]) -> dict[str, Any] | None:
+        audio = part.get("input_audio") or part
+        if not isinstance(audio, dict):
+            return None
+        data = audio.get("data")
+        if not data:
+            return None
+        fmt = str(audio.get("format", "wav"))
+        mime_type = f"audio/{fmt}"
+        return {"inline_data": {"mime_type": mime_type, "data": str(data)}}
 
     def _tools_to_gemini(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         declarations = []
