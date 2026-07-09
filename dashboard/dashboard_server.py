@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
-from runtime.orchestration.provider_router import credential_pool_status, reload_credential_pools
+from runtime.orchestration.provider_router import credential_pool_status, reload_credential_pools, custom_provider_status, reload_custom_providers
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
@@ -865,6 +865,7 @@ def _build_overview() -> dict[str, Any]:
             }
         )
     cloud_providers = _check_cloud_providers()
+    custom_providers = custom_provider_status()
 
     gpus_enriched = [
         {**g, "tier": _get_gpu_tier(g.get("name", ""))} 
@@ -885,6 +886,7 @@ def _build_overview() -> dict[str, Any]:
         "models_enriched": models_enriched,
         "alerts": alerts,
         "cloud_providers": cloud_providers,
+        "custom_providers": custom_providers,
         "request_metrics": _fetch_router_metrics("/api/metrics/requests") or request_metrics.get_summary(),
         "provider_metrics": (_fetch_router_metrics("/api/metrics/providers") or {}).get("providers", request_metrics.get_provider_metrics()),
         "provider_diagnostics": (_fetch_router_metrics("/api/metrics/provider-diagnostics") or {}).get("providers", request_metrics.get_provider_diagnostics()),
@@ -983,6 +985,128 @@ def credentials_put(provider: str, body: list[Any] = Body(...)) -> dict[str, Any
     settings.save_cloud_credentials(provider, valid)
     reload_credential_pools()
     return {"ok": True, "provider": provider, "count": len(valid)}
+
+
+@api.get("/custom-providers")
+def custom_providers_list() -> dict[str, Any]:
+    data = settings.load_custom_providers()
+    safe = {}
+    for name, cfg in data.items():
+        if isinstance(cfg, dict):
+            safe[name] = {
+                "name": name,
+                "api_type": cfg.get("api_type", "openai"),
+                "base_url": cfg.get("base_url", ""),
+                "has_key": bool(str(cfg.get("api_key", "")).strip()),
+            }
+    return {"providers": safe}
+
+
+@api.post("/custom-providers")
+def custom_providers_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    name = str(body.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Provider name is required")
+    base_url = str(body.get("base_url", "")).strip().rstrip("/")
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Base URL is required")
+    api_key = str(body.get("api_key", "")).strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+    data = settings.load_custom_providers()
+    if name in data:
+        raise HTTPException(status_code=409, detail=f"Provider '{name}' already exists")
+    data[name] = {
+        "api_type": "openai",
+        "base_url": f"{base_url}/v1" if "/v1" not in base_url else base_url,
+        "api_key": api_key,
+    }
+    settings.save_custom_providers(data)
+    reload_custom_providers()
+    return {"ok": True, "name": name}
+
+
+@api.put("/custom-providers/{name}")
+def custom_providers_update(name: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    data = settings.load_custom_providers()
+    if name not in data:
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+    cfg = data[name]
+    if not isinstance(cfg, dict):
+        cfg = {}
+    if "base_url" in body:
+        base_url = str(body["base_url"]).strip().rstrip("/")
+        if base_url:
+            cfg["base_url"] = f"{base_url}/v1" if "/v1" not in base_url else base_url
+    if "api_key" in body:
+        val = str(body["api_key"]).strip()
+        if val:
+            cfg["api_key"] = val
+    data[name] = cfg
+    settings.save_custom_providers(data)
+    reload_custom_providers()
+    return {"ok": True, "name": name}
+
+
+@api.delete("/custom-providers/{name}")
+def custom_providers_delete(name: str) -> dict[str, Any]:
+    data = settings.load_custom_providers()
+    if name not in data:
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+    del data[name]
+    settings.save_custom_providers(data)
+    reload_custom_providers()
+    return {"ok": True, "name": name}
+
+
+@api.post("/custom-providers/{name}/probe")
+def custom_providers_probe(name: str) -> dict[str, Any]:
+    data = settings.load_custom_providers()
+    cfg = data.get(name)
+    if not isinstance(cfg, dict):
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+    base_url = str(cfg.get("base_url", "")).rstrip("/")
+    api_key = str(cfg.get("api_key", "")).strip()
+    if not api_key:
+        return {"name": name, "ok": False, "status": "not_configured", "message": "No API key"}
+    headers = {"Authorization": f"Bearer {api_key}"}
+    endpoints_to_try = ["/models", "/api/tags"]
+    for endpoint in endpoints_to_try:
+        try:
+            response = get_session().get(f"{base_url}{endpoint}", headers=headers, timeout=2)
+            if response.ok:
+                data_json = response.json()
+                model_count = 0
+                if isinstance(data_json, dict):
+                    if "data" in data_json:
+                        model_count = len(data_json["data"])
+                    elif "models" in data_json:
+                        model_count = len(data_json["models"])
+                elif isinstance(data_json, list):
+                    model_count = len(data_json)
+                return {
+                    "name": name,
+                    "ok": True,
+                    "status": "healthy",
+                    "base_url": base_url,
+                    "model_count": model_count,
+                    "latency_ms": int(response.elapsed.total_seconds() * 1000),
+                }
+        except requests.RequestException:
+            continue
+    return {
+        "name": name,
+        "ok": False,
+        "status": "unreachable",
+        "base_url": base_url,
+        "message": f"Failed to connect to {base_url}",
+    }
+
+
+@api.post("/custom-providers/reload")
+def custom_providers_reload() -> dict[str, Any]:
+    reloaded = reload_custom_providers()
+    return {"ok": True, "providers": list(reloaded.keys())}
 
 
 @api.get("/web-search/status")
