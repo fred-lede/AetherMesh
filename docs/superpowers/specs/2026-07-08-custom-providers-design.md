@@ -39,9 +39,8 @@ New file `config/custom_providers.json`:
 - **`base_url`**: full URL including `/v1` path
 - **`api_key`**: authentication key
 
-Gitignore: `custom_providers.json` is not gitignored (unlike `credentials.json`),
-because it's a shared config that defines the provider, not just secrets.
-Actually — it contains API keys, so it SHOULD be gitignored. Add to `.gitignore`.
+Gitignore: `custom_providers.json` contains API keys and should be gitignored
+(same as `credentials.json`). Add to `.gitignore`.
 
 ## Routing Integration
 
