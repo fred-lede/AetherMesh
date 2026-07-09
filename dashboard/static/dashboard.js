@@ -582,8 +582,8 @@
           const healthy = p.healthy;
           const cooldownRemaining = Number(p.cooldown_remaining_s || 0);
           const inCooldown = cooldownRemaining > 0;
-          const statusCls = enabled ? (inCooldown || healthy === false ? 'warn' : 'ok') : 'bad';
-          const statusText = enabled ? (inCooldown ? 'cooldown' : (healthy ? 'healthy' : 'unhealthy')) : 'disabled';
+          const statusCls = enabled ? (inCooldown || healthy === false ? 'warn' : (healthy === true ? 'ok' : 'unknown')) : 'bad';
+          const statusText = enabled ? (inCooldown ? 'cooldown' : (healthy === false ? 'unhealthy' : (healthy === true ? 'healthy' : 'unknown'))) : 'disabled';
           const latencyText = inCooldown ? `${Math.ceil(cooldownRemaining)}s left` : `${p.latency_ms || 0}ms`;
           return `
             <div class="routing-control-card">
