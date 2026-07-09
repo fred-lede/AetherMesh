@@ -9,6 +9,7 @@ model_aliases:
   # alias to the actual model name before routing.
   alias_prefix: AIIH
   entries:
+    z-ai/glm-5.2: z-ai/glm-5.2
     minimaxai/minimax-m2.7: minimaxai/minimax-m2.7
     moonshotai/kimi-k2.6: moonshotai/kimi-k2.6
     google/diffusiongemma-26b-a4b-it: google/diffusiongemma-26b-a4b-it
@@ -18,7 +19,7 @@ model_aliases:
     qwen3-vl-235b: qwen3-vl:235b
     # Claude tier → local model mapping
     claude-sonnet-4-20250514: gemma4:31b-it-qat      # Opus tier — strongest reasoning(5090)
-    claude-sonnet-4-6: z-ai/glm4.7               # Sonnet tier — balanced all-round(5090)
+    claude-sonnet-4-6: z-ai/glm-5.2               # Sonnet tier — balanced all-round(5090)
     claude-3-5-haiku-20241022: gemma4:12b       # Haiku tier — fast & light (4070)
 
 fallback:

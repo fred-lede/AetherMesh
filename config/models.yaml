@@ -229,6 +229,11 @@ models:
     worker_ports: []
     capabilities: [chat, responses, embeddings, tools]
 
+  - name: z-ai/glm-5.2
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, thinking, tools]
+
   - name: minimaxai/minimax-m2.7
     provider: nvidia_nim
     worker_ports: []
@@ -256,6 +261,11 @@ models:
 
   - name: deepseek-ai/deepseek-v4-flash
     provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, thinking, tools]
+    
+  - name: agnes-2.0-flash
+    provider: agnes
     worker_ports: []
     capabilities: [chat, thinking, tools]
 
