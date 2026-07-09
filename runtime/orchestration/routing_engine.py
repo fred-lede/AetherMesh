@@ -37,6 +37,29 @@ CLOUD_PROVIDER_ENDPOINTS = {
 }
 
 
+def register_custom_providers(names: list[str], name_base_urls: dict[str, str]) -> None:
+    for name in names:
+        if name not in CLOUD_PROVIDERS:
+            CLOUD_PROVIDERS.append(name)
+        if name not in ROUTING_PROVIDERS:
+            ROUTING_PROVIDERS.append(name)
+        if name not in CLOUD_PROVIDER_ENDPOINTS:
+            base_url = name_base_urls.get(name, "")
+            CLOUD_PROVIDER_ENDPOINTS[name] = ("", "", base_url)
+        for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
+            if name not in cap_scores:
+                cap_scores[name] = cap_scores.get("openai", 85)
+
+
+def unregister_custom_providers(names: list[str]) -> None:
+    for name in names:
+        CLOUD_PROVIDERS[:] = [p for p in CLOUD_PROVIDERS if p != name]
+        ROUTING_PROVIDERS[:] = [p for p in ROUTING_PROVIDERS if p != name]
+        CLOUD_PROVIDER_ENDPOINTS.pop(name, None)
+        for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
+            cap_scores.pop(name, None)
+
+
 @dataclass
 class RouteCandidate:
     provider: str
@@ -139,6 +162,16 @@ class ModelRoutingEngine:
             result[provider] = bool(os.getenv(api_key_env, "").strip())
         for provider in ROUTING_PROVIDERS:
             result.setdefault(provider, True)
+        custom_path = settings.config_path("custom_providers.json")
+        if custom_path.exists():
+            try:
+                custom_data = json.loads(custom_path.read_text(encoding="utf-8"))
+                if isinstance(custom_data, dict):
+                    for name, cfg in custom_data.items():
+                        if isinstance(cfg, dict) and str(cfg.get("api_key", "")).strip():
+                            result[name] = True
+            except (OSError, json.JSONDecodeError):
+                pass
         return result
 
     def set_provider_health(self, provider: str, healthy: bool) -> None:
@@ -670,12 +703,29 @@ class ModelRoutingEngine:
         return rows
 
     def _cloud_adapter_worker(self, provider: str) -> dict[str, Any]:
-        base_url_env, api_key_env, default_base_url = CLOUD_PROVIDER_ENDPOINTS[provider]
-        return {
-            "kind": "cloud_adapter",
-            "base_url": os.getenv(base_url_env, default_base_url).rstrip("/"),
-            "credential_configured": bool(os.getenv(api_key_env, "").strip()),
-        }
+        if provider in CLOUD_PROVIDER_ENDPOINTS:
+            base_url_env, api_key_env, default_base_url = CLOUD_PROVIDER_ENDPOINTS[provider]
+            base_url = os.getenv(base_url_env, default_base_url).rstrip("/")
+            if api_key_env:
+                configured = bool(os.getenv(api_key_env, "").strip())
+            else:
+                configured = False
+                custom_path = settings.config_path("custom_providers.json")
+                if custom_path.exists():
+                    try:
+                        custom_data = json.loads(custom_path.read_text(encoding="utf-8"))
+                        if isinstance(custom_data, dict) and provider in custom_data:
+                            cfg = custom_data[provider]
+                            if isinstance(cfg, dict) and str(cfg.get("api_key", "")).strip():
+                                configured = True
+                    except (OSError, json.JSONDecodeError):
+                        pass
+            return {
+                "kind": "cloud_adapter",
+                "base_url": base_url,
+                "credential_configured": configured,
+            }
+        return {"kind": "cloud_adapter", "base_url": "", "credential_configured": False}
 
     def get_routing_status(self) -> dict[str, Any]:
         with self._lock:
