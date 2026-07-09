@@ -744,7 +744,7 @@ class ModelRoutingEngine:
                 "providers": {
                     provider: {
                         "enabled": self._provider_enabled.get(provider, False),
-                        "healthy": self._provider_health.get(provider, None),
+                        "healthy": self._provider_health.get(provider, True),
                         "latency_ms": self._provider_latency.get(provider, 0),
                         "cooldown_remaining_s": round(self._provider_cooldown_remaining(provider), 1),
                         "cooldown_reason": self._provider_cooldown_reason.get(provider, ""),
