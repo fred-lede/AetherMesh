@@ -679,6 +679,17 @@
           </div>{% endfor %}
         </div>
       </div>
+      <div id="custom-provider-section" style="margin-top: 14px;">
+        <div class="subsection-title">Custom Providers</div>
+        <div style="color: var(--muted); font-size: 0.85rem; margin-bottom: 8px;">OpenAI-compatible providers added via Dashboard. Stored in config/custom_providers.json.</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <input id="cp-name" class="control-input" type="text" placeholder="Provider name (e.g. agnes)" style="flex:1;min-width:140px;">
+          <input id="cp-baseurl" class="control-input" type="text" placeholder="Base URL (e.g. https://api.agnes.ai/v1)" style="flex:2;min-width:200px;">
+          <input id="cp-apikey" class="control-input" type="password" placeholder="API key" style="flex:1;min-width:140px;">
+          <button class="btn btn-primary" onclick="addCustomProvider(event)">Add</button>
+        </div>
+        <div id="custom-provider-grid" class="provider-grid"></div>
+      </div>
       <div id="web-search-providers" style="margin-top: 6px;"></div>
       <div class="subsection-title">Request Metrics</div>
       <div id="request-metrics-summary" class="muted-line">Tracking requests via Anthropic router</div>

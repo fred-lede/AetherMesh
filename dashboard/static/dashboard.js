@@ -515,6 +515,7 @@
       if (_isAdmin) {
         renderCredentials(cloudList);
       }
+      renderCustomProviders(data);
 
       if (_isAdmin) {
         const webSearchEl = document.getElementById('web-search-providers');
@@ -1405,3 +1406,122 @@
       };
     }
     connectSSE();
+
+    // ── Custom Providers ──────────────────────────────────────────────
+
+    function renderCustomProviders(data) {
+      const grid = document.getElementById('custom-provider-grid');
+      if (!grid) return;
+      const providers = data.custom_providers || [];
+      if (!providers.length) {
+        grid.innerHTML = '<div style="color:var(--muted);padding:12px;">No custom providers configured.</div>';
+        return;
+      }
+      grid.innerHTML = providers.map(p => `
+        <div class="provider-card" id="cp-card-${escapeJsString(p.name)}">
+          <div class="provider-top">
+            <div>
+              <div class="provider-name">${escapeHtml(p.name)}</div>
+              <div class="provider-sub">${escapeHtml(p.base_url)}</div>
+            </div>
+            <span class="pill ${statusClass(p.configured ? 'ok' : 'bad')}">${p.configured ? 'configured' : 'no key'}</span>
+          </div>
+          <div class="provider-actions" style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);">
+            <button class="btn btn-primary" onclick="probeCustomProvider('${escapeJsString(p.name)}')">Test</button>
+            <button class="btn" onclick="editCustomProvider('${escapeJsString(p.name)}')">Edit</button>
+            <button class="btn btn-danger" onclick="deleteCustomProvider('${escapeJsString(p.name)}')">Delete</button>
+            <span id="cp-probe-${escapeJsString(p.name)}" style="font-size:0.8rem;color:var(--muted);align-self:center;"></span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addCustomProvider(event) {
+      const btn = event.currentTarget;
+      const restore = setButtonBusy(btn, 'Adding...');
+      try {
+        const name = document.getElementById('cp-name').value.trim();
+        const baseUrl = document.getElementById('cp-baseurl').value.trim();
+        const apiKey = document.getElementById('cp-apikey').value.trim();
+        if (!name || !baseUrl || !apiKey) {
+          setOperationStatus('All fields are required.', 'bad');
+          return;
+        }
+        await mutateDashboard('/api/custom-providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, base_url: baseUrl, api_key: apiKey }),
+        });
+        document.getElementById('cp-name').value = '';
+        document.getElementById('cp-baseurl').value = '';
+        document.getElementById('cp-apikey').value = '';
+        await refresh();
+        setOperationStatus(`Provider "${name}" added.`, 'ok');
+      } catch (err) {
+        setOperationStatus(`Failed: ${err.message}`, 'bad');
+      } finally {
+        restore();
+      }
+    }
+
+    async function probeCustomProvider(name) {
+      const span = document.getElementById(`cp-probe-${name}`);
+      if (span) span.textContent = 'Probing...';
+      try {
+        const result = await mutateDashboard(`/api/custom-providers/${encodeURIComponent(name)}/probe`, { method: 'POST' });
+        if (span) span.textContent = result.ok
+          ? `OK (${result.latency_ms || '?'}ms, ${result.model_count || 0} models)`
+          : `Failed: ${result.status}`;
+      } catch (err) {
+        if (span) span.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    async function deleteCustomProvider(name) {
+      if (!confirm(`Delete provider "${name}"?`)) return;
+      try {
+        await mutateDashboard(`/api/custom-providers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        await refresh();
+        setOperationStatus(`Provider "${name}" deleted.`, 'ok');
+      } catch (err) {
+        setOperationStatus(`Failed: ${err.message}`, 'bad');
+      }
+    }
+
+    function editCustomProvider(name) {
+      const container = document.getElementById('custom-provider-section');
+      const nameInput = document.getElementById('cp-name');
+      const baseUrlInput = document.getElementById('cp-baseurl');
+      const apiKeyInput = document.getElementById('cp-apikey');
+      const addBtn = container.querySelector('.btn-primary');
+      nameInput.value = name;
+      nameInput.readOnly = true;
+      addBtn.textContent = 'Save';
+      addBtn.onclick = async function saveEdit(event) {
+        const restore = setButtonBusy(addBtn, 'Saving...');
+        try {
+          const baseUrl = baseUrlInput.value.trim();
+          const apiKey = apiKeyInput.value.trim();
+          const body = {};
+          if (baseUrl) body.base_url = baseUrl;
+          if (apiKey) body.api_key = apiKey;
+          await mutateDashboard(`/api/custom-providers/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          nameInput.readOnly = false;
+          nameInput.value = '';
+          baseUrlInput.value = '';
+          apiKeyInput.value = '';
+          addBtn.textContent = 'Add';
+          addBtn.onclick = addCustomProvider;
+          await refresh();
+          setOperationStatus(`Provider "${name}" updated.`, 'ok');
+        } catch (err) {
+          setOperationStatus(`Failed: ${err.message}`, 'bad');
+        } finally {
+          restore();
+        }
+      };
+    }
