@@ -143,3 +143,8 @@ data/
 body.json
 output*.wav
 test.py
+
+############################
+# Custom provider config (contains API keys)
+############################
+config/custom_providers.json

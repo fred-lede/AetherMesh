@@ -172,6 +172,18 @@ class Settings:
         with path.open("r", encoding="utf-8") as handle:
             return yaml.safe_load(handle) or {}
 
+    def load_custom_providers(self) -> dict[str, Any]:
+        path = self.config_path("custom_providers.json")
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return data
+
     def model_registry(self) -> dict[str, Any]:
         return self.load_yaml("models.yaml")
 
@@ -381,6 +393,12 @@ class Settings:
         existing[provider] = credentials
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(path)
+
+    def save_custom_providers(self, data: dict[str, Any]) -> None:
+        path = self.config_path("custom_providers.json")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
         tmp.replace(path)
 
     def sandbox_manager(self) -> Any:
