@@ -43,6 +43,10 @@ _CLOUD_ADAPTERS: dict[str, type] = {
 
 _credential_pools: dict[str, CredentialPool] = {}
 
+_CUSTOM_PROVIDERS: dict[str, dict[str, Any]] = {}
+_OPENAI_TYPES = {"openai"}
+_CUSTOM_PROVIDERS.update(_load_custom_providers())
+
 
 def _cloud_pool(provider: str) -> CredentialPool | None:
     """Return a cached CredentialPool for *provider*, or None if none configured."""
@@ -86,6 +90,50 @@ def reload_credential_pools() -> None:
     _credential_pools.clear()
 
 
+def _load_custom_providers() -> dict[str, dict[str, Any]]:
+    data = settings.load_custom_providers()
+    result: dict[str, dict[str, Any]] = {}
+    for name, cfg in data.items():
+        if not isinstance(cfg, dict):
+            continue
+        if not name or not isinstance(name, str):
+            continue
+        api_type = str(cfg.get("api_type", "openai")).lower()
+        api_key = str(cfg.get("api_key", "")).strip()
+        base_url = str(cfg.get("base_url", "")).strip()
+        if api_key and base_url and api_type in _OPENAI_TYPES:
+            result[name] = {"api_type": api_type, "base_url": base_url, "api_key": api_key}
+    return result
+
+
+def reload_custom_providers() -> dict[str, dict[str, Any]]:
+    from runtime.orchestration.routing_engine import register_custom_providers, unregister_custom_providers
+    old_names = set(_CUSTOM_PROVIDERS.keys())
+    new_data = _load_custom_providers()
+    _CUSTOM_PROVIDERS.clear()
+    _CUSTOM_PROVIDERS.update(new_data)
+    new_names = set(new_data.keys())
+    to_remove = old_names - new_names
+    if to_remove:
+        unregister_custom_providers(list(to_remove))
+    to_add = new_names - old_names
+    if to_add:
+        register_custom_providers(list(to_add), {n: new_data[n]["base_url"] for n in to_add})
+    return dict(_CUSTOM_PROVIDERS)
+
+
+def custom_provider_status() -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for name, cfg in _CUSTOM_PROVIDERS.items():
+        result.append({
+            "name": name,
+            "api_type": cfg["api_type"],
+            "base_url": cfg["base_url"],
+            "configured": bool(cfg.get("api_key")),
+        })
+    return result
+
+
 def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
     if provider == "ollama":
         if worker is None:
@@ -116,6 +164,9 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
         if ImageGenAdapter is None:
             raise ValueError("ImageGen adapter not available")
         return _get_image_gen_adapter()
+    if provider in _CUSTOM_PROVIDERS:
+        cfg = _CUSTOM_PROVIDERS[provider]
+        return OpenAIAdapter(api_key=cfg["api_key"], base_url=cfg["base_url"])
     raise ValueError(f"Unsupported provider: {provider}")
 
 
