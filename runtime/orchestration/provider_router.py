@@ -59,10 +59,11 @@ def _cloud_pool(provider: str) -> CredentialPool | None:
     if not cred_configs:
         return None
 
+    default_base_url = _CUSTOM_PROVIDERS.get(provider, {}).get("base_url") if provider in _CUSTOM_PROVIDERS else None
     credentials = [
         Credential(
             api_key=c["api_key"],
-            base_url=c.get("base_url"),
+            base_url=c.get("base_url") or default_base_url,
             label=c.get("label", ""),
             cooldown_s=c.get("cooldown_s"),
         )
@@ -114,9 +115,14 @@ def reload_custom_providers() -> dict[str, dict[str, Any]]:
     new_names = set(new_data.keys())
     to_remove = old_names - new_names
     if to_remove:
+        for name in to_remove:
+            _CLOUD_ADAPTERS.pop(name, None)
+            _credential_pools.pop(name, None)
         unregister_custom_providers(list(to_remove))
     to_add = new_names - old_names
     if to_add:
+        for name in to_add:
+            _CLOUD_ADAPTERS[name] = OpenAIAdapter
         register_custom_providers(list(to_add), {n: new_data[n]["base_url"] for n in to_add})
     return dict(_CUSTOM_PROVIDERS)
 
@@ -139,6 +145,8 @@ def custom_provider_status() -> list[dict[str, Any]]:
 
 _CUSTOM_PROVIDERS.update(_load_custom_providers())
 if _CUSTOM_PROVIDERS:
+    for name in _CUSTOM_PROVIDERS:
+        _CLOUD_ADAPTERS[name] = OpenAIAdapter
     try:
         from runtime.orchestration.routing_engine import register_custom_providers
         register_custom_providers(

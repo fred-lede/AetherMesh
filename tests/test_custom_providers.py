@@ -9,6 +9,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from config.settings import Settings
+
+# Remove stale routing state from previous runs before it gets loaded
+_stale_state = Settings().config_path("routing_state.yaml")
+if _stale_state.exists():
+    _stale_state.unlink()
+
 from runtime.orchestration.provider_router import (
     OpenAIAdapter, _CUSTOM_PROVIDERS, _load_custom_providers,
     adapter, reload_custom_providers,
@@ -16,7 +22,8 @@ from runtime.orchestration.provider_router import (
 from runtime.orchestration.routing_engine import (
     CAPABILITY_PROVIDER_SCORES, CLOUD_PROVIDERS,
     CLOUD_PROVIDER_ENDPOINTS, ROUTING_PROVIDERS,
-    register_custom_providers, unregister_custom_providers,
+    register_custom_providers, routing_engine,
+    unregister_custom_providers,
 )
 
 
@@ -112,26 +119,34 @@ class TestLoadCustomProviders:
 
 class TestAdapterCustomProviders:
 
+    def _patch_cp(self, data: dict):
+        """Patch _CUSTOM_PROVIDERS and clear _CLOUD_ADAPTERS to avoid real config leakage."""
+        from unittest.mock import patch
+        return patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", data, clear=True)
+
     def test_returns_openai_adapter_for_custom_provider(self):
-        with patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", {
+        with self._patch_cp({
             "agnes": {"api_type": "openai", "base_url": "https://api.agnes.ai/v1", "api_key": "sk-agnes"},
-        }, clear=True):
-            result = adapter("agnes")
-            assert isinstance(result, OpenAIAdapter)
-            assert result.base_url == "https://api.agnes.ai/v1"
-            assert result.api_key == "sk-agnes"
+        }):
+            with patch("runtime.orchestration.provider_router._cloud_pool", return_value=None):
+                result = adapter("agnes")
+                assert isinstance(result, OpenAIAdapter)
+                assert result.base_url == "https://api.agnes.ai/v1"
+                assert result.api_key == "sk-agnes"
 
     def test_raises_for_unknown_custom_provider(self):
-        with patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", {}, clear=True):
-            with pytest.raises(ValueError, match="Unsupported provider: unknown"):
-                adapter("unknown")
+        with self._patch_cp({}):
+            with patch("runtime.orchestration.provider_router._cloud_pool", return_value=None):
+                with pytest.raises(ValueError, match="Unsupported provider: unknown"):
+                    adapter("unknown")
 
     def test_raises_for_custom_provider_without_api_key(self):
-        with patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", {
+        with self._patch_cp({
             "nokey": {"api_type": "openai", "base_url": "https://example.com/v1", "api_key": ""},
-        }, clear=True):
-            with pytest.raises(Exception):
-                adapter("nokey")
+        }):
+            with patch("runtime.orchestration.provider_router._cloud_pool", return_value=None):
+                with pytest.raises(Exception):
+                    adapter("nokey")
 
     def test_still_resolves_builtin_providers(self):
         with patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", {}, clear=True):
@@ -158,24 +173,54 @@ class TestReloadCustomProviders:
                                 ["test_prov"], {"test_prov": "https://test.ai/v1"}
                             )
 
+    def test_reload_updates_cloud_adapters(self):
+        import runtime.orchestration.provider_router as pr
+        data = {"poolai": {"api_type": "openai", "base_url": "https://pool.ai/v1", "api_key": "sk-pool"}}
+        tmp = _with_temp_custom_providers(data)
+        with patch("config.settings.Settings.config_path", return_value=tmp):
+            s = Settings()
+            with patch("runtime.orchestration.provider_router.settings", s):
+                with patch("runtime.orchestration.routing_engine.register_custom_providers"):
+                    with patch("runtime.orchestration.routing_engine.unregister_custom_providers"):
+                        with patch.dict("runtime.orchestration.provider_router._CUSTOM_PROVIDERS", {}, clear=True):
+                            with patch.dict(pr._CLOUD_ADAPTERS, {}, clear=True):
+                                reload_custom_providers()
+                                assert "poolai" in pr._CLOUD_ADAPTERS
+                                assert pr._CLOUD_ADAPTERS["poolai"] is OpenAIAdapter
+
 
 # ── Routing Engine ───────────────────────────────────────────────────
 
 class TestRegisterCustomProviders:
 
     def setup_method(self):
+        import runtime.orchestration.provider_router as pr
         self._orig_cloud = list(CLOUD_PROVIDERS)
         self._orig_routing = list(ROUTING_PROVIDERS)
         self._orig_endpoints = dict(CLOUD_PROVIDER_ENDPOINTS)
         self._orig_scores = {k: dict(v) for k, v in CAPABILITY_PROVIDER_SCORES.items()}
+        self._orig_cloud_adapters = dict(pr._CLOUD_ADAPTERS)
+        self._orig_cred_pools = dict(pr._credential_pools)
+        self._orig_prov_enabled = dict(routing_engine._provider_enabled)
 
     def teardown_method(self):
+        import runtime.orchestration.provider_router as pr
         CLOUD_PROVIDERS[:] = self._orig_cloud
         ROUTING_PROVIDERS[:] = self._orig_routing
         CLOUD_PROVIDER_ENDPOINTS.clear()
         CLOUD_PROVIDER_ENDPOINTS.update(self._orig_endpoints)
         CAPABILITY_PROVIDER_SCORES.clear()
         CAPABILITY_PROVIDER_SCORES.update(self._orig_scores)
+        pr._CLOUD_ADAPTERS.clear()
+        pr._CLOUD_ADAPTERS.update(self._orig_cloud_adapters)
+        pr._credential_pools.clear()
+        pr._credential_pools.update(self._orig_cred_pools)
+        routing_engine._provider_enabled.clear()
+        routing_engine._provider_enabled.update(self._orig_prov_enabled)
+        # remove state file leaks from previous runs
+        state_path = routing_engine._state_path
+        if state_path.exists():
+            state_path.unlink(missing_ok=True)
 
     def test_registers_provider_in_all_lists(self):
         register_custom_providers(["testai"], {"testai": "https://test.ai/v1"})
@@ -185,6 +230,7 @@ class TestRegisterCustomProviders:
         for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
             assert "testai" in cap_scores
             assert cap_scores["testai"] == cap_scores.get("openai", 85)
+        assert routing_engine._provider_enabled.get("testai") is True
 
     def test_registers_idempotent(self):
         register_custom_providers(["testai"], {"testai": "https://test.ai/v1"})
@@ -200,6 +246,7 @@ class TestRegisterCustomProviders:
         assert "testai" not in CLOUD_PROVIDER_ENDPOINTS
         for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
             assert "testai" not in cap_scores
+        assert routing_engine._provider_enabled.get("testai") is False
 
     def test_unregister_does_not_remove_builtin(self):
         register_custom_providers(["openai"], {"openai": "https://custom.openai.com/v1"})
@@ -207,6 +254,9 @@ class TestRegisterCustomProviders:
         assert "openai" in CLOUD_PROVIDERS
         assert "openai" in ROUTING_PROVIDERS
         assert "openai" in CLOUD_PROVIDER_ENDPOINTS
+        assert routing_engine._provider_enabled.get("openai") is not False
+
+
 
 
 # ── Dashboard API ────────────────────────────────────────────────────

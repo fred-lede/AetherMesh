@@ -383,6 +383,11 @@ def _probe_local_ollama() -> dict[str, Any]:
 
 def _probe_provider(provider: str) -> dict[str, Any]:
     provider = provider.lower()
+    if provider == "ollama":
+        return _probe_local_ollama()
+    from runtime.orchestration.provider_router import is_custom_provider
+    if is_custom_provider(provider):
+        return _probe_custom_provider(provider)
     cloud_configs = {
         "nvidia_nim": (
             "NVIDIA_NIM_API_BASE",
@@ -393,12 +398,53 @@ def _probe_provider(provider: str) -> dict[str, Any]:
         "openai": ("OPENAI_API_BASE", "OPENAI_API_KEY", "https://api.openai.com/v1"),
         "gemini": ("GEMINI_API_BASE", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta"),
     }
-    if provider == "ollama":
-        return _probe_local_ollama()
     if provider not in cloud_configs:
         raise HTTPException(status_code=404, detail=f"Unknown provider: {provider}")
     base_url_env, api_key_env, default_base = cloud_configs[provider]
     return _check_cloud_provider(provider, base_url_env, api_key_env, default_base)
+
+
+def _probe_custom_provider(name: str) -> dict[str, Any]:
+    data = settings.load_custom_providers()
+    cfg = data.get(name)
+    if not isinstance(cfg, dict):
+        return {"name": name, "ok": False, "status": "not_found", "message": f"Provider '{name}' not found"}
+    base_url = str(cfg.get("base_url", "")).rstrip("/")
+    api_key = str(cfg.get("api_key", "")).strip()
+    if not api_key:
+        return {"name": name, "ok": False, "status": "not_configured", "message": "No API key"}
+    headers = {"Authorization": f"Bearer {api_key}"}
+    endpoints_to_try = ["/models", "/api/tags"]
+    for endpoint in endpoints_to_try:
+        try:
+            response = get_session().get(f"{base_url}{endpoint}", headers=headers, timeout=2)
+            if response.ok:
+                data_json = response.json()
+                model_count = 0
+                if isinstance(data_json, dict):
+                    if "data" in data_json:
+                        model_count = len(data_json["data"])
+                    elif "models" in data_json:
+                        model_count = len(data_json["models"])
+                elif isinstance(data_json, list):
+                    model_count = len(data_json)
+                return {
+                    "name": name,
+                    "ok": True,
+                    "status": "healthy",
+                    "base_url": base_url,
+                    "model_count": model_count,
+                    "latency_ms": int(response.elapsed.total_seconds() * 1000),
+                }
+        except requests.RequestException:
+            continue
+    return {
+        "name": name,
+        "ok": False,
+        "status": "unreachable",
+        "base_url": base_url,
+        "message": f"Failed to connect to {base_url}",
+    }
 
 
 def _fetch_json(path: str) -> Any:
@@ -786,6 +832,8 @@ async def change_password_form(request: Request):
 def index(request: Request):
     user_role = _session_user_role(request) or "user"
     user_name = _session_user_name(request)
+    from runtime.orchestration.provider_router import _CUSTOM_PROVIDERS
+    custom_providers = sorted(_CUSTOM_PROVIDERS.keys())
     return templates.TemplateResponse(
         "index.html",
         {
@@ -795,6 +843,7 @@ def index(request: Request):
             "auth_enabled": settings.dashboard_auth_enabled,
             "user_role": user_role,
             "user_name": user_name,
+            "custom_providers": custom_providers,
         },
     )
 
@@ -866,6 +915,13 @@ def _build_overview() -> dict[str, Any]:
         )
     cloud_providers = _check_cloud_providers()
     custom_providers = custom_provider_status()
+    for cp in custom_providers:
+        cloud_providers.append({
+            "name": cp["name"],
+            "ok": cp["configured"],
+            "status": "configured" if cp["configured"] else "not_configured",
+            "is_custom": True,
+        })
 
     gpus_enriched = [
         {**g, "tier": _get_gpu_tier(g.get("name", ""))} 
@@ -1061,46 +1117,10 @@ def custom_providers_delete(name: str) -> dict[str, Any]:
 
 @api.post("/custom-providers/{name}/probe")
 def custom_providers_probe(name: str) -> dict[str, Any]:
-    data = settings.load_custom_providers()
-    cfg = data.get(name)
-    if not isinstance(cfg, dict):
-        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
-    base_url = str(cfg.get("base_url", "")).rstrip("/")
-    api_key = str(cfg.get("api_key", "")).strip()
-    if not api_key:
-        return {"name": name, "ok": False, "status": "not_configured", "message": "No API key"}
-    headers = {"Authorization": f"Bearer {api_key}"}
-    endpoints_to_try = ["/models", "/api/tags"]
-    for endpoint in endpoints_to_try:
-        try:
-            response = get_session().get(f"{base_url}{endpoint}", headers=headers, timeout=2)
-            if response.ok:
-                data_json = response.json()
-                model_count = 0
-                if isinstance(data_json, dict):
-                    if "data" in data_json:
-                        model_count = len(data_json["data"])
-                    elif "models" in data_json:
-                        model_count = len(data_json["models"])
-                elif isinstance(data_json, list):
-                    model_count = len(data_json)
-                return {
-                    "name": name,
-                    "ok": True,
-                    "status": "healthy",
-                    "base_url": base_url,
-                    "model_count": model_count,
-                    "latency_ms": int(response.elapsed.total_seconds() * 1000),
-                }
-        except requests.RequestException:
-            continue
-    return {
-        "name": name,
-        "ok": False,
-        "status": "unreachable",
-        "base_url": base_url,
-        "message": f"Failed to connect to {base_url}",
-    }
+    result = _probe_custom_provider(name)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
 
 
 @api.post("/custom-providers/reload")

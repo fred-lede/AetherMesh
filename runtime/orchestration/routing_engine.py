@@ -54,6 +54,9 @@ def register_custom_providers(names: list[str], name_base_urls: dict[str, str]) 
         for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
             if name not in cap_scores:
                 cap_scores[name] = cap_scores.get("openai", 85)
+    for name in names:
+        if name not in routing_engine._provider_enabled:
+            routing_engine.set_provider_enabled(name, True)
 
 
 def unregister_custom_providers(names: list[str]) -> None:
@@ -65,6 +68,7 @@ def unregister_custom_providers(names: list[str]) -> None:
         CLOUD_PROVIDER_ENDPOINTS.pop(name, None)
         for cap_scores in CAPABILITY_PROVIDER_SCORES.values():
             cap_scores.pop(name, None)
+        routing_engine.set_provider_enabled(name, False)
 
 
 @dataclass
@@ -132,7 +136,7 @@ class ModelRoutingEngine:
         provider_enabled = state.get("provider_enabled", {})
         if isinstance(provider_enabled, dict):
             for provider, enabled in provider_enabled.items():
-                if provider in self._provider_enabled:
+                if provider and isinstance(provider, str):
                     self._provider_enabled[str(provider)] = bool(enabled)
 
         model_overrides = state.get("model_overrides", {})

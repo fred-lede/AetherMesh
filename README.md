@@ -946,7 +946,7 @@ Dashboard at `http://localhost:9001`:
 - Provider health, request metrics, local-only mode, model overrides, routing audit log
 - **Model Alias Map**: gateway model → AIIH alias → target model → provider → worker
 - **Cloud Providers**: connection status, model count, latency for built-in (NVIDIA NIM, Ollama Cloud, OpenAI, Gemini) and custom OpenAI-compatible providers
-- **Custom Providers**: add/edit/delete OpenAI-compatible cloud providers (name + base URL + API key) via Dashboard UI; stored in `config/custom_providers.json` (gitignored); auto-probe on save; model names prefixed with `{provider_name}-` (e.g., `agnes-2.0-flash`) route automatically
+- **Custom Providers**: add/edit/delete OpenAI-compatible cloud providers (name + base URL + API key) via Dashboard UI; stored in `config/custom_providers.json` (gitignored); auto-probe on save; multi-key credential pool support via `credentials.json`; model names prefixed with `{provider_name}-` (e.g., `agnes-2.0-flash`) route automatically; Cloud Credentials section auto-shows cards for all custom providers for per-provider API key management
 - **Cloud Credentials**: add/remove API keys per provider, view cooldown status (admin only)
 - **Charts**: latency trends, request rates, GPU utilization, model usage, worker load, tokens/sec, TTFT, GPU memory
 - **Audio**: TTS/ASR settings overview, voice management (register, edit, delete, preview) (admin only)

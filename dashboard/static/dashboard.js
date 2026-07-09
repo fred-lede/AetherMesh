@@ -1277,7 +1277,44 @@
       const section = document.getElementById('credential-section');
       if (!section) return;
 
-      for (const name of ['nvidia_nim', 'openai', 'gemini', 'ollama_cloud']) {
+      const grid = document.getElementById('credential-grid');
+      if (!grid) return;
+
+      // inject missing credential cards for custom providers
+      for (const cp of cloudList) {
+        if (document.getElementById(`cred-card-${cp.name}`)) continue;
+        if (!cp.is_custom) continue;
+        const card = document.createElement('div');
+        card.className = 'provider-card';
+        card.id = `cred-card-${cp.name}`;
+        card.innerHTML = `
+          <div class="provider-top">
+            <div>
+              <div class="provider-name">${cp.name}</div>
+              <div class="provider-sub" id="cred-sub-${cp.name}">${cp.ok ? 'Connected' : (cp.status || 'Not configured')}</div>
+            </div>
+          </div>
+          <div id="cred-keys-${cp.name}" style="font-size:0.85rem;color:var(--muted);padding:6px 0;">Loading credentials...</div>
+          <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);">
+            <input id="cred-key-${cp.name}" class="control-input" type="password" placeholder="API key" style="flex:1;min-width:0;font-size:0.8rem;">
+            <input id="cred-label-${cp.name}" class="control-input" type="text" placeholder="Label" style="width:100px;font-size:0.8rem;">
+            <button class="btn btn-primary" style="white-space:nowrap;" onclick="addCredential(event,'${cp.name}')">Add</button>
+          </div>`;
+        grid.appendChild(card);
+      }
+
+      // remove stale credential cards for deleted custom providers
+      const customNames = new Set(cloudList.filter(c => c.is_custom).map(c => c.name));
+      for (const card of grid.querySelectorAll('.provider-card')) {
+        const name = card.id.replace('cred-card-', '');
+        if (customNames.has(name)) continue;
+        if (['nvidia_nim', 'openai', 'gemini', 'ollama_cloud'].includes(name)) continue;
+        card.remove();
+      }
+
+      const cards = grid.querySelectorAll('.provider-card');
+      for (const card of cards) {
+        const name = card.id.replace('cred-card-', '');
         const cloud = cloudList.find(c => c.name === name);
         const sub = document.getElementById(`cred-sub-${name}`);
         if (sub) sub.textContent = (cloud && cloud.ok) ? 'Connected' : (cloud ? cloud.status : 'Not configured');
@@ -1287,8 +1324,9 @@
     }
 
     async function loadCredentialKeys() {
-      const providers = ['nvidia_nim', 'openai', 'gemini', 'ollama_cloud'];
-      for (const name of providers) {
+      const cards = document.querySelectorAll('#credential-grid .provider-card');
+      for (const card of cards) {
+        const name = card.id.replace('cred-card-', '');
         let creds, statuses;
         try {
           const resp = await fetch(`/api/credentials/${name}`);

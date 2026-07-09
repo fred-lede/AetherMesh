@@ -662,7 +662,7 @@
       <div id="credential-section" style="margin-top: 14px;">
         <div class="subsection-title">Cloud Credentials</div>
         <div style="color: var(--muted); font-size: 0.85rem; margin-bottom: 8px;">Manage API keys for cloud providers. Keys are stored in config/credentials.json.</div>
-        <div id="credential-grid" class="provider-grid">{% for prov in ["nvidia_nim", "openai", "gemini", "ollama_cloud"] %}
+        <div id="credential-grid" class="provider-grid">{% for prov in ["nvidia_nim", "openai", "gemini", "ollama_cloud"] + custom_providers %}
           <div class="provider-card" id="cred-card-{{ prov }}">
             <div class="provider-top">
               <div>
