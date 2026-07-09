@@ -45,7 +45,6 @@ _credential_pools: dict[str, CredentialPool] = {}
 
 _CUSTOM_PROVIDERS: dict[str, dict[str, Any]] = {}
 _OPENAI_TYPES = {"openai"}
-_CUSTOM_PROVIDERS.update(_load_custom_providers())
 
 
 def _cloud_pool(provider: str) -> CredentialPool | None:
@@ -122,6 +121,10 @@ def reload_custom_providers() -> dict[str, dict[str, Any]]:
     return dict(_CUSTOM_PROVIDERS)
 
 
+def is_custom_provider(name: str) -> bool:
+    return name in _CUSTOM_PROVIDERS
+
+
 def custom_provider_status() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for name, cfg in _CUSTOM_PROVIDERS.items():
@@ -132,6 +135,18 @@ def custom_provider_status() -> list[dict[str, Any]]:
             "configured": bool(cfg.get("api_key")),
         })
     return result
+
+
+_CUSTOM_PROVIDERS.update(_load_custom_providers())
+if _CUSTOM_PROVIDERS:
+    try:
+        from runtime.orchestration.routing_engine import register_custom_providers
+        register_custom_providers(
+            list(_CUSTOM_PROVIDERS.keys()),
+            {n: v["base_url"] for n, v in _CUSTOM_PROVIDERS.items()},
+        )
+    except ImportError:
+        pass
 
 
 def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
@@ -293,6 +308,9 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
         return "openai", None
     if any(clean_model.startswith(p) for p in NVIDIA_PREFIXES) or clean_model.startswith("nemotron"):
         return "nvidia_nim", None
+    for cp_name in _CUSTOM_PROVIDERS:
+        if model == cp_name or model.startswith(cp_name + "-") or model.startswith(cp_name + "/"):
+            return cp_name, None
     return "ollama", None
 
 
@@ -325,6 +343,9 @@ def provider_for_model(model: str, registry: dict[str, Any]) -> str:
         return "openai"
     if any(model.startswith(p) for p in NVIDIA_PREFIXES) or model.startswith("nemotron"):
         return "nvidia_nim"
+    for cp_name in _CUSTOM_PROVIDERS:
+        if model == cp_name or model.startswith(cp_name + "-") or model.startswith(cp_name + "/"):
+            return cp_name
     return "ollama"
 
 

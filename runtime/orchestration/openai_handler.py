@@ -23,6 +23,7 @@ from runtime.orchestration.provider_router import (
     adapter,
     capabilities_for_model,
     find_registry_model,
+    is_custom_provider,
     local_ollama_fallback,
     provider_for_model,
 )
@@ -1348,7 +1349,7 @@ class RouterService:
 
             for current_model in try_models:
                 provider = (payload.get("provider") or provider_for_model(current_model, self.registry)).lower()
-                if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
+                if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud") or is_custom_provider(provider):
                     if current_model == original_model:
                         return provider, None
                     continue

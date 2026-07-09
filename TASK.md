@@ -344,3 +344,17 @@
 | 2026-07-07 | Phase 26 | `/v1/images/edits` multipart/form-data support: Cherry Studio sends edits as form data with image file, not JSON. Handler now accepts `UploadFile` + `Form(...)`. All 8 tests passing. |
 | 2026-07-07 | Phase 26 | ChatBox image gen mode fix: use built-in OpenAI provider (not custom provider) pointed to AetherMesh. No model alias needed. |
 | 2026-07-07 | Phase 26 | macOS cluster node: `scripts/start-mac-node.sh`, launchd plist with `AIIH_CONTROL_IP`, node_agent + worker_agent register with Windows control plane. |
+
+## Phase 27 — Custom OpenAI-Compatible Providers ✅ (2026-07-09)
+- [x] `config/custom_providers.json` — gitignored JSON store for name→(api_type, base_url, api_key) configs
+- [x] `config/settings.py` — `load_custom_providers()` + `save_custom_providers()` helpers
+- [x] `runtime/orchestration/provider_router.py` — `_CUSTOM_PROVIDERS` cache, `_load_custom_providers()` filter, `reload_custom_providers()`, `custom_provider_status()`, adapter() fallback
+- [x] `runtime/orchestration/routing_engine.py` — `register_custom_providers()` / `unregister_custom_providers()` with built-in provider protection, `_check_provider_credentials()` reads custom configs, `_cloud_adapter_worker()` handles custom providers
+- [x] `dashboard/dashboard_server.py` — CRUD at `/api/custom-providers`, probe at `/{name}/probe`, reload at `/reload`, overview SSE includes custom_providers
+- [x] `dashboard/templates/index.html` — Custom Providers section in Providers tab
+- [x] `dashboard/static/dashboard.js` — `renderCustomProviders()`, `addCustomProvider()`, `probeCustomProvider()`, `deleteCustomProvider()`, `editCustomProvider()`
+- [x] `tests/test_custom_providers.py` — 28 tests: Settings load/save, _load_custom_providers filtering, adapter resolution, reload, register/unregister, Dashboard API CRUD
+- [x] **Post-deployment fix (2026-07-09)**: 3 routing fixes for custom provider model resolution
+  - Startup registration: `_CUSTOM_PROVIDERS` syncs to routing engine at module load (provider_router.py:136)
+  - Prefix fallback: `provider_for_model()`/`resolve_provider()` match `agnes-2.0-flash` → `agnes` by prefix (no models.yaml entry required)
+  - Dispatch bypass: `_resolve_provider_and_worker()` treats custom providers like cloud providers — returns immediately without worker dispatch |

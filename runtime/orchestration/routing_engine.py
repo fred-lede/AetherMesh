@@ -37,6 +37,11 @@ CLOUD_PROVIDER_ENDPOINTS = {
 }
 
 
+_CUSTOM_PROVIDER_NAMES: set[str] = set()
+_BUILTIN_CLOUD_PROVIDERS: frozenset = frozenset(CLOUD_PROVIDERS)
+_BUILTIN_ROUTING_PROVIDERS: frozenset = frozenset(ROUTING_PROVIDERS)
+
+
 def register_custom_providers(names: list[str], name_base_urls: dict[str, str]) -> None:
     for name in names:
         if name not in CLOUD_PROVIDERS:
@@ -53,6 +58,8 @@ def register_custom_providers(names: list[str], name_base_urls: dict[str, str]) 
 
 def unregister_custom_providers(names: list[str]) -> None:
     for name in names:
+        if name in _BUILTIN_CLOUD_PROVIDERS or name in _BUILTIN_ROUTING_PROVIDERS:
+            continue
         CLOUD_PROVIDERS[:] = [p for p in CLOUD_PROVIDERS if p != name]
         ROUTING_PROVIDERS[:] = [p for p in ROUTING_PROVIDERS if p != name]
         CLOUD_PROVIDER_ENDPOINTS.pop(name, None)
