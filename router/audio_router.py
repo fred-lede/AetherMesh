@@ -33,7 +33,7 @@ AUDIO_CONTENT_TYPES = {
 def _resolve_adapter():
     if not settings.tts_enabled:
         raise HTTPException(status_code=503, detail="TTS is not enabled")
-    adapter = get_adapter("xtts")
+    adapter = get_adapter(settings.tts_provider)
     if adapter is None:
         raise HTTPException(status_code=503, detail="TTS adapter unavailable (model load failed or cooling down)")
     return adapter

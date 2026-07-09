@@ -131,6 +131,7 @@ class Settings:
     file_cleanup_ttl_seconds: int = field(default_factory=lambda: _env_int("AIIH_FILE_CLEANUP_TTL", 600))
     ocr_concurrency: int = field(default_factory=lambda: _env_int("AIIH_OCR_CONCURRENCY", 2))
     tts_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_TTS_ENABLED", "false"))
+    tts_provider: str = field(default_factory=lambda: os.getenv("AIIH_TTS_PROVIDER", "xtts").strip().lower())
     tts_model_name: str = field(
         default_factory=lambda: os.getenv("AIIH_TTS_MODEL",
                                           "tts_models/multilingual/multi-dataset/xtts_v2")
@@ -278,7 +279,7 @@ class Settings:
 
     def strip_model_route_prefix(self, model: str) -> str:
         clean_model = str(model or "")
-        for prefix in ("anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/", "xtts/"):
+        for prefix in ("anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/", "xtts/", "cosyvoice/"):
             if clean_model.startswith(prefix):
                 return clean_model[len(prefix):]
         return clean_model
