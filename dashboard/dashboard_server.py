@@ -1561,7 +1561,7 @@ def admin_token_usage(
         db.close()
 
 
-api.get("/admin/token-usage/summary")
+@api.get("/admin/token-usage/summary")
 def admin_token_usage_summary(
     request: Request,
     from_: float | None = Query(None, alias="from"),
