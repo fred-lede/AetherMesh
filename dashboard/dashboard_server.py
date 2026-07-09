@@ -281,11 +281,17 @@ def _check_cloud_provider(name: str, base_url_env: str, api_key_env: str, defaul
         return {"name": name, "ok": False, "status": "not_configured", "message": f"{api_key_env} is not set"}
 
     headers = {"Authorization": f"Bearer {api_key}"}
+    params = {}
+    is_gemini = name == "gemini"
+    if is_gemini:
+        headers.pop("Authorization", None)
+        params["key"] = api_key
+
     endpoints_to_try = ["/models", "/api/tags"]
-    
+
     for endpoint in endpoints_to_try:
         try:
-            response = requests.get(f"{base_url}{endpoint}", headers=headers, timeout=2)
+            response = requests.get(f"{base_url}{endpoint}", headers=headers, params=params, timeout=2)
             if response.ok:
                 data = response.json()
                 model_count = 0
