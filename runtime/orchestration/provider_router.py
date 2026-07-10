@@ -179,8 +179,6 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
         if XTTSAdapter is None:
             raise ValueError("XTTS adapter not available (TTS not installed)")
         return _get_tts_adapter()
-    if provider == "cosyvoice":
-        return _get_tts_adapter()
     if provider == "asr":
         if FasterWhisperAdapter is None:
             raise ValueError("ASR adapter not available (faster-whisper not installed)")
@@ -211,23 +209,14 @@ def _get_tts_adapter() -> Any:
                        _ADAPTER_RETRY_COOLDOWN - (time.monotonic() - _tts_adapter_failed_at))
         return None
     try:
-        if settings.tts_provider == "cosyvoice":
-            from providers.cosyvoice_adapter import CosyVoiceAdapter
-            _tts_adapter = CosyVoiceAdapter(
-                model_name=settings.tts_model_name,
-                device=settings.tts_device,
-                voices_dir=settings.tts_voices_dir,
-                models_dir=settings.tts_models_dir,
-            )
-        else:
-            _tts_adapter = XTTSAdapter(
-                model_name=settings.tts_model_name,
-                device=settings.tts_device,
-                voices_dir=settings.tts_voices_dir,
-                models_dir=settings.tts_models_dir,
-                dtype=settings.tts_dtype,
-                max_ref_seconds=settings.tts_max_ref_seconds,
-            )
+        _tts_adapter = XTTSAdapter(
+            model_name=settings.tts_model_name,
+            device=settings.tts_device,
+            voices_dir=settings.tts_voices_dir,
+            models_dir=settings.tts_models_dir,
+            dtype=settings.tts_dtype,
+            max_ref_seconds=settings.tts_max_ref_seconds,
+        )
         _tts_adapter_failed_at = 0.0
         return _tts_adapter
     except Exception:
