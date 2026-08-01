@@ -16,3 +16,12 @@
 - `openai_handler.handle_responses()` non-streaming openai branch pops `tool_choice` on `original_payload` when tools empty/missing
 - `nvidia_nim_adapter._chat_payload()` pops `tool_choice` when `tools` empty/missing (covers NIM chat path)
 - Tests: +2 in `tests/test_responses_e2e.py` (streaming/non-streaming openai passthrough drop `tool_choice` without tools) — 10 passed; orchestration + NIM adapter suites 24 passed
+
+## 2026-08-01 — Phase 32e: function-only tool filter covers custom providers
+
+### Fixes
+- `stream.failed` trace showed provider `agnes` (custom) still forwarding `web_search` → `tools[144].function: missing field parameters` (400 json_parse_error)
+- Root cause: custom providers use `OpenAIAdapter` (`provider_router.py` registers `_CLOUD_ADAPTERS[name] = OpenAIAdapter`), but `_filter_openai_tools` guard only matched `provider == "openai"`
+- `_normalize_payload_for_provider()` guard extended to `provider == "openai" or is_custom_provider(provider)`
+- `handle_responses()` non-streaming tool-loop path: `tools` now filtered before `responses_tool_loop` (loop overwrites `chat_payload["tools"]` with the raw client list, re-introducing `web_search`)
+- Tests: +2 in `tests/test_responses_e2e.py` (streaming/non-streaming custom provider drops `web_search`, keeps function) — 39 passed across e2e + orchestration + NIM suites
