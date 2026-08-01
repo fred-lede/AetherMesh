@@ -457,3 +457,10 @@
   - `handle_responses()` non-streaming 工具迴圈路徑：`tools` 傳入 `responses_tool_loop` 前也過濾（`tool_loop.py:186` 會用 raw `tools` 覆寫 `chat_payload["tools"]`，否則 web_search 仍會送出）
 - [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming custom provider（agnes）丟棄 web_search、保留 function 工具
 - [x] 驗證：三套件 39 passed
+
+## Phase 32f — SSE 串流 StopIteration RuntimeError（Python 3.14）✅ (2026-08-01)
+- [x] 現象：重啟載入 32e 後，web_search 過濾已生效（trace 顯示 route_selected 139 tools、無 web_search），但 streaming 結束時 server 崩潰：`RuntimeError: StopIteration interacts badly with generators and cannot be raised into a Future`（`router/streaming_router.py:51`）
+- [x] 根因：`async_stream_response()` 用 `loop.run_in_executor(None, next, iter_obj)` 推進 generator。generator 耗盡時 `next` 在 worker thread 內拋 `StopIteration`；Python 3.14 不允許 StopIteration 傳入 Future → `except StopIteration` 永遠接不到，轉成 RuntimeError
+- [x] 修正（`router/streaming_router.py`）：改用 `partial(next, iter_obj, _SENTINEL)` + sentinel 比對結束，完全不拋 StopIteration
+- [x] `tests/test_streaming_router.py` — 新增（format_sse_event、stream_response、async_stream_response 耗盡/空迭代）
+- [x] 驗證：streaming_router + responses_e2e 20 passed

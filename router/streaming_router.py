@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from functools import partial
 from typing import Any, Iterable
 
 from fastapi import Request
@@ -14,6 +15,9 @@ def format_sse_event(item: dict[str, Any] | str) -> str:
     else:
         payload = json.dumps(item, ensure_ascii=False)
     return f"data: {payload}\n\n"
+
+
+_SENTINEL = object()
 
 
 def stream_response(iterator: Iterable[dict[str, Any] | str]) -> StreamingResponse:
@@ -47,11 +51,9 @@ async def async_stream_response(
                     adapter.abort_stream()
                 return
 
-            try:
-                item = await loop.run_in_executor(None, next, iter_obj)
-            except StopIteration:
+            item = await loop.run_in_executor(None, partial(next, iter_obj, _SENTINEL))
+            if item is _SENTINEL:
                 return
-            else:
-                yield format_sse_event(item)
+            yield format_sse_event(item)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
