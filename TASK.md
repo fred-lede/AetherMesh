@@ -448,3 +448,12 @@
   - NIM 不受影響（filter 只在 provider == "openai"；Phase 30 已支援 NIM web_search）
 - [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai 丟棄 web_search、保留 function 工具
 - [x] 驗證：`test_responses_e2e.py` + `test_orchestration.py` + `test_nvidia_nim_adapter.py` 37 passed
+
+## Phase 32e — custom provider（agnes）也套用 function-only 過濾 ✅ (2026-08-01)
+- [x] 現象：Phase 32d 之後 trace 仍報 `tools[144].function: missing field parameters`（400 json_parse_error）
+- [x] 根因：`stream.failed` trace 顯示 `"provider": "agnes"`（非 "openai"）。自訂 provider 一律用 `OpenAIAdapter`（`provider_router.py:149` `_CLOUD_ADAPTERS[name] = OpenAIAdapter`），但 `_filter_openai_tools` 只在 `provider == "openai"` 套用 → agnes 繞過過濾
+- [x] 修正（`openai_handler.py`）：
+  - `_normalize_payload_for_provider()`：條件改為 `provider == "openai" or is_custom_provider(provider)`（覆蓋 streaming responses）
+  - `handle_responses()` non-streaming 工具迴圈路徑：`tools` 傳入 `responses_tool_loop` 前也過濾（`tool_loop.py:186` 會用 raw `tools` 覆寫 `chat_payload["tools"]`，否則 web_search 仍會送出）
+- [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming custom provider（agnes）丟棄 web_search、保留 function 工具
+- [x] 驗證：三套件 39 passed

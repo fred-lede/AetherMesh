@@ -496,6 +496,72 @@ class TestResponsesOpenAIProviderToolNormalization:
         assert tools[0]["type"] == "function"
         assert "web_search" not in {t.get("type") for t in sent["tools"]}
 
+    def test_streaming_custom_provider_drops_unsupported_tool_types(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.stream.return_value = []
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("agnes", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_finalize_request"), \
+             patch("runtime.orchestration.openai_handler.is_custom_provider", return_value=True):
+            list(svc.handle_streaming_responses({
+                "model": "agnes-2.0-flash",
+                "input": "hi",
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "web_search", "name": ""},
+                ],
+            }))
+
+        sent = mock_adapter.stream.call_args[0][0]
+        tools = sent["tools"]
+        assert len(tools) == 1
+        assert tools[0]["type"] == "function"
+        assert "web_search" not in {t.get("type") for t in sent["tools"]}
+
+    def test_non_streaming_custom_provider_drops_unsupported_tool_types(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_response = MagicMock()
+        mock_response.usage = {}
+        mock_response.to_dict.return_value = {"id": "resp_1", "output": [], "usage": {}}
+
+        mock_loop = MagicMock()
+        mock_loop.run_with_client_tools.return_value = (mock_response, None)
+        mock_loop._max_turns = 4
+        mock_loop._parallel_tool_calls = True
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("agnes", None)), \
+             patch.object(svc, "_adapter"), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_resolve_max_turns", return_value=4), \
+             patch("runtime.orchestration.openai_handler.is_custom_provider", return_value=True), \
+             patch("runtime.responses.tool_loop.responses_tool_loop", mock_loop):
+            svc.handle_responses({
+                "model": "agnes-2.0-flash",
+                "input": "hi",
+                "store": True,
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "web_search", "name": ""},
+                ],
+            })
+
+        _, kwargs = mock_loop.run_with_client_tools.call_args
+        chat_payload = kwargs["chat_payload"]
+        loop_tools = kwargs["tools"]
+        assert "web_search" not in {t.get("type") for t in chat_payload["tools"]}
+        assert "web_search" not in {t.get("type") for t in loop_tools}
+        assert len(loop_tools) == 1
+        assert loop_tools[0]["type"] == "function"
+
     def test_non_streaming_openai_drops_tool_choice_without_tools(self) -> None:
         from runtime.orchestration.openai_handler import RouterService
         svc = RouterService()

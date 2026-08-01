@@ -682,6 +682,8 @@ class RouterService:
                 return result
             else:
                 tools = self._ensure_openai_tools(payload.get("tools") or [])
+                if provider == "openai" or is_custom_provider(provider):
+                    tools = self._filter_openai_tools(tools)
                 max_turns = int(payload.get("max_turns", self._resolve_max_turns()))
                 parallel_tool_calls = payload.get("parallel_tool_calls", True)
 
@@ -1525,7 +1527,7 @@ class RouterService:
         normalized = dict(payload)
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
-        if provider == "openai":
+        if provider == "openai" or is_custom_provider(provider):
             normalized["tools"] = self._filter_openai_tools(normalized.get("tools"))
         if "tool_choice" in normalized and not normalized.get("tools"):
             normalized.pop("tool_choice")
