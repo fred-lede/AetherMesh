@@ -20,6 +20,7 @@ from runtime.orchestration.routing_engine import routing_engine
 from runtime.security.tool_policy import server_tool_name
 from runtime.tools.content_blocks import anthropic_block_to_openai_parts, anthropic_content_to_openai_parts
 from runtime.tools.tool_normalizer import NormalizedToolCall, ToolCallNormalizer
+from runtime.tools.tool_registry import ensure_parameters_schema
 
 logger = logging.getLogger("anthropic_converter")
 
@@ -161,7 +162,7 @@ class AnthropicRouter:
                         "function": {
                             "name": f"{ttype}_{name}",
                             "description": f"External {ttype} tool: {tool.get('description', '')}",
-                            "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+                            "parameters": ensure_parameters_schema(tool.get("input_schema")),
                         },
                     }
                 )
@@ -173,7 +174,7 @@ class AnthropicRouter:
             fn_def: dict[str, Any] = {
                 "name": name,
                 "description": description,
-                "parameters": input_schema,
+                "parameters": ensure_parameters_schema(input_schema),
             }
 
             strict = tool.get("strict")

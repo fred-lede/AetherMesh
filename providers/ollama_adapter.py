@@ -594,9 +594,24 @@ class OllamaAdapter(ProviderAdapter):
             if not isinstance(tool, dict):
                 continue
             if tool.get("type") == "namespace" and isinstance(tool.get("tools"), list):
+                namespace_name = str(tool.get("name", ""))
                 for sub_tool in tool["tools"]:
-                    if isinstance(sub_tool, dict) and sub_tool.get("type") == "function" and isinstance(sub_tool.get("function"), dict):
-                        normalized_tools.append(self._normalize_function_tool(sub_tool))
+                    if not isinstance(sub_tool, dict) or sub_tool.get("type") != "function":
+                        continue
+                    if isinstance(sub_tool.get("function"), dict):
+                        normalized_sub_tool = self._normalize_function_tool(sub_tool)
+                    else:
+                        normalized_sub_tool = {
+                            "type": "function",
+                            "function": {
+                                "name": str(sub_tool.get("name", "")),
+                                "description": str(sub_tool.get("description", "")),
+                                "parameters": sub_tool.get("inputSchema", {"type": "object", "properties": {}}),
+                            },
+                        }
+                    if namespace_name and normalized_sub_tool.get("function", {}).get("name"):
+                        normalized_sub_tool["function"]["name"] = f"{namespace_name}.{normalized_sub_tool['function']['name']}"
+                    normalized_tools.append(normalized_sub_tool)
                 continue
             if tool.get("type") in ("plugin", "integration") and isinstance(tool.get("tools"), list):
                 for sub_tool in tool["tools"]:

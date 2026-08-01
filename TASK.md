@@ -358,3 +358,52 @@
   - Startup registration: `_CUSTOM_PROVIDERS` syncs to routing engine at module load (provider_router.py:136)
   - Prefix fallback: `provider_for_model()`/`resolve_provider()` match `agnes-2.0-flash` → `agnes` by prefix (no models.yaml entry required)
   - Dispatch bypass: `_resolve_provider_and_worker()` treats custom providers like cloud providers — returns immediately without worker dispatch |
+
+## Phase 28 — OpenAI Function Tool Schema 標準化 ✅ (2026-08-01)
+- [x] 新增 `ensure_parameters_schema()` helper (`runtime/tools/tool_registry.py`)：缺參數/空/非法 schema 一律回傳 `{"type":"object","properties":{},"additionalProperties":false}`
+- [x] `ToolRegistry.get_openai_tools()` 對空 `input_schema` 的工具回傳有效 JSON Schema
+- [x] `openai_handler._ensure_openai_tools()` 修復兩處缺 `parameters` 的 bug：
+  - flat 格式 `{"type":"function","name":...}`（無 function 鍵）現在補上 `parameters`
+  - nested 格式 `{"type":"function","function":{...}}` 缺 `parameters` 時補上（原直接 pass-through）
+  - plugin/integration 分支改用 helper（原預設無 `additionalProperties`）
+- [x] `anthropic_converter._anthropic_tools_to_openai()` 修復 `input_schema={}` → `parameters:{}` 的無效 schema（改為 helper 預設）
+- [x] `tool_loop._register_temp_tools()` 改用 helper（原本就有預設，統一風格）
+- [x] `tests/test_tool_schema.py` — 14 tests（helper 3 + registry 2 + _ensure_openai_tools 6 + anthropic 3）
+- [x] 驗證：相關套件 120 passed, 6 skipped（Linux-only sandbox）；`test_image_gen::test_edits_requires_prompt` 為既有 422vs400 環境失敗，與本次無關
+
+## Phase 29 — Codex Namespace 工具協議支援 ✅ (2026-08-01)
+- [x] 盤點 Codex app-server 官方 README + `responses_api.rs` + `dynamic_tools_tests.rs`：namespace 是新的 Codex 工具協議一部分
+  - namespace 結構 `{"type":"namespace","name","description","tools":[{"type":"function",...}]}`
+  - namespace 內 function 用 flat 格式（`name`+`inputSchema`，非 OpenAI nested `function` dict）
+  - namespace name 須 `^[a-zA-Z0-9_-]+$` 1–64 字元；保留字：functions、multi_tool_use、file_search、web、browser、image_gen、computer、container、terminal、python、python_user_visible、api_tool、tool_search、submodel_delegator
+  - `deferLoading` flag（預設 false，僅 namespace 內可用）；呼叫用分開的 `namespace`+`name` 欄位
+- [x] `openai_handler._ensure_openai_tools()` 新增 namespace 分支：unwrapped 子 function，逐一套 `ensure_parameters_schema`，限定名 `{namespace}.{name}`；同時支援 flat（`inputSchema`）與 nested（`function` dict）格式；`strict` 透傳
+- [x] `ollama_adapter._tools_for_ollama()` namespace 分支修復：原本只認 nested `function` dict，Codex flat 格式會**靜默丟棄**；現在支援 flat + nested，並限定名 `{namespace}.{name}`
+- [x] `input_converter._parse_input_item()` function_call 帶 `namespace` 欄位時限定為 `{namespace}.{name}`（避免重複限定）
+- [x] 新增測試：`test_tool_schema.py` +5（namespace flat/nested/缺 schema/無 name）、`test_ollama_adapter.py` +2（flat + nested 限定名）、`test_responses_tool_loop.py` +2（namespace 限定 + 不重複限定）
+- [x] 驗證：相關套件 68 passed；全量 466 passed, 6 skipped（5 個環境既有失敗：test_file_parser 缺 pypdf/python-docx/pptx、test_token_counting 指標——stash 確認與本次無關）
+
+## Phase 30 — NVIDIA NIM web_search 工具型別修正 ✅ (2026-08-01)
+- [x] Bug：Codex 送 `{"type":"web_search"}` 工具 → 路由到 NVIDIA NIM → NIM 報 `unknown variant web_search, expected function` 拒絕請求
+- [x] Root cause：server tool policy 只在 Anthropic path（`messages_adapter.py`）執行；OpenAI path 的 `_ensure_openai_tools` 對 OpenAI 原生 Responses API 正確透傳 `web_search`，但 NIM `/chat/completions` 只接受 `type:"function"`。Ollama/Gemini adapter 都在 adapter 層過濾非 function 工具，唯 NIM 直接轉發
+- [x] 修正：`nvidia_nim_adapter._filter_tools()` 過濾掉非 `type:"function"` 的工具；`chat()`/`stream()` 都套用
+- [x] `tests/test_nvidia_nim_adapter.py` — 新增 3 tests（chat 丟棄 web_search、stream 丟棄、無 tools 時不變）
+- [x] 驗證：相關套件 93 passed
+
+## Phase 31 — NVIDIA NIM Responses-only 參數過濾 ✅ (2026-08-01)
+- [x] Bug：Codex streaming `/v1/responses` → NIM 報 `Validation: Unsupported parameter(s): include, reasoning, client_metadata, prompt_cache_key`
+- [x] Root cause：`handle_streaming_responses` 把 Responses payload 複製成 `chat_payload` 後只 pop `input/instructions/previous_response_id/store/stream`，`include`/`reasoning`/`client_metadata`/`prompt_cache_key` 等 Responses-only 參數原封不動送進 NIM `/chat/completions`；Gemini/Ollama 用白名單建 body 所以免疫，NIM 直接轉發
+- [x] 修正：`nvidia_nim_adapter._chat_payload()` 改為白名單制（`_CHAT_KEYS` 只含 chat-completions 參數），保留 `_filter_tools` 功能（只送 `type:"function"`）；`chat()`/`stream()` 都走此路徑；NIM 只會走 `chat()`/`stream()`（`responses()` 僅 OpenAI provider 使用）
+- [x] `tests/test_nvidia_nim_adapter.py` — 新增 2 tests（chat/stream 剝離 Responses-only 參數、保留合法 chat 參數）
+- [x] 驗證：相關套件 106 passed
+
+## Phase 31b — NVIDIA NIM Namespaced Tool Name 消毒 ✅ (2026-08-01)
+- [x] Bug：Codex streaming + NIM 報 `Validation: Function at index 8 has an invalid name: "mcp__codegraph.codegraph_explore". Only a-z, A-Z, 0-9, underscores, and dashes are allowed.`
+- [x] Root cause：`_ensure_openai_tools` 把 namespace 工具限定成 `{namespace}.{name}`（Codex MCP namespace `mcp__codegraph` + function `codegraph_explore` → `mcp__codegraph.codegraph_explore`）。NIM function name 只允許 `[a-zA-Z0-9_-]`，dot 在 validation 被拒
+- [x] 修正（完全限定在 NIM adapter；adapter 每個 request 都是新 instance，所以 per-request map 安全）：
+  - `NvidiaNIMAdapter._sanitize_tool_name()` — `.` → `__`（符合 `mcp__server__tool` 慣例），其他非法字元 → `_`
+  - `_chat_payload()` 記錄 `self._tool_name_map`（sanitized → original），並複製 fn dict（不污染 input，retry/fallback 時 idempotent）
+  - `chat()` 呼叫 `_restore_completion_names()`、`stream()` 呼叫 `_restore_chunk_names()`，讓 client (Codex) 收到原本的 dotted `namespace.name` 以便 round-trip dispatch
+  - 確認兩條 passthrough 路徑：streaming 直接 proxy chunks 給 client（`openai_handler.py:1032`）、non-streaming `run_with_client_tools` 只做單次 `adapter.chat()` — 都不在 AetherMesh 執行，reverse-map 完全在 adapter 內完成
+- [x] `tests/test_nvidia_nim_adapter.py` — +4 tests：chat sanitize+restore、stream sanitize+restore、sanitize 字元保留
+- [x] 驗證：相關套件 150 passed

@@ -584,7 +584,7 @@ class ResponsesToolLoop:
 
     def _register_temp_tools(self, tools: list[dict[str, Any]]) -> list[str]:
         """Temporarily register client-provided function tools for execution."""
-        from runtime.tools.tool_registry import ToolDescriptor
+        from runtime.tools.tool_registry import ToolDescriptor, ensure_parameters_schema
 
         registered: list[str] = []
         for tool in tools:
@@ -604,7 +604,7 @@ class ResponsesToolLoop:
             descriptor = ToolDescriptor(
                 name=name,
                 description=str(fn.get("description", "")),
-                input_schema=fn.get("parameters", {"type": "object", "properties": {}}),
+                input_schema=ensure_parameters_schema(fn.get("parameters")),
                 handler=_noop_handler,
                 source="client",
             )

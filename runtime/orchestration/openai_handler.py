@@ -38,6 +38,7 @@ from runtime.tools.builtin.web_search import (
 )
 from runtime.tools.content_blocks import content_part_to_audio_data, content_part_to_text_and_images, normalize_image_ref, resolve_file_blocks
 from runtime.tools.file_cleanup import get_file_cleanup_manager
+from runtime.tools.tool_registry import ensure_parameters_schema
 
 
 def _resolve_file_ids_in_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
@@ -1449,6 +1450,7 @@ class RouterService:
             tool_type = tool.get("type", "function")
             if tool_type == "function" and "function" not in tool and "name" in tool:
                 fn_def = {k: v for k, v in tool.items() if k != "type"}
+                fn_def["parameters"] = ensure_parameters_schema(fn_def.get("parameters"))
                 normalized.append({"type": "function", "function": fn_def})
             elif tool_type in ("plugin", "integration"):
                 if isinstance(tool.get("tools"), list):
@@ -1461,9 +1463,32 @@ class RouterService:
                         "function": {
                             "name": f"plugin_{tool['name']}",
                             "description": f"Plugin: {tool.get('description', '')}",
-                            "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+                            "parameters": ensure_parameters_schema(tool.get("input_schema")),
                         },
                     })
+            elif tool_type == "namespace" and isinstance(tool.get("tools"), list):
+                namespace_name = str(tool.get("name", ""))
+                for sub_tool in tool["tools"]:
+                    if not isinstance(sub_tool, dict) or sub_tool.get("type") != "function":
+                        continue
+                    if isinstance(sub_tool.get("function"), dict):
+                        fn_def = dict(sub_tool["function"])
+                    else:
+                        fn_def = {
+                            "name": str(sub_tool.get("name", "")),
+                            "description": str(sub_tool.get("description", "")),
+                            "parameters": ensure_parameters_schema(sub_tool.get("inputSchema")),
+                        }
+                        if sub_tool.get("strict") is not None:
+                            fn_def["strict"] = sub_tool["strict"]
+                    if namespace_name and fn_def.get("name"):
+                        fn_def["name"] = f"{namespace_name}.{fn_def['name']}"
+                    fn_def["parameters"] = ensure_parameters_schema(fn_def.get("parameters"))
+                    normalized.append({"type": "function", "function": fn_def})
+            elif tool_type == "function" and isinstance(tool.get("function"), dict):
+                fn_def = dict(tool["function"])
+                fn_def["parameters"] = ensure_parameters_schema(fn_def.get("parameters"))
+                normalized.append({"type": "function", "function": fn_def})
             else:
                 normalized.append(tool)
         return normalized

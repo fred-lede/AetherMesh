@@ -110,6 +110,9 @@ def _parse_input_item(item: dict[str, Any]) -> InputItem:
     elif item_type == InputItemType.TOOL_CALL:
         result.tool_call_id = str(item.get("tool_call_id", item.get("call_id", "")))
         result.tool_name = str(item.get("tool_name", item.get("name", "")))
+        namespace = item.get("namespace")
+        if namespace and result.tool_name and not result.tool_name.startswith(f"{namespace}."):
+            result.tool_name = f"{namespace}.{result.tool_name}"
         result.arguments = _stringify_arguments(item.get("arguments", "{}"))
 
     elif item_type in (InputItemType.TOOL_RESULT, InputItemType.FUNCTION_CALL_OUTPUT):

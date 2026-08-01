@@ -23,6 +23,42 @@ def test_stream_uses_configured_read_timeout() -> None:
     assert get_session.return_value.post.call_args.kwargs["timeout"] == (30, 1800)
 
 
+def test_tools_for_ollama_flattens_codex_namespace_flat_format() -> None:
+    adapter = OllamaAdapter("http://127.0.0.1:11434")
+    schema = {"type": "object", "properties": {"id": {"type": "integer"}}}
+    tools = adapter._tools_for_ollama([
+        {
+            "type": "namespace",
+            "name": "tickets",
+            "tools": [
+                {"type": "function", "name": "lookup_ticket", "description": "Look up", "inputSchema": schema}
+            ],
+        }
+    ])
+    assert tools == [{
+        "type": "function",
+        "function": {
+            "name": "tickets.lookup_ticket",
+            "description": "Look up",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }]
+
+
+def test_tools_for_ollama_namespace_nested_format_stays_qualified() -> None:
+    adapter = OllamaAdapter("http://127.0.0.1:11434")
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+    tools = adapter._tools_for_ollama([
+        {
+            "type": "namespace",
+            "name": "web",
+            "tools": [{"type": "function", "function": {"name": "search", "description": "Search", "parameters": schema}}],
+        }
+    ])
+    assert tools[0]["function"]["name"] == "web.search"
+    assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}}
+
+
 def test_stream_emits_tool_calls_from_done_chunk() -> None:
     response = MagicMock(ok=True)
     response.iter_lines.return_value = [json.dumps({

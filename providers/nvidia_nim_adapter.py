@@ -26,6 +26,7 @@ class NvidiaNIMAdapter(ProviderAdapter):
         self.max_retries = int(os.getenv("NVIDIA_NIM_MAX_RETRIES", "2"))
         self.backoff_factor = float(os.getenv("NVIDIA_NIM_BACKOFF_FACTOR", "2.0"))
         self.retryable_statuses = {429, 502, 503, 504}
+        self._tool_name_map: dict[str, str] = {}
         self._session = requests.Session()
         self._session.mount("http://", HTTPAdapter(max_retries=0))
         self._session.mount("https://", HTTPAdapter(max_retries=0))
@@ -33,7 +34,9 @@ class NvidiaNIMAdapter(ProviderAdapter):
             raise ProviderError("NVIDIA_NIM_API_KEY is not configured.")
 
     def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._post_json("/chat/completions", self._strip_prefix(payload))
+        completion = self._post_json("/chat/completions", self._chat_payload(payload, stream=False))
+        self._restore_completion_names(completion)
+        return completion
 
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
         stripped = self._strip_prefix(payload)
@@ -74,8 +77,7 @@ class NvidiaNIMAdapter(ProviderAdapter):
         return self._post_json("/responses", stripped)
 
     def stream(self, payload: dict[str, Any]) -> Iterable[dict[str, Any] | str]:
-        body = self._strip_prefix(payload)
-        body["stream"] = True
+        body = self._chat_payload(payload, stream=True)
         response = self._post_with_retry("/chat/completions", body, stream=True)
         self._stream_response = response
         for raw_line in response.iter_lines(decode_unicode=True):
@@ -89,9 +91,12 @@ class NvidiaNIMAdapter(ProviderAdapter):
                 yield "[DONE]"
                 return
             try:
-                yield json.loads(value)
+                chunk = json.loads(value)
             except json.JSONDecodeError:
                 yield value
+                continue
+            self._restore_chunk_names(chunk)
+            yield chunk
 
     def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post_json("/embeddings", self._strip_prefix(payload))
@@ -166,6 +171,106 @@ class NvidiaNIMAdapter(ProviderAdapter):
         if model.startswith(prefix):
             body["model"] = model[len(prefix):]
         return body
+
+    _CHAT_KEYS = frozenset({
+        "model",
+        "messages",
+        "tools",
+        "tool_choice",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "stop",
+        "stream",
+        "stream_options",
+        "n",
+        "presence_penalty",
+        "frequency_penalty",
+        "logit_bias",
+        "user",
+        "response_format",
+        "seed",
+        "logprobs",
+        "top_logprobs",
+        "parallel_tool_calls",
+    })
+
+    def _chat_payload(self, payload: dict[str, Any], *, stream: bool) -> dict[str, Any]:
+        body = {key: payload[key] for key in self._CHAT_KEYS if key in payload}
+        if stream:
+            body["stream"] = True
+        tools = body.get("tools")
+        name_map: dict[str, str] = {}
+        if isinstance(tools, list):
+            filtered: list[dict[str, Any]] = []
+            for tool in tools:
+                if not isinstance(tool, dict) or tool.get("type") != "function":
+                    continue
+                fn = tool.get("function")
+                if isinstance(fn, dict):
+                    fn_copy = dict(fn)
+                    original = str(fn_copy.get("name") or "")
+                    if original:
+                        sanitized = self._sanitize_tool_name(original)
+                        if sanitized != original:
+                            fn_copy["name"] = sanitized
+                            name_map[sanitized] = original
+                    filtered.append({"type": "function", "function": fn_copy})
+                else:
+                    filtered.append(tool)
+            body["tools"] = filtered
+        self._tool_name_map = name_map
+        model = str(body.get("model", ""))
+        prefix = f"{self.provider_name}/"
+        if model.startswith(prefix):
+            body["model"] = model[len(prefix):]
+        return body
+
+    @staticmethod
+    def _sanitize_tool_name(name: str) -> str:
+        out: list[str] = []
+        for char in str(name or ""):
+            if char == ".":
+                out.append("__")
+            elif char.isascii() and (char.isalnum() or char in "_-"):
+                out.append(char)
+            else:
+                out.append("_")
+        return "".join(out)
+
+    def _restore_tool_name(self, name: str) -> str:
+        return self._tool_name_map.get(name, name)
+
+    def _restore_completion_names(self, completion: dict[str, Any]) -> None:
+        if not self._tool_name_map:
+            return
+        for choice in completion.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            message = choice.get("message")
+            if not isinstance(message, dict):
+                continue
+            for tc in message.get("tool_calls") or []:
+                if isinstance(tc, dict):
+                    fn = tc.get("function")
+                    if isinstance(fn, dict) and str(fn.get("name") or "") in self._tool_name_map:
+                        fn["name"] = self._tool_name_map[str(fn["name"])]
+
+    def _restore_chunk_names(self, chunk: dict[str, Any]) -> None:
+        if not self._tool_name_map:
+            return
+        for choice in chunk.get("choices") or []:
+            if not isinstance(choice, dict):
+                continue
+            delta = choice.get("delta")
+            if not isinstance(delta, dict):
+                continue
+            for tc in delta.get("tool_calls") or []:
+                if isinstance(tc, dict):
+                    fn = tc.get("function")
+                    if isinstance(fn, dict) and str(fn.get("name") or "") in self._tool_name_map:
+                        fn["name"] = self._tool_name_map[str(fn["name"])]
 
     def _wait_for_turn(self) -> None:
         with self._queue_lock:

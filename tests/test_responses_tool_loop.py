@@ -234,6 +234,40 @@ def test_responses_input_round_trips_function_call_and_output():
     }
 
 
+def test_responses_input_qualifies_namespaced_function_call():
+    input_value = [
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "namespace": "tickets",
+            "name": "lookup_ticket",
+            "arguments": '{"id":1}',
+        },
+    ]
+
+    messages = responses_input_to_messages(input_value)
+
+    assert messages[0]["role"] == "assistant"
+    assert messages[0]["tool_calls"][0]["function"]["name"] == "tickets.lookup_ticket"
+
+
+def test_responses_input_does_not_double_qualify_namespaced_name():
+    input_value = [
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "namespace": "tickets",
+            "name": "tickets.lookup_ticket",
+            "arguments": '{"id":1}',
+        },
+    ]
+
+    messages = responses_input_to_messages(input_value)
+
+    assert messages[0]["role"] == "assistant"
+    assert messages[0]["tool_calls"][0]["function"]["name"] == "tickets.lookup_ticket"
+
+
 def test_responses_input_truncation_keeps_last_turns():
     """With truncation='auto', oldest messages should be dropped."""
     items = [

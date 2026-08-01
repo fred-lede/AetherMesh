@@ -11,6 +11,17 @@ logger = logging.getLogger("tool_registry")
 ToolHandler = Callable[[ToolCall], ToolResult | Awaitable[ToolResult]]
 
 
+def ensure_parameters_schema(schema: Any) -> dict[str, Any]:
+    """Return a valid JSON Schema object for OpenAI function tool parameters.
+
+    OpenAI requires every function tool to carry a ``parameters`` JSON Schema.
+    Tools that accept no arguments must still send the empty-object schema.
+    """
+    if isinstance(schema, dict) and isinstance(schema.get("type"), str):
+        return schema
+    return {"type": "object", "properties": {}, "additionalProperties": False}
+
+
 @dataclass
 class ToolDescriptor:
     name: str
@@ -46,7 +57,7 @@ class ToolRegistry:
                 "function": {
                     "name": t.name,
                     "description": t.description,
-                    "parameters": t.input_schema,
+                    "parameters": ensure_parameters_schema(t.input_schema),
                 },
             }
             for t in self._tools.values()
