@@ -25,3 +25,11 @@
 - `_normalize_payload_for_provider()` guard extended to `provider == "openai" or is_custom_provider(provider)`
 - `handle_responses()` non-streaming tool-loop path: `tools` now filtered before `responses_tool_loop` (loop overwrites `chat_payload["tools"]` with the raw client list, re-introducing `web_search`)
 - Tests: +2 in `tests/test_responses_e2e.py` (streaming/non-streaming custom provider drops `web_search`, keeps function) — 39 passed across e2e + orchestration + NIM suites
+
+## 2026-08-01 — Phase 32f: SSE stream StopIteration RuntimeError on Python 3.14
+
+### Fixes
+- After 32e restart, `web_search` filter confirmed working (`route_selected` = 139 tools, no `web_search`), but streaming requests crashed at completion with `RuntimeError: StopIteration interacts badly with generators and cannot be raised into a Future` (`router/streaming_router.py:51`)
+- Root cause: `async_stream_response()` advanced the generator with `loop.run_in_executor(None, next, iter_obj)`; on exhaustion `next()` raises `StopIteration` in the worker thread, which Python 3.14 converts to `RuntimeError`, bypassing the `except StopIteration` guard
+- Fix: `partial(next, iter_obj, _SENTINEL)` + sentinel comparison — loop ends without raising `StopIteration`
+- Tests: new `tests/test_streaming_router.py` (format_sse_event, sync stream, async stream exhaustion, empty iterator) — 20 passed
