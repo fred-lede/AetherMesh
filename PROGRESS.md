@@ -33,3 +33,11 @@
 - Root cause: `async_stream_response()` advanced the generator with `loop.run_in_executor(None, next, iter_obj)`; on exhaustion `next()` raises `StopIteration` in the worker thread, which Python 3.14 converts to `RuntimeError`, bypassing the `except StopIteration` guard
 - Fix: `partial(next, iter_obj, _SENTINEL)` + sentinel comparison — loop ends without raising `StopIteration`
 - Tests: new `tests/test_streaming_router.py` (format_sse_event, sync stream, async stream exhaustion, empty iterator) — 20 passed
+
+## 2026-08-01 — Phase 32g: upstream 400 "No user query found in messages"
+
+### Fixes
+- After 32e/32f, Codex first request succeeded (200, 139 function tools), but the tool-loop follow-up failed with `BadRequestError: No user query found in messages` (400) from the agnes upstream gateway
+- Root cause: `runtime/responses/input_converter.py:_truncate_input_list()` (`truncation:"auto"`) keeps only the last 8 non-system messages. When a single turn is `[user, assistant(tool_calls), tool×7]` (9 non-system), the user message falls outside the window and is dropped, leaving `[assistant(tool_calls), tool×7]` → upstream rejects with no user query
+- Fix: after slicing, if the kept window contains no `role: user`, move the cut forward to the last user message in `non_system`
+- Tests: new `tests/test_input_converter.py` (4 tests) — 68 passed across input_converter + responses e2e/tool_loop/adapter + streaming_router suites

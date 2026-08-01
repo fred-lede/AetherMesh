@@ -464,3 +464,10 @@
 - [x] 修正（`router/streaming_router.py`）：改用 `partial(next, iter_obj, _SENTINEL)` + sentinel 比對結束，完全不拋 StopIteration
 - [x] `tests/test_streaming_router.py` — 新增（format_sse_event、stream_response、async_stream_response 耗盡/空迭代）
 - [x] 驗證：streaming_router + responses_e2e 20 passed
+
+## Phase 32g — 上游 400「No user query found in messages」✅ (2026-08-01)
+- [x] 現象：web_search fix 後（server 16:27:58 重啟、全 fix 載入），Codex 第一輪成功（200，tools 139、web_search 已移除），但 tool 執行後的 follow-up 失敗：`BadRequestError: {"object":"error","message":"No user query found in messages.","code":400}`（來自 agnes 上游 Rust serde gateway）
+- [x] 根因（`input_converter.py:_truncate_input_list`）：`truncation:"auto"` 只保留最後 8 則非 system 訊息。當最近一輪為 `[user, assistant(tool_calls), tool×7]`（9 則非 system > 8），user 被切掉，保留 `[assistant(tool_calls), tool×7]` → 上游收到無 user 的 messages → 400。trace 佐證：messages 19 則 = system×11 + 保留 8 則非 system，全無 user
+- [x] 修正：truncation 後若保留窗無 `role: user`，把切點前移到最後一則 user（`max(enumerate(non_system) where role==user)`）
+- [x] `tests/test_input_converter.py` — 新增 4 tests（大 tool turn 保留 user、無 tool 結果、無 user 輸入不變、`_truncate_input_list` 直接驗證）
+- [x] 驗證：input_converter + responses_e2e + tool_loop + adapter + streaming_router **68 passed**

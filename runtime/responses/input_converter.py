@@ -67,6 +67,13 @@ def _truncate_input_list(
     keep_from = len(non_system) - 2 * min_turns_to_keep
     if keep_from < 0:
         keep_from = 0
+    if not any(m.get("role") == "user" for m in non_system[keep_from:]):
+        last_user = max(
+            (i for i, m in enumerate(non_system) if m.get("role") == "user"),
+            default=-1,
+        )
+        if last_user >= 0:
+            keep_from = last_user
     return system_msgs + non_system[keep_from:]
 
 
