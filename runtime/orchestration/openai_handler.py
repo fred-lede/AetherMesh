@@ -1495,6 +1495,11 @@ class RouterService:
                 normalized.append({"type": "function", "function": fn_def})
             else:
                 normalized.append(tool)
+        for tool in normalized:
+            if isinstance(tool, dict) and tool.get("type") == "function":
+                fn = tool.get("function")
+                if isinstance(fn, dict):
+                    fn["parameters"] = ensure_parameters_schema(fn.get("parameters"))
         return normalized
 
     def _normalize_payload_for_provider(
@@ -1695,6 +1700,8 @@ class RouterService:
 
         provider = (payload.get("provider") or provider_for_model(model, self.registry)).lower()
         task_payload = dict(payload)
+        if isinstance(task_payload.get("tools"), list):
+            task_payload["tools"] = self._ensure_openai_tools(task_payload["tools"])
         task_payload["model"] = model
         task_payload["endpoint"] = endpoint
         task_payload["provider"] = provider

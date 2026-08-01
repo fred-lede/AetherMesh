@@ -429,3 +429,13 @@
   - `nvidia_nim_adapter._chat_payload()` — 建 body 後若 `tools` 為空/缺，`pop("tool_choice")`（覆蓋 NIM chat 路徑）
 - [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai passthrough 在無 tools 時不帶 `tool_choice`
 - [x] 驗證：`test_responses_e2e.py` 10 passed；`test_orchestration.py` + `test_nvidia_nim_adapter.py` 24 passed
+
+## Phase 32c — 工具參數防線強化 + 非同步路徑正規化 ✅ (2026-08-01)
+- [x] 現象：Phase 32/32b 之後相同錯誤 `tools[139].function: missing field parameters`（400 json_parse_error）再次出現
+- [x] 調查結論：目前程式碼所有 Codex 使用路徑都已正規化（/v1/responses ± streaming、/v1/chat/completions ± streaming、/v1/messages 皆確保 parameters），相同錯誤重現最可能是**伺服器跑舊版程式（未 restart，早於 Phase 32）**
+- [x] 但仍補強兩處真實缺口（defense-in-depth，同類錯誤）：
+  - `_ensure_openai_tools()` — 新增最終保證 pass：所有輸出的 `{"type":"function","function":{...}}` 必定含 `parameters`（封閉 plugin/integration 子工具 raw append 缺 parameters 的漏洞）
+  - `_enqueue_async_task()` — 送 control plane 前對 `tools` 跑 `_ensure_openai_tools`（封閉非同步 worker 送 raw payload 的漏洞）
+- [x] `tests/test_responses_e2e.py` — +1 test：plugin 子工具缺 parameters → 送出時補上 default schema
+- [x] 驗證：`test_responses_e2e.py` + `test_orchestration.py` 27 passed
+- [x] ⚠️ 使用者需 restart AetherMesh server，否則舊 process 仍以未正規化 payload 轉發

@@ -406,6 +406,35 @@ class TestResponsesOpenAIProviderToolNormalization:
         sent = mock_adapter.stream.call_args[0][0]
         assert "tool_choice" not in sent
 
+    def test_streaming_openai_guarantees_parameters_for_plugin_subtools(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.stream.return_value = []
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_finalize_request"):
+            list(svc.handle_streaming_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tools": [
+                    {"type": "plugin", "name": "codex", "tools": [
+                        {"type": "function", "function": {"name": "read", "description": "read file"}},
+                    ]},
+                ],
+            }))
+
+        sent = mock_adapter.stream.call_args[0][0]
+        tools = sent["tools"]
+        assert len(tools) == 1
+        assert tools[0]["type"] == "function"
+        assert tools[0]["function"]["name"] == "read"
+        assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}, "additionalProperties": False}
+
     def test_non_streaming_openai_drops_tool_choice_without_tools(self) -> None:
         from runtime.orchestration.openai_handler import RouterService
         svc = RouterService()
