@@ -621,6 +621,8 @@ class RouterService:
         error_code = ""
         try:
             if provider == "openai":
+                if "tools" in original_payload:
+                    original_payload["tools"] = self._ensure_openai_tools(original_payload["tools"])
                 result = adapter_instance.responses(original_payload)
                 if store:
                     from runtime.responses.response_models import ResponseObject
@@ -969,7 +971,7 @@ class RouterService:
             stream_error_code = ""
             try:
                 if outer_state["provider"] == "openai":
-                    openai_payload = dict(payload)
+                    openai_payload = dict(outer_state["payload"])
                     openai_payload["stream"] = True
                     try:
                         adapter_instance = self._adapter(outer_state["provider"], outer_state["worker"])

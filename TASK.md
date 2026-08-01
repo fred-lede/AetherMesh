@@ -407,3 +407,15 @@
   - 確認兩條 passthrough 路徑：streaming 直接 proxy chunks 給 client（`openai_handler.py:1032`）、non-streaming `run_with_client_tools` 只做單次 `adapter.chat()` — 都不在 AetherMesh 執行，reverse-map 完全在 adapter 內完成
 - [x] `tests/test_nvidia_nim_adapter.py` — +4 tests：chat sanitize+restore、stream sanitize+restore、sanitize 字元保留
 - [x] 驗證：相關套件 150 passed
+
+## Phase 32 — OpenAI Passthrough 工具參數正規化 ✅ (2026-08-01)
+- [x] Bug：streaming `/v1/responses` → 上游 OpenAI-compatible（Rust serde）報 `Invalid JSON data: Failed to deserialize the JSON body into the target type: tools[139].function: missing field parameters`（400 json_parse_error）
+- [x] Root cause：`provider == "openai"` 的兩條 passthrough 路徑把未正規化的工具原封不動轉發：
+  - streaming：`openai_payload = dict(payload)`（raw client payload，無 `messages`、tools 沒跑 `_ensure_openai_tools`）→ `openai_adapter.stream()` 送 `/chat/completions`
+  - non-streaming：`adapter.responses(original_payload)`（raw payload，tools 沒跑 `_ensure_openai_tools`）
+  - 結果：flat/namespace 工具的 `function` 缺 `parameters`，嚴格上游 reject（其他 provider 走 `effective_payload` 所以免疫）
+- [x] 修正（`openai_handler.py`）：
+  - streaming 分支改用 `outer_state["payload"]`（即已正規化的 `effective_payload`，含 messages + tools + 移除 responses-only 參數）
+  - non-streaming 分支在 `responses(original_payload)` 前對 `original_payload["tools"]` 跑 `_ensure_openai_tools`
+- [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai passthrough 的 tools 皆含 `parameters`、namespace 扁平化、streaming 有 `messages`
+- [x] 驗證：相關套件 110 passed

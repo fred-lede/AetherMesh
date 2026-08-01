@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
@@ -305,3 +305,82 @@ class TestResponsesToolLoopDirectExecution:
         )
 
         assert response.status == ResponseStatus.COMPLETED
+
+
+class TestResponsesOpenAIProviderToolNormalization:
+    """OpenAI-compatible passthrough must run _ensure_openai_tools so every
+    function tool carries a valid `parameters` field (strict upstreams reject
+    `tools[i].function: missing field parameters`)."""
+
+    def test_streaming_openai_normalizes_tools(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.stream.return_value = []
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_finalize_request"):
+            list(svc.handle_streaming_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "namespace", "name": "codegraph", "description": "cg", "tools": [
+                        {"type": "function", "name": "explore", "description": "x", "inputSchema": {"type": "object"}},
+                    ]},
+                ],
+            }))
+
+        sent = mock_adapter.stream.call_args[0][0]
+        assert sent["stream"] is True
+        assert sent["messages"] == [{"role": "user", "content": "hi"}]
+        assert "input" not in sent
+        tools = sent["tools"]
+        assert len(tools) == 2
+        assert tools[0]["type"] == "function"
+        assert tools[0]["function"]["name"] == "shell"
+        assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}, "additionalProperties": False}
+        assert tools[1]["type"] == "function"
+        assert tools[1]["function"]["name"] == "codegraph.explore"
+        assert tools[1]["function"]["parameters"] == {"type": "object"}
+
+    def test_non_streaming_openai_normalizes_tools(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.responses.return_value = {
+            "id": "resp_1",
+            "object": "response",
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [],
+            "usage": {},
+        }
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"):
+            svc.handle_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "namespace", "name": "codegraph", "description": "cg", "tools": [
+                        {"type": "function", "name": "explore", "description": "x", "inputSchema": {"type": "object"}},
+                    ]},
+                ],
+            })
+
+        sent = mock_adapter.responses.call_args[0][0]
+        assert "input" in sent
+        tools = sent["tools"]
+        assert len(tools) == 2
+        assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}, "additionalProperties": False}
+        assert tools[1]["function"]["name"] == "codegraph.explore"
+        assert tools[1]["function"]["parameters"] == {"type": "object"}
