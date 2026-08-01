@@ -623,6 +623,7 @@ class RouterService:
             if provider == "openai":
                 if "tools" in original_payload:
                     original_payload["tools"] = self._ensure_openai_tools(original_payload["tools"])
+                    original_payload["tools"] = self._filter_openai_tools(original_payload["tools"])
                 if "tool_choice" in original_payload and not original_payload.get("tools"):
                     original_payload.pop("tool_choice")
                 result = adapter_instance.responses(original_payload)
@@ -1509,6 +1510,12 @@ class RouterService:
                     fn["parameters"] = ensure_parameters_schema(fn.get("parameters"))
         return normalized
 
+    @staticmethod
+    def _filter_openai_tools(tools: Any) -> Any:
+        if not isinstance(tools, list):
+            return tools
+        return [tool for tool in tools if isinstance(tool, dict) and tool.get("type") == "function"]
+
     def _normalize_payload_for_provider(
         self,
         payload: dict[str, Any],
@@ -1518,6 +1525,8 @@ class RouterService:
         normalized = dict(payload)
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
+        if provider == "openai":
+            normalized["tools"] = self._filter_openai_tools(normalized.get("tools"))
         if "tool_choice" in normalized and not normalized.get("tools"):
             normalized.pop("tool_choice")
         if provider == "ollama":

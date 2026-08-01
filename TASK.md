@@ -439,3 +439,12 @@
 - [x] `tests/test_responses_e2e.py` — +1 test：plugin 子工具缺 parameters → 送出時補上 default schema
 - [x] 驗證：`test_responses_e2e.py` + `test_orchestration.py` 27 passed
 - [x] ⚠️ 使用者需 restart AetherMesh server，否則舊 process 仍以未正規化 payload 轉發
+
+## Phase 32d — openai passthrough 只轉發 function 工具 ✅ (2026-08-01)
+- [x] 根因確認（`stream.failed` trace）：正規化後 index 144 是 `{"type": "web_search", ...}`（無 `function` 欄位）。嚴格上游 gateway（Rust serde，chat-completions 純 function-tools）不支援 `web_search` tool type，解析時報 `tools[144].function: missing field parameters`（400 json_parse_error）
+- [x] 修正：`_filter_openai_tools()` — 只保留 `type == "function"` 的工具；套用於：
+  - `_normalize_payload_for_provider()`（provider == "openai"，覆蓋 streaming responses + chat ± streaming）
+  - `handle_responses()` non-streaming openai 分支（`original_payload`）
+  - NIM 不受影響（filter 只在 provider == "openai"；Phase 30 已支援 NIM web_search）
+- [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai 丟棄 web_search、保留 function 工具
+- [x] 驗證：`test_responses_e2e.py` + `test_orchestration.py` + `test_nvidia_nim_adapter.py` 37 passed

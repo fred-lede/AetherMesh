@@ -435,6 +435,67 @@ class TestResponsesOpenAIProviderToolNormalization:
         assert tools[0]["function"]["name"] == "read"
         assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}, "additionalProperties": False}
 
+    def test_streaming_openai_drops_unsupported_tool_types(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.stream.return_value = []
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_finalize_request"):
+            list(svc.handle_streaming_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "web_search", "name": ""},
+                ],
+            }))
+
+        sent = mock_adapter.stream.call_args[0][0]
+        tools = sent["tools"]
+        assert len(tools) == 1
+        assert tools[0]["type"] == "function"
+        assert tools[0]["function"]["name"] == "shell"
+        assert "web_search" not in {t.get("type") for t in sent["tools"]}
+
+    def test_non_streaming_openai_drops_unsupported_tool_types(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.responses.return_value = {
+            "id": "resp_1",
+            "object": "response",
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [],
+            "usage": {},
+        }
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"):
+            svc.handle_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tools": [
+                    {"type": "function", "name": "shell", "description": "run shell", "inputSchema": {}},
+                    {"type": "web_search", "name": ""},
+                ],
+            })
+
+        sent = mock_adapter.responses.call_args[0][0]
+        tools = sent["tools"]
+        assert len(tools) == 1
+        assert tools[0]["type"] == "function"
+        assert "web_search" not in {t.get("type") for t in sent["tools"]}
+
     def test_non_streaming_openai_drops_tool_choice_without_tools(self) -> None:
         from runtime.orchestration.openai_handler import RouterService
         svc = RouterService()
