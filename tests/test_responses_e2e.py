@@ -384,3 +384,51 @@ class TestResponsesOpenAIProviderToolNormalization:
         assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {}, "additionalProperties": False}
         assert tools[1]["function"]["name"] == "codegraph.explore"
         assert tools[1]["function"]["parameters"] == {"type": "object"}
+
+    def test_streaming_openai_drops_tool_choice_without_tools(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.stream.return_value = []
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"), \
+             patch.object(svc, "_finalize_request"):
+            list(svc.handle_streaming_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tool_choice": {"type": "auto"},
+            }))
+
+        sent = mock_adapter.stream.call_args[0][0]
+        assert "tool_choice" not in sent
+
+    def test_non_streaming_openai_drops_tool_choice_without_tools(self) -> None:
+        from runtime.orchestration.openai_handler import RouterService
+        svc = RouterService()
+        svc.registry = {"models": []}
+
+        mock_adapter = MagicMock()
+        mock_adapter.responses.return_value = {
+            "id": "resp_1",
+            "object": "response",
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [],
+            "usage": {},
+        }
+
+        with patch.object(svc, "_resolve_provider_and_worker", return_value=("openai", None)), \
+             patch.object(svc, "_adapter", return_value=mock_adapter), \
+             patch.object(svc, "_record_metrics"):
+            svc.handle_responses({
+                "model": "gpt-4o",
+                "input": "hi",
+                "tool_choice": {"type": "auto"},
+            })
+
+        sent = mock_adapter.responses.call_args[0][0]
+        assert "tool_choice" not in sent

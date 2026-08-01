@@ -419,3 +419,13 @@
   - non-streaming 分支在 `responses(original_payload)` 前對 `original_payload["tools"]` 跑 `_ensure_openai_tools`
 - [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai passthrough 的 tools 皆含 `parameters`、namespace 扁平化、streaming 有 `messages`
 - [x] 驗證：相關套件 110 passed
+
+## Phase 32b — tool_choice 在無 tools 時剝離 ✅ (2026-08-01)
+- [x] Bug：上游 OpenAI-compatible（Rust serde）報 `__all__: Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified.`（400 invalid_request_error）
+- [x] Root cause：client 送 `tool_choice` 但無 tools（或 tools 在 `_ensure_openai_tools` 正規化後變空，例如空 namespace），strict 上游在沒有 tools 時不允許 `tool_choice`
+- [x] 修正（三處防線）：
+  - `openai_handler._normalize_payload_for_provider()` — tools 正規化後若 `tools` 為空/缺，`pop("tool_choice")`（覆蓋 streaming openai + 所有非 openai provider 路徑）
+  - `openai_handler.handle_responses()` non-streaming openai 分支 — 對 `original_payload` 做同樣剝離
+  - `nvidia_nim_adapter._chat_payload()` — 建 body 後若 `tools` 為空/缺，`pop("tool_choice")`（覆蓋 NIM chat 路徑）
+- [x] `tests/test_responses_e2e.py` — +2 tests：streaming/non-streaming openai passthrough 在無 tools 時不帶 `tool_choice`
+- [x] 驗證：`test_responses_e2e.py` 10 passed；`test_orchestration.py` + `test_nvidia_nim_adapter.py` 24 passed

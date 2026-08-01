@@ -623,6 +623,8 @@ class RouterService:
             if provider == "openai":
                 if "tools" in original_payload:
                     original_payload["tools"] = self._ensure_openai_tools(original_payload["tools"])
+                if "tool_choice" in original_payload and not original_payload.get("tools"):
+                    original_payload.pop("tool_choice")
                 result = adapter_instance.responses(original_payload)
                 if store:
                     from runtime.responses.response_models import ResponseObject
@@ -1504,6 +1506,8 @@ class RouterService:
         normalized = dict(payload)
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
+        if "tool_choice" in normalized and not normalized.get("tools"):
+            normalized.pop("tool_choice")
         if provider == "ollama":
             messages = self._extract_messages_from_payload(normalized)
             if messages is not None:

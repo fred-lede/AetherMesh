@@ -7,3 +7,12 @@
 - **Route disabled on startup**: `register_custom_providers()` now calls `routing_engine.set_provider_enabled(name, True)`, and `_load_state()` no longer filters out unknown providers (preserves prior manual toggle across restarts)
 - **Cloud Credentials cards**: template + JS now dynamically include custom providers; `renderCredentials()` injects/removes credential cards when providers are added/deleted without page refresh
 - **Test state leakage**: module-level cleanup deletes stale `routing_state.yaml` before it's loaded; teardown restores `_provider_enabled`
+
+## 2026-08-01 — Phase 32b: strip `tool_choice` when no tools present
+
+### Fixes
+- Strict OpenAI-compatible upstream (Rust serde) rejected `tool_choice` when `tools` absent/empty: `__all__: Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified.`
+- `openai_handler._normalize_payload_for_provider()` now pops `tool_choice` when `tools` ends up empty/missing after `_ensure_openai_tools` (covers streaming openai + all non-openai provider paths)
+- `openai_handler.handle_responses()` non-streaming openai branch pops `tool_choice` on `original_payload` when tools empty/missing
+- `nvidia_nim_adapter._chat_payload()` pops `tool_choice` when `tools` empty/missing (covers NIM chat path)
+- Tests: +2 in `tests/test_responses_e2e.py` (streaming/non-streaming openai passthrough drop `tool_choice` without tools) — 10 passed; orchestration + NIM adapter suites 24 passed

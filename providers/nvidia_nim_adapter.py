@@ -221,6 +221,8 @@ class NvidiaNIMAdapter(ProviderAdapter):
                     filtered.append(tool)
             body["tools"] = filtered
         self._tool_name_map = name_map
+        if "tool_choice" in body and not body.get("tools"):
+            body.pop("tool_choice")
         model = str(body.get("model", ""))
         prefix = f"{self.provider_name}/"
         if model.startswith(prefix):
