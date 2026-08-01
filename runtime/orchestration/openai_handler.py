@@ -912,6 +912,13 @@ class RouterService:
         effective_payload = self._normalize_payload_for_provider(chat_payload, provider, worker)
         started = time.perf_counter()
         self._trace_responses(
+            "stream.request_raw",
+            response_id=response_id,
+            provider=provider,
+            worker=worker,
+            effective_payload=chat_payload,
+        )
+        self._trace_responses(
             "stream.route_selected",
             response_id=response_id,
             provider=provider,
@@ -1861,7 +1868,35 @@ class RouterService:
             "input_len": self._value_len(input_value) if "input" in payload else 0,
             "messages": self._summarize_messages(messages),
             "tools_count": len(payload.get("tools") or []) if isinstance(payload.get("tools"), list) else 0,
+            "tools": self._summarize_tools(payload.get("tools")),
         }
+
+    def _summarize_tools(self, tools: Any) -> list[dict[str, Any]]:
+        if not isinstance(tools, list):
+            return []
+        summary: list[dict[str, Any]] = []
+        for index, tool in enumerate(tools):
+            if not isinstance(tool, dict):
+                summary.append({"index": index, "type": type(tool).__name__})
+                continue
+            fn = tool.get("function")
+            if isinstance(fn, dict):
+                summary.append({
+                    "index": index,
+                    "type": tool.get("type", ""),
+                    "name": fn.get("name", ""),
+                    "has_parameters": isinstance(fn.get("parameters"), dict),
+                    "parameters_type": (fn.get("parameters") or {}).get("type", "") if isinstance(fn.get("parameters"), dict) else "",
+                })
+            else:
+                summary.append({
+                    "index": index,
+                    "type": tool.get("type", ""),
+                    "name": tool.get("name", ""),
+                    "has_parameters": isinstance(tool.get("parameters"), dict),
+                    "parameters_type": (tool.get("parameters") or {}).get("type", "") if isinstance(tool.get("parameters"), dict) else "",
+                })
+        return summary
 
     def _summarize_messages(self, messages: Any) -> list[dict[str, Any]]:
         if not isinstance(messages, list):
