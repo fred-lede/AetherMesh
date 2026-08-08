@@ -264,6 +264,11 @@ models:
     worker_ports: []
     capabilities: [chat, thinking, tools]
     
+  - name: big-pickle
+    provider: OpenCode
+    worker_ports: []
+    capabilities: [chat, thinking, tools]
+    
   - name: agnes-2.0-flash
     provider: agnes
     worker_ports: []
