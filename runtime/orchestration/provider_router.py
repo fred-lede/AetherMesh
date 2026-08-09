@@ -11,6 +11,7 @@ from providers.nvidia_nim_adapter import NvidiaNIMAdapter
 from providers.ollama_adapter import OllamaAdapter
 from providers.ollama_cloud_adapter import OllamaCloudAdapter
 from providers.openai_adapter import OpenAIAdapter
+from runtime.orchestration.routing_engine import ROUTING_PROVIDERS
 
 logger = logging.getLogger("runtime.orchestration.provider_router")
 
@@ -49,6 +50,7 @@ _OPENAI_TYPES = {"openai"}
 
 def _cloud_pool(provider: str) -> CredentialPool | None:
     """Return a cached CredentialPool for *provider*, or None if none configured."""
+    provider = canonical_provider_name(provider)
     if provider not in _CLOUD_ADAPTERS:
         return None
     existing = _credential_pools.get(provider)
@@ -128,7 +130,7 @@ def reload_custom_providers() -> dict[str, dict[str, Any]]:
 
 
 def is_custom_provider(name: str) -> bool:
-    return name in _CUSTOM_PROVIDERS
+    return name in _CUSTOM_PROVIDERS or name.lower() in {k.lower() for k in _CUSTOM_PROVIDERS}
 
 
 def custom_provider_status() -> list[dict[str, Any]]:
@@ -281,6 +283,17 @@ def _get_image_gen_adapter() -> Any:
         return None
 
 
+def canonical_provider_name(name: str) -> str:
+    lowered = str(name).lower()
+    for provider in ROUTING_PROVIDERS:
+        if provider.lower() == lowered:
+            return provider
+    for cp_name in _CUSTOM_PROVIDERS:
+        if cp_name.lower() == lowered:
+            return cp_name
+    return str(name)
+
+
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     for prefix, hinted_provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
@@ -298,7 +311,7 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
     clean_model = settings.resolve_model_alias(model)
     for item in registry.get("models", []):
         if item.get("name") in (model, clean_model):
-            p = str(item.get("provider", "ollama")).lower()
+            p = canonical_provider_name(str(item.get("provider", "ollama")))
             if p in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
                 return p, None
             if p == "ollama":

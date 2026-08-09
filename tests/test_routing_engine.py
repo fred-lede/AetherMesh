@@ -469,3 +469,72 @@ def test_get_routing_status() -> None:
     assert "ollama" in status["providers"]
     for provider_key in ["enabled", "healthy", "latency_ms", "cooldown_remaining_s"]:
         assert provider_key in status["providers"]["ollama"]
+
+
+# ── routing rules ──────────────────────────────────────────────────
+
+def test_rule_glob_matches_prefix_pattern() -> None:
+    engine = ModelRoutingEngine()
+    engine._routing_rules = [
+        {
+            "name": "boost openai o1",
+            "model": "o1-*",
+            "provider": "openai",
+            "priority_boost": 2.0,
+            "enabled": True,
+        }
+    ]
+    with patch.object(
+        engine,
+        "_provider_available_locked",
+        return_value=True,
+    ):
+        engine._provider_credentials["openai"] = True
+        decision = engine.route("o1-preview", registry_models=[])
+        assert "rule_boost openai x2.0" in decision.rules_applied
+        openai_cand = next((c for c in decision.candidates if c.provider == "openai"), None)
+        assert openai_cand is not None
+        assert openai_cand.score > 150
+
+
+def test_rule_glob_does_not_match_different_model() -> None:
+    engine = ModelRoutingEngine()
+    engine._routing_rules = [
+        {
+            "name": "boost openai o1",
+            "model": "o1-*",
+            "provider": "openai",
+            "priority_boost": 2.0,
+            "enabled": True,
+        }
+    ]
+    with patch.object(
+        engine,
+        "_provider_available_locked",
+        return_value=True,
+    ):
+        engine._provider_credentials["openai"] = True
+        decision = engine.route("gemma4:e2b", registry_models=[])
+        assert "rule_boost openai x2.0" not in decision.rules_applied
+
+
+def test_rule_skipped_when_registry_match_healthy() -> None:
+    engine = ModelRoutingEngine()
+    engine._routing_rules = [
+        {
+            "name": "boost ollama",
+            "model": "*",
+            "provider": "ollama",
+            "priority_boost": 2.0,
+            "enabled": True,
+        }
+    ]
+    with patch.object(
+        engine,
+        "_provider_available_locked",
+        return_value=True,
+    ):
+        registry = [{"name": "gpt-4.1-mini", "provider": "openai", "capabilities": ["chat"]}]
+        decision = engine.route("gpt-4.1-mini", registry_models=registry)
+        assert decision.provider == "openai"
+        assert "rule_boost ollama x2.0" not in decision.rules_applied

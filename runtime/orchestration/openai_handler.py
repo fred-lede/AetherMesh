@@ -21,6 +21,7 @@ from providers.http_client import get_session
 from runtime.orchestration.capabilities import required_openai_capabilities
 from runtime.orchestration.provider_router import (
     adapter,
+    canonical_provider_name,
     capabilities_for_model,
     find_registry_model,
     is_custom_provider,
@@ -1363,7 +1364,7 @@ class RouterService:
             last_error_resp = None
 
             for current_model in try_models:
-                provider = (payload.get("provider") or provider_for_model(current_model, self.registry)).lower()
+                provider = canonical_provider_name(payload.get("provider") or provider_for_model(current_model, self.registry))
                 if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud") or is_custom_provider(provider):
                     if current_model == original_model:
                         return provider, None
@@ -1716,7 +1717,7 @@ class RouterService:
             raise self._as_http_error(status_code=400, code="bad_request", message="The request must include a model.")
         model = settings.resolve_model_alias(str(requested_model))
 
-        provider = (payload.get("provider") or provider_for_model(model, self.registry)).lower()
+        provider = canonical_provider_name(payload.get("provider") or provider_for_model(model, self.registry))
         task_payload = dict(payload)
         if isinstance(task_payload.get("tools"), list):
             task_payload["tools"] = self._ensure_openai_tools(task_payload["tools"])

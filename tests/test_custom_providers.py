@@ -256,6 +256,27 @@ class TestRegisterCustomProviders:
         assert "openai" in CLOUD_PROVIDER_ENDPOINTS
         assert routing_engine._provider_enabled.get("openai") is not False
 
+    def test_route_custom_provider_case_insensitive(self):
+        register_custom_providers(["OpenCode"], {"OpenCode": "https://opencode.ai/zen/v1"})
+        try:
+            registry = {"models": [{"name": "big-pickle", "provider": "OpenCode", "capabilities": ["chat", "thinking", "tools"]}]}
+            decision = routing_engine.route("big-pickle", registry_models=registry["models"])
+            assert decision.provider == "OpenCode"
+            assert decision.model == "big-pickle"
+            candidates = {c.provider for c in decision.candidates}
+            assert "OpenCode" in candidates
+        finally:
+            unregister_custom_providers(["OpenCode"])
+
+    def test_canonical_provider_name_case_insensitive(self):
+        from runtime.orchestration.provider_router import canonical_provider_name
+        register_custom_providers(["OpenCode"], {"OpenCode": "https://opencode.ai/zen/v1"})
+        try:
+            assert canonical_provider_name("opencode") == "OpenCode"
+            assert canonical_provider_name("OpenCode") == "OpenCode"
+        finally:
+            unregister_custom_providers(["OpenCode"])
+
 
 
 

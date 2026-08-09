@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,14 @@ CLOUD_PROVIDER_ENDPOINTS = {
 _CUSTOM_PROVIDER_NAMES: set[str] = set()
 _BUILTIN_CLOUD_PROVIDERS: frozenset = frozenset(CLOUD_PROVIDERS)
 _BUILTIN_ROUTING_PROVIDERS: frozenset = frozenset(ROUTING_PROVIDERS)
+
+
+def canonical_provider(name: str) -> str:
+    lowered = str(name).lower()
+    for provider in ROUTING_PROVIDERS:
+        if provider.lower() == lowered:
+            return provider
+    return str(name)
 
 
 def register_custom_providers(names: list[str], name_base_urls: dict[str, str]) -> None:
@@ -357,7 +366,7 @@ class ModelRoutingEngine:
 
             registry_match = self._find_in_registry(clean_model, registry_models)
             if registry_match:
-                provider = str(registry_match.get("provider", "ollama")).lower()
+                provider = canonical_provider(str(registry_match.get("provider", "ollama")))
                 bindings = registry_match.get("worker_bindings", [])
                 worker = None
                 if provider == "ollama" and bindings:
@@ -419,21 +428,31 @@ class ModelRoutingEngine:
                         ))
                     rules_applied.append(f"capability_score {cap} -> {provider}")
 
+            registry_has_healthy_match = any(
+                c.reason == "registry_match" and c.healthy for c in candidates
+            )
             for rule in self._routing_rules:
+                if registry_has_healthy_match:
+                    rules_applied.append("rules_skipped_registry_match")
+                    break
                 rule_model = rule.get("model", "")
-                if rule_model and rule_model not in (model, clean_model):
+                if rule_model and not (
+                    rule_model in (model, clean_model)
+                    or fnmatch(model, rule_model)
+                    or fnmatch(clean_model, rule_model)
+                ):
                     continue
                 rule_provider = rule.get("provider")
                 if rule_provider:
                     rule_enabled = rule.get("enabled", True)
                     if not rule_enabled:
                         for c in candidates:
-                            if c.provider == rule_provider:
+                            if c.provider == rule_provider and c.reason != "registry_match":
                                 c.score *= 0.1
                         rules_applied.append(f"rule_disable {rule_provider}")
                     else:
                         for c in candidates:
-                            if c.provider == rule_provider:
+                            if c.provider == rule_provider and c.reason != "registry_match":
                                 c.score *= rule.get("priority_boost", 1.0)
                         rules_applied.append(f"rule_boost {rule_provider} x{rule.get('priority_boost', 1.0)}")
 

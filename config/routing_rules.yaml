@@ -10,14 +10,14 @@ model_aliases:
   alias_prefix: AIIH
   entries:
     # Claude tier → local model mapping
-    claude-sonnet-4-20250514: gemma4:31b-it-qat      # Opus tier — strongest reasoning(5090)
-    claude-sonnet-4-6: z-ai/glm-5.2               # Sonnet tier — balanced all-round(5090)
-    claude-3-5-haiku-20241022: gemma4:12b       # Haiku tier — fast & light (4070)
+    claude-sonnet-4-glm-5.2: z-ai/glm-5.2      # Opus tier — strongest reasoning(5090)
+    claude-sonnet-4-6-big-pickle: big-pickle               # Sonnet tier — balanced all-round(5090)
+    claude-3-5-haiku-agnes-2.0-flash: agnes-2.0-flash       # Haiku tier — fast & light (4070)
 
 fallback:
   # Explicit local Ollama model used when cloud providers are rate-limited,
   # overloaded, or time out before a response starts.
-  ollama_default_model: gemma4:12b
+  ollama_default_model: gemma4:31b-it-qat
   # Optional explicit Ollama base URL for cloud fallback. When omitted,
   # fallback uses the model's first worker binding from config/models.yaml.
   ollama_base_url: http://127.0.0.1:11434
@@ -29,20 +29,15 @@ rules:
     priority_boost: 1.1
     enabled: true
 
-  - name: "Use OpenAI for reasoning models"
-    model: "o1-*"
-    provider: openai
-    priority_boost: 2.0
-    enabled: true
-
-  - name: "Use OpenAI for reasoning models"
-    model: "o3-*"
-    provider: openai
-    priority_boost: 2.0
-    enabled: true
-
-  - name: "Use Gemini for vision-heavy tasks"
-    model: "*"
-    provider: gemini
-    priority_boost: 1.0
-    enabled: true
+  # NOTE: o1-*/o3-* -> openai rules removed — OPENAI_API_KEY is empty in .env.
+  # Re-enable once a key is configured:
+  # - name: "Use OpenAI for reasoning models"
+  #   model: "o1-*"
+  #   provider: openai
+  #   priority_boost: 2.0
+  #   enabled: true
+  # - name: "Use OpenAI for reasoning models"
+  #   model: "o3-*"
+  #   provider: openai
+  #   priority_boost: 2.0
+  #   enabled: true
