@@ -205,7 +205,7 @@ def test_handle_chat_records_metrics_in_request_metrics():
 
     with patch.object(service, "_resolve_provider_and_worker", return_value=("ollama", None)):
         with patch.object(service, "_adapter", return_value=mock_adapter):
-            with patch.object(service, "_normalize_payload_for_provider", side_effect=lambda p, pr: p):
+            with patch.object(service, "_normalize_payload_for_provider", side_effect=lambda p, pr, w: p):
                 with patch.object(service, "_apply_generation_defaults", side_effect=lambda p: p):
                     with patch.object(service, "_finalize_request"):
                         with patch("runtime.orchestration.openai_handler.request_metrics", collector):

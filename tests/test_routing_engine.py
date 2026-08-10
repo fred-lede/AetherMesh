@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from unittest.mock import patch, MagicMock
 
+import pytest
 import requests
 
 from runtime.orchestration.routing_engine import ModelRoutingEngine
@@ -538,3 +539,33 @@ def test_rule_skipped_when_registry_match_healthy() -> None:
         decision = engine.route("gpt-4.1-mini", registry_models=registry)
         assert decision.provider == "openai"
         assert "rule_boost ollama x2.0" not in decision.rules_applied
+
+
+# ── state file save retry (Windows file lock race) ─────────────────
+
+def test_save_state_retries_on_permission_error(monkeypatch) -> None:
+    engine = ModelRoutingEngine()
+    real_replace = __import__("os").replace
+    calls = {"n": 0}
+
+    def flaky_replace(src: str, dst: str) -> None:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError(32, "file in use")
+        real_replace(src, dst)
+
+    monkeypatch.setattr("os.replace", flaky_replace)
+    engine.set_provider_enabled("ollama", True)
+    assert calls["n"] == 3
+    assert engine._state_path.exists()
+
+
+def test_save_state_raises_after_all_retries(monkeypatch) -> None:
+    engine = ModelRoutingEngine()
+
+    def always_fail(src: str, dst: str) -> None:
+        raise PermissionError(32, "file in use")
+
+    monkeypatch.setattr("os.replace", always_fail)
+    with pytest.raises(PermissionError):
+        engine.set_provider_enabled("ollama", True)

@@ -1356,13 +1356,19 @@ def delete_user(request: Request, user_id: int, db: SASession = Depends(get_db))
 def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
     _require_admin(request)
     from runtime.security.auth.api_key import list_api_keys as _list_keys
+    from runtime.security.auth.token_tracker import get_api_key_usage
     keys = _list_keys(db)
     user_ids = {k["user_id"] for k in keys}
     users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    usage = get_api_key_usage(db, api_key_ids=[k["id"] for k in keys])
     for k in keys:
         owner = users.get(k["user_id"])
         k["owner_email"] = owner.email if owner else None
         k["owner_display_name"] = owner.display_name if owner else None
+        k["token_usage"] = usage.get(
+            k["id"],
+            {"total_input_tokens": 0, "total_output_tokens": 0, "total_tokens": 0, "record_count": 0},
+        )
     return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
@@ -1440,10 +1446,17 @@ def list_my_api_keys(request: Request) -> JSONResponse:
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     from runtime.security.auth.api_key import list_api_keys as _list_keys
+    from runtime.security.auth.token_tracker import get_api_key_usage
 
     db = SessionLocal()
     try:
         keys = _list_keys(db, user_id=user.id)
+        usage = get_api_key_usage(db, api_key_ids=[k["id"] for k in keys])
+        for k in keys:
+            k["token_usage"] = usage.get(
+                k["id"],
+                {"total_input_tokens": 0, "total_output_tokens": 0, "total_tokens": 0, "record_count": 0},
+            )
         return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     finally:
         db.close()

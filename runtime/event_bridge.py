@@ -10,6 +10,8 @@ from runtime.observability.event_bus import graph_event_bus, GraphEvent
 
 logger = logging.getLogger("bridge.event_bus")
 
+_BRIDGE_MARKER = "_aether_bridge_forwarded"
+
 
 def _graph_event_to_runtime_event(graph_event: GraphEvent) -> RuntimeEvent:
     type_mapping: dict[str, EventType] = {
@@ -56,11 +58,13 @@ def _runtime_event_to_graph_event(event: RuntimeEvent) -> GraphEvent | None:
         duration_ms=event.duration_ms,
         error=event.error,
         content=event.payload.get("content"),
-        metadata=event.payload,
+        metadata={**event.payload, _BRIDGE_MARKER: True},
     )
 
 
 def _old_bus_to_new_bridge(graph_event: GraphEvent) -> None:
+    if graph_event.metadata.get(_BRIDGE_MARKER):
+        return
     runtime_event = _graph_event_to_runtime_event(graph_event)
     import asyncio
     try:

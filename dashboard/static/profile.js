@@ -58,16 +58,21 @@
         return;
       }
       panel.innerHTML = `<table class="table"><thead><tr>
-        <th>Prefix</th><th>Name</th><th>Status</th><th>Created</th><th>Last Used</th><th></th>
+        <th>Prefix</th><th>Name</th><th>Status</th><th>Tokens</th><th>Created</th><th>Last Used</th><th></th>
       </tr></thead><tbody>
-        ${keys.map(k => `<tr>
+        ${keys.map(k => {
+          const tu = k.token_usage || { total_tokens: 0, total_input_tokens: 0, total_output_tokens: 0, record_count: 0 };
+          const title = `Input: ${tu.total_input_tokens.toLocaleString()}, Output: ${tu.total_output_tokens.toLocaleString()}, Requests: ${tu.record_count.toLocaleString()}`;
+          return `<tr>
           <td><code>${escapeHtml(k.key_prefix)}...</code></td>
           <td>${escapeHtml(k.name || '-')}</td>
           <td><span class="pill ${k.is_active ? 'ok' : 'disabled'}">${k.is_active ? 'Active' : 'Revoked'}</span></td>
+          <td title="${title}">${tu.total_tokens.toLocaleString()}</td>
           <td>${k.created_at ? timeAgo(k.created_at) : '-'}</td>
           <td>${k.last_used_at ? timeAgo(k.last_used_at) : 'Never'}</td>
           <td>${k.is_active ? `<button class="btn btn-sm btn-danger" onclick="revokeMyApiKey(${k.id})">Revoke</button>` : ''}</td>
-        </tr>`).join('')}
+        </tr>`;
+        }).join('')}
       </tbody></table>
       <button class="btn btn-sm" onclick="createMyApiKey()" style="margin-top:4px">Generate</button>`;
     } catch(e) { panel.innerHTML = '<span class="pill warn">Error</span>'; }

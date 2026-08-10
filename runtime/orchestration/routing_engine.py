@@ -160,9 +160,18 @@ class ModelRoutingEngine:
             "updated_at": time.time(),
         }
         tmp_path = self._state_path.with_name(f"{self._state_path.name}.tmp")
-        with tmp_path.open("w", encoding="utf-8") as f:
-            yaml.safe_dump(state, f, sort_keys=True, allow_unicode=False)
-        os.replace(tmp_path, self._state_path)
+        last_error: PermissionError | None = None
+        for attempt in range(5):
+            try:
+                with tmp_path.open("w", encoding="utf-8") as f:
+                    yaml.safe_dump(state, f, sort_keys=True, allow_unicode=False)
+                os.replace(tmp_path, self._state_path)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(0.1 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
 
     def _append_audit_locked(self, action: str, actor: str, details: dict[str, Any]) -> None:
         self._audit_path.parent.mkdir(parents=True, exist_ok=True)

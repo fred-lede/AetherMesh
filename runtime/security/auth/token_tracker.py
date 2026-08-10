@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session as SASession
 
 from runtime.security.models import TokenUsage
@@ -62,12 +63,48 @@ def get_token_usage_summary(
     from_ts: float | None = None,
     to_ts: float | None = None,
 ) -> dict[str, Any]:
-    records = get_token_usage(db, user_id=user_id, from_ts=from_ts, to_ts=to_ts, limit=10000)
-    total_input = sum(r["input_tokens"] for r in records)
-    total_output = sum(r["output_tokens"] for r in records)
+    query = db.query(
+        func.count(TokenUsage.id),
+        func.coalesce(func.sum(TokenUsage.input_tokens), 0),
+        func.coalesce(func.sum(TokenUsage.output_tokens), 0),
+    )
+    if user_id is not None:
+        query = query.filter(TokenUsage.user_id == user_id)
+    if from_ts is not None:
+        query = query.filter(TokenUsage.created_at >= from_ts)
+    if to_ts is not None:
+        query = query.filter(TokenUsage.created_at <= to_ts)
+    count, total_input, total_output = query.one()
+    total_input = int(total_input)
+    total_output = int(total_output)
     return {
         "total_input_tokens": total_input,
         "total_output_tokens": total_output,
         "total_tokens": total_input + total_output,
-        "record_count": len(records),
+        "record_count": int(count),
     }
+
+
+def get_api_key_usage(
+    db: SASession,
+    api_key_ids: list[int] | None = None,
+) -> dict[int, dict[str, Any]]:
+    query = db.query(
+        TokenUsage.api_key_id,
+        func.count(TokenUsage.id),
+        func.coalesce(func.sum(TokenUsage.input_tokens), 0),
+        func.coalesce(func.sum(TokenUsage.output_tokens), 0),
+    ).filter(TokenUsage.api_key_id.isnot(None))
+    if api_key_ids:
+        query = query.filter(TokenUsage.api_key_id.in_(api_key_ids))
+    result: dict[int, dict[str, Any]] = {}
+    for key_id, count, total_input, total_output in query.group_by(TokenUsage.api_key_id).all():
+        total_input = int(total_input)
+        total_output = int(total_output)
+        result[int(key_id)] = {
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_tokens": total_input + total_output,
+            "record_count": int(count),
+        }
+    return result
