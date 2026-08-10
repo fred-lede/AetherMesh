@@ -41,3 +41,28 @@
 - Root cause: `runtime/responses/input_converter.py:_truncate_input_list()` (`truncation:"auto"`) keeps only the last 8 non-system messages. When a single turn is `[user, assistant(tool_calls), tool×7]` (9 non-system), the user message falls outside the window and is dropped, leaving `[assistant(tool_calls), tool×7]` → upstream rejects with no user query
 - Fix: after slicing, if the kept window contains no `role: user`, move the cut forward to the last user message in `non_system`
 - Tests: new `tests/test_input_converter.py` (4 tests) — 68 passed across input_converter + responses e2e/tool_loop/adapter + streaming_router suites
+
+## 2026-08-11 — Phase 34: Structured Output / Batch API / Audit Query / Realtime API
+
+### Structured Outputs (`response_format`)
+- New `runtime/orchestration/structured_output.py`: `response_format_schema()` parses `json_schema`/`json_object` modes; `extract_json_content()` handles code fences + embedded JSON; `validate_json()` recursively checks type/required/properties/items/enum/min-max; `build_repair_messages()` keeps conversation history + injects schema; `apply_structured_output()` strips `response_format` before the adapter call, validates, and runs a bounded repair loop (max 2 retries) then normalizes valid JSON back into `choices[0].message.content`
+- Wired into `handle_chat` non-streaming path; `StructuredOutputError` → HTTPException 422 in `router/openai/chat_adapter.py`
+- Tests: `tests/test_structured_output.py` (20) — all pass
+
+### Batch API (`/v1/batches`)
+- New `runtime/orchestration/batch_manager.py`: JSONL input validation (custom_id/method/url/body), background-thread processing over `handle_chat`/`handle_responses`/`handle_embeddings`, OpenAI-format output JSONL (`file_batch_out_*`), per-request error capture, JSON persistence + reload, cancel support
+- New `router/openai/batches_adapter.py`: `POST/GET /v1/batches`, `GET /v1/batches/{id}`, `POST /v1/batches/{id}/cancel`
+- Tests: `tests/test_batch_manager.py` (12) — all pass
+
+### Audit Log Query API (`/v1/audit/logs`)
+- `AuditLog.query()` now supports action/actor/time-range/details filter + offset/limit; `recent_events` keeps "latest N" semantics
+- New `router/audit_router.py`: unified query over `security` + `routing` JSONL sources, timestamp desc, `has_more`; `GET /v1/audit/sources`
+- Tests: `tests/test_audit_log_query.py` (11) — all pass
+
+### Realtime API (`/v1/realtime` WebSocket)
+- New `runtime/realtime/realtime_session.py`: `RealtimeSession` state machine (session.update / conversation.item.create / ping / audio rejection) + `build_messages()` (instructions → system, items → user/assistant messages)
+- New `router/realtime_router.py`: WS endpoint with Bearer/`?api_key=` auth, `session.created`, `response.create` → `asyncio.to_thread(handle_chat)` → `response.created` / `output_item.added` / `content_part.added` / chunked `text.delta` / `output_item.done` / `response.done` (failures → `status: failed`)
+- Tests: `tests/test_realtime_session.py` (12) — all pass
+
+### Verification
+- Related suites 70 passed (structured_output 20 + batch 12 + audit 11 + realtime 12 + orchestration 15); `router.openai_router` imports cleanly with all new routers wired

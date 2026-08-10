@@ -41,6 +41,19 @@ class AuditLog:
         )
 
     def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        events = self.query(limit=0)
+        return events[-max(1, limit):]
+
+    def query(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        action: str | None = None,
+        actor: str | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        details_filter: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         if not self._path.exists():
             return []
         try:
@@ -48,14 +61,29 @@ class AuditLog:
         except OSError:
             return []
         events: list[dict[str, Any]] = []
-        for line in lines[-limit:]:
+        for line in lines:
             try:
                 item = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(item, dict):
-                events.append(item)
-        return events
+            if not isinstance(item, dict):
+                continue
+            if action and item.get("action") != action:
+                continue
+            if actor and item.get("actor") != actor:
+                continue
+            ts = item.get("timestamp")
+            if isinstance(ts, (int, float)):
+                if start_time is not None and ts < start_time:
+                    continue
+                if end_time is not None and ts > end_time:
+                    continue
+            if details_filter:
+                details = item.get("details") or {}
+                if not all(details.get(k) == v for k, v in details_filter.items()):
+                    continue
+            events.append(item)
+        return events[offset : offset + limit] if limit > 0 else events[offset:]
 
 
 audit_log = AuditLog()

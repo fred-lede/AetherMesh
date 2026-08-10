@@ -374,6 +374,13 @@ apiKey: "local-dev-key"
 ### OpenAI-Compatible API (`router/openai_router.py`, port `8001`)
 
 - `POST /v1/chat/completions` — streaming (`stream=true`) and non-streaming
+- `POST /v1/batches` — create a batch (JSONL input file from `/v1/files`)
+- `GET /v1/batches` — list batches
+- `GET /v1/batches/{id}` — batch status / results
+- `POST /v1/batches/{id}/cancel` — cancel a running batch
+- `WS /v1/realtime` — realtime session WebSocket (`session.update` / `conversation.item.create` / `response.create`)
+- `GET /v1/audit/logs` — query security + routing audit events (action/actor/time filters)
+- `GET /v1/audit/sources` — audit log sources
 - `POST /v1/responses` — full OpenAI Responses API format
 - `GET /v1/responses/{id}` — fetch stored response
 - `DELETE /v1/responses/{id}` — delete stored response

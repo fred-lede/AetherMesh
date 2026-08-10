@@ -471,3 +471,70 @@
 - [x] 修正：truncation 後若保留窗無 `role: user`，把切點前移到最後一則 user（`max(enumerate(non_system) where role==user)`）
 - [x] `tests/test_input_converter.py` — 新增 4 tests（大 tool turn 保留 user、無 tool 結果、無 user 輸入不變、`_truncate_input_list` 直接驗證）
 - [x] 驗證：input_converter + responses_e2e + tool_loop + adapter + streaming_router **68 passed**
+
+## Phase 33 — 長時間運轉穩定性稽核 🟡 (2026-08-10)
+### 🔴 已修：event_bridge 雙 bus 無限迴圈（高風險 #7）
+- [x] 現象：單一 graph event 1.5 秒內爆炸成 **195,896 個事件**（指數放大）
+- [x] 根因：`connect_event_buses()`（kernel.initialize 生產路徑）讓 `graph_event_bus ↔ runtime_event_bus` 互相訂閱。GRAPH_* 型別事件被 `_old_bus_to_new_bridge` → `_new_bus_to_old_bridge` 來回轉換，無任何去重 → 無限迴圈；每輪 `ensure_future` 產生 fire-and-forget task
+- [x] 修正（`runtime/event_bridge.py`）：新增 `_BRIDGE_MARKER`（`_aether_bridge_forwarded`）。`_runtime_event_to_graph_event()` 在 metadata 加 marker，`_old_bus_to_new_bridge()` 偵測到 marker 即 return → 斷迴圈
+- [x] 修後驗證：1 graph event → 恰 1 runtime event + 1 echo graph event，不再放大
+- [x] `tests/test_event_bridge.py` — 新增 2 tests（無迴圈放大、roundtrip metadata 保留；try/finally 清理 bus，避免跨 test 污染）
+- [x] 驗證：test_event_bridge + observability + memory + orchestration + agent_loop + multi_agent **58 passed**
+
+### 🔴 已修：routing_state.yaml 啟動競態（WinError 32 crash）(2026-08-10)
+- [x] 現象：anthropic_router 2026/8/9 22:15 crash（`PermissionError: [WinError 32] routing_state.yaml.tmp -> routing_state.yaml`）→ 8002 死掉 → dashboard `_build_overview()` 打 3 個 dead metrics endpoint 各卡 ~2 秒 → 「登入後內容反應慢」
+- [x] 根因：8001/8002 共用 `config/routing_state.yaml`，同時啟動時 `register_custom_providers() → set_provider_enabled() → _save_state_locked() → os.replace()` 撞 Windows 檔案鎖（MoveFileEx 目標檔被另一 process 開啟），無 retry → 直接 crash
+- [x] 修正（`runtime/orchestration/routing_engine.py:_save_state_locked`）：`PermissionError` retry ×5、backoff 0.1s×(attempt+1)，全失敗才 re-raise
+- [x] `tests/test_routing_engine.py` — +2 tests（retry 後成功、全失敗 re-raise）
+- [x] 已手動重啟 anthropic_router（8002，PID 6440），metrics endpoints 回應 3-18ms
+- [x] 驗證：test_routing_engine + test_custom_providers + test_event_bridge **65 passed**
+
+### 🔴 已修：Token Usage Requests 卡在 10,000（2026-08-10）
+- [x] 現象：Dashboard「GLOBAL TOKEN USAGE」與 Profile「Token Usage」的 Requests 一直顯示 10,000 不變
+- [x] 根因：`get_token_usage_summary()` 用 `limit=10000` 撈記錄，`record_count = len(records)`。DB 實際有 **20,550+** 筆 → 被釘在 10000
+- [x] 修正（`runtime/security/auth/token_tracker.py:get_token_usage_summary`）：改用 SQL 聚合 `COUNT` + `SUM(COALESCE)`，移除 10000 上限；驗證真值 `record_count=20551`
+- [x] 另修 pre-existing 測試 `test_token_counting.py:208` 過時 lambda（`_normalize_payload_for_provider` 3 參數簽名）
+- [x] `tests/test_token_tracker.py` — 新增 5 tests（>10000 筆不 cap、empty、user 隔離、時間範圍、cleanup dispose engine）
+- [x] 驗證：test_token_tracker + test_token_counting **14 passed**
+- [x] ⚠️ 需重啟 dashboard（9001）載入修正
+
+### 🟢 新增：API Keys / Profile 顯示每個 API Key 的 Token 用量（2026-08-10）
+- [x] `runtime/security/auth/token_tracker.py` — 新增 `get_api_key_usage(db, api_key_ids)`（SQL group_by：per-key input/output/total/record_count）
+- [x] `dashboard_server.py` — `list_api_keys`（admin）與 `list_my_api_keys`（self）回傳附 `token_usage`（含 0 預設）
+- [x] `admin_api_keys.js` + `profile.js` — API Keys 表單新增 Tokens 欄（hover tooltip 顯示 Input/Output/Requests）
+- [x] 驗證：實際 DB per-key 正確（myapi 88M/2242、user1 221M/5864）；JS `node --check` OK；`get_api_key_usage` +2 tests；dashboard api_key/admin tests 9 passed
+- [x] ⚠️ 需重啟 dashboard（9001）載入 backend 改動；JS 是磁碟靜態檔，重整頁面即生效
+
+### 🟡 待處理（次高優先，未修）— 稽核清單（詳見對話）
+- episodic_memory._records、semantic_memory（含 O(N) search）無界
+- metrics._histograms、event_metrics._event_durations 無界 list（key 含動態 tool/provider 名）
+- tracer._spans + execution_trace._traces 無清理
+- rate_limiter._buckets 無 TTL/eviction
+- shared_memory._broadcast_log、redis_queue memory 模式 task、metrics/request_metrics dict key 無界
+- session_store._sessions/messages、worker/node registry dead 累積、model_affinity._records、extended_metrics._session_metrics、file_cleanup._request_files、agent_context.steps
+- bus.history pop(0) O(n)、routing_engine._worker_health_cache 舊 key、裸 requests.get、nvidia_nim_adapter per-instance Session
+
+## Phase 34 — OpenAI 相容面擴充（Structured Output / Batch / Audit / Realtime）✅ (2026-08-11)
+### 2. Structured Outputs（response_format 驗證 + 修復迴圈）
+- [x] `runtime/orchestration/structured_output.py` — `response_format_schema()`（支援 `json_schema` + `json_object`）、`extract_json_content()`（去 code fence + 子字串定位）、`validate_json()`（type/required/properties/items/enum/min-max 遞迴驗證）、`build_repair_messages()`（system schema 提示 + 原歷史）、`apply_structured_output()`（strip response_format → 驗證 → 修復迴圈 max 2 次 → 正規化緊湊 JSON 回填 content）
+- [x] `openai_handler.handle_chat` non-streaming 於 `adapter.chat()` 後接 `apply_structured_output()`
+- [x] `router/openai/chat_adapter.py` — `StructuredOutputError` → HTTPException 422
+- [x] `tests/test_structured_output.py` — 20 tests
+
+### 3. Batch API（/v1/batches）
+- [x] `runtime/orchestration/batch_manager.py` — `BatchManager`：JSONL input 解析（custom_id/method/url/body 驗證）、background thread 處理、逐 request 呼叫 handler（chat/responses/embeddings）、output JSONL（OpenAI 格式）、per-request error 記錄、JSON 持久化 reload、cancel（cancelling→cancelled）、`_public_batch()` 剝離內部 errors
+- [x] `router/openai/batches_adapter.py` — `POST/GET /v1/batches`、`GET /v1/batches/{id}`、`POST /v1/batches/{id}/cancel`
+- [x] `tests/test_batch_manager.py` — 12 tests（含 thread + reload + cancel）
+
+### 4. Audit Log Query API（/v1/audit/logs）
+- [x] `runtime/security/audit_log.py` — 新增 `query()`（action/actor/time-range/details_filter 過濾 + offset/limit）；`recent_events` 語意保持最新 N 筆
+- [x] `router/audit_router.py` — `GET /v1/audit/logs`（統一查詢 security + routing 兩個 JSONL source、timestamp desc 排序、has_more）+ `GET /v1/audit/sources`
+- [x] `tests/test_audit_log_query.py` — 11 tests
+
+### 5. Realtime API（/v1/realtime WebSocket）
+- [x] `runtime/realtime/realtime_session.py` — `RealtimeSession` 狀態機：session.update / conversation.item.create（text + function item）/ ping / audio 拒絕；`build_messages()`（instructions → system + items → messages）
+- [x] `router/realtime_router.py` — WebSocket `/v1/realtime`：Bearer/api_key auth（同 ASR WS）、session.created、response.create → `asyncio.to_thread(service.handle_chat)` → response.created/output_item.added/content_part.added/text.delta 分塊/text.done/output_item.done/response.done（失敗→status failed）、response.cancel
+- [x] `tests/test_realtime_session.py` — 12 tests
+
+### 驗證
+- [x] 相關套件 70 passed（structured_output 20 + batch 12 + audit 11 + realtime 12 + orchestration 15）

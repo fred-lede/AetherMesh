@@ -26,9 +26,12 @@ from router.openai.responses_adapter import create_responses_router
 from router.openai.models_adapter import create_models_route
 from router.openai.embeddings_adapter import create_embeddings_route
 from router.openai.rerank_adapter import create_rerank_route
+from router.openai.batches_adapter import create_batches_router
 from router.files_router import router as files_router
 from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
 from router.skills_router import skills_router
+from router.audit_router import router as audit_router
+from router.realtime_router import router as realtime_router
 from runtime.skills.skill_registry import skill_registry
 
 logger = logging.getLogger("openai_router")
@@ -72,6 +75,9 @@ app.include_router(agent_router)
 app.include_router(files_router)
 app.include_router(skills_router)
 app.include_router(create_responses_router(service))
+app.include_router(create_batches_router(service))
+app.include_router(audit_router)
+app.include_router(realtime_router)
 
 if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router

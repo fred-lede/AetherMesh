@@ -29,6 +29,7 @@ from runtime.orchestration.provider_router import (
     provider_for_model,
 )
 from runtime.orchestration.routing_engine import routing_engine
+from runtime.orchestration.structured_output import apply_structured_output
 from runtime.memory import memory_manager
 from runtime.security.auth.token_tracker import record_token_usage
 from runtime.security.database import SessionLocal
@@ -194,6 +195,7 @@ class RouterService:
         error_code = ""
         try:
             response = adapter.chat(effective_payload)
+            response = apply_structured_output(effective_payload, response, adapter)
             if settings.debug_responses:
                 choices = response.get("choices", [])
                 if choices and isinstance(choices[0], dict):
