@@ -114,6 +114,18 @@ class Settings:
     upload_dir: Path = field(
         default_factory=lambda: Path(os.getenv("AIIH_UPLOAD_DIR", "/tmp/aethermesh/uploads"))
     )
+    rag_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_RAG_ENABLED", "false"))
+    rag_auto_inject: bool = field(default_factory=lambda: _env_bool("AIIH_RAG_AUTO_INJECT", "false"))
+    rag_embedding_model: str = field(
+        default_factory=lambda: os.getenv("AIIH_RAG_EMBEDDING_MODEL", "nomic-embed-text-v2-moe:latest")
+    )
+    session_summary_model: str = field(
+        default_factory=lambda: os.getenv("AIIH_SESSION_SUMMARY_MODEL", "gpt-4o-mini")
+    )
+    session_summarize_threshold: int = field(default_factory=lambda: _env_int("AIIH_SESSION_SUMMARIZE_THRESHOLD", 40))
+    otel_endpoint: str = field(default_factory=lambda: os.getenv("AIIH_OTEL_ENDPOINT", ""))
+    otel_export_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_OTEL_EXPORT_ENABLED", "false"))
+    traces_url: str = field(default_factory=lambda: os.getenv("AIIH_TRACES_URL", "http://127.0.0.1:8001"))
     max_upload_size_mb: int = field(default_factory=lambda: _env_int("AIIH_MAX_UPLOAD_SIZE_MB", 50))
     allowed_upload_mime_types: list[str] = field(
         default_factory=lambda: _env_csv("AIIH_ALLOWED_UPLOAD_MIME_TYPES",

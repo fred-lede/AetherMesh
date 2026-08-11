@@ -538,3 +538,36 @@
 
 ### 驗證
 - [x] 相關套件 70 passed（structured_output 20 + batch 12 + audit 11 + realtime 12 + orchestration 15）
+
+## Phase 35 — Traces Dashboard Tab + OTEL Export（/v1/traces）🟡 (2026-08-11)
+- [x] `config/settings.py` — 新增 `otel_endpoint` / `otel_export_enabled` / `traces_url`（dashboard 撈 traces 的來源，預設 8001）
+- [x] `router/traces_router.py` — `GET /v1/traces`（spans + trace_ids + execution_trace summaries）、`GET /v1/traces/export?format=json|otlp`、`POST /v1/traces/export`（推 OTLP 到 collector）、`DELETE /v1/traces`（清空）
+- [x] `runtime/security/middleware.py` — `/v1/traces` 與 `/v1/traces/` prefix 加入 auth bypass（同 `/api/metrics/` localhost observability 模式）
+- [x] `openai_router.py` — include traces_router
+- [x] `dashboard_server.py` — `GET /api/traces` proxy（撈 `settings.traces_url/v1/traces`，失敗回空陣列不炸 dashboard）
+- [x] `dashboard/templates/index.html` — 新增 Traces tab + `#traces-panel`
+- [x] `dashboard/static/dashboard.js` — `renderTraces()`：spans 表（name/trace/span/parent/elapsed_ms/attributes）+ execution traces 表，`refresh()` 時一併更新
+- [x] 驗證：`GET /v1/traces` 200（span_count 0）、`GET /v1/traces/export?format=json` 200；import smoke OK；test_security.py 2 failures 為 pre-existing `AIIH_API_KEY` env 問題（非本次改動）
+- [x] 	ests/test_traces_router.py �X 10 tests�]empty/list/filter�Bexecution summaries�Bjson/otlp export shape�Binvalid format 400�BPOST export endpoint guard + dispatch�BDELETE clear�^**10 passed**
+- [x] �צn tracer �����]	racing.py TraceContext �אּ context manager + set_attribute�Fexecution_trace.start_trace/end_trace �אּ request ���ͩR�g�� span�Aclear() �s�a�M tracer�^
+- [x] openai_router.py �X �s�W equest_trace_middleware�G/v1/chat/completions + /v1/responses �۰� seed/end execution trace�]streaming �� async esponse.background ��������ɪ��A�ҥ~�] close�^
+- [x] �쥻 tracer/execution_trace ���O dead code�]request ���|�q���I�s�^
+- [x] 	ests/test_execution_trace.py�]6�^+ 	est_traces_router.py +1 integration �X�X ���� 54 passed�AE2E smoke 1 request �� 1 execution trace + 1 span
+## Phase 36 — API Keys vs Users 用量差異可調和 ✅ (2026-08-11)
+- [x] 根因：Users 統計該 user 全部流量（含 `api_key_id=NULL`），API Keys 只統計用註冊 key 認證的流量；差額 = env key / dashboard 登入流量（`api_key_id IS NULL`）
+- [x] 實測驗證：Users (user 1) = 398,772 tokens / 38 req；API Keys 合計 = 182,167 / 10 req；差額 216,605 / 28 req 恰為 `api_key_id IS NULL` 記錄數
+- [x] `runtime/security/auth/token_tracker.py` — 新增 `get_unkeyed_usage(db, user_ids=None)`（SQL 聚合 `api_key_id IS NULL`）
+- [x] `dashboard_server.py` — `list_api_keys`（admin）與 `list_my_api_keys`（self）回傳 `{keys, unkeyed_usage}`
+- [x] `admin_api_keys.js` + `profile.js` — 表格下方加 summary line：Keyed / Unkeyed（env key・login）/ Total 三個 pill，tooltip 顯示 Input/Output/Requests；空 keys 時也顯示 unkeyed
+- [x] 驗證：`get_unkeyed_usage` 實測 216,605 tokens / 28 req；216,605 + 182,167 = 398,772 與 Users 完全對齊；`node --check` 兩檔 OK；`test_token_tracker.py` 8 passed
+- [x] ⚠️ 需重啟 dashboard（9001）載入 `list_api_keys`/`list_my_api_keys` 新回傳 shape；JS 是磁碟靜態檔，Ctrl+F5 即生效
+
+## Pending (2026-08-11)
+- [ ] Trace �O����W���G	racer._spans / execution_trace._traces �L�ɡ]�{�b�C request ���|�� trace�A�� cap �O�d�̪� N=1000�^
+- [ ] ���q stage �I�I�]openai_handler �U stage span�^�X �Ȯį�E�_�ݭn�ɤ~���A���j�k���I
+- [ ] OTLP export �u��X / Traces �L�o UI �X �����ܫh����
+- [x] Trace �O����W���GTracer(max_spans=1000) + ExecutionTraceCollector(max_traces=1000) evict ���¡]�������� span�^�F+2 tests�A35 passed
+- [x] Dashboard Users ����� per-user Token �ζq�Gget_user_usage() + list_users �a 	oken_usage + dmin_users.js Tokens ��F+1 test�A8 passed
+- [x] ���� OpenAI path + Ollama/���� provider �� token usage �O���G�쥻�N�w���㱵�q�]4 �� path ���� _record_metrics��_record_token_usage�^�F+9 E2E tests �ҩ� chat/streaming �U provider ���O���B�ΦW���L�F33 passed
+- [x] ���I�Gusage ����������O user_id is None guard �X env key �y�q�n�� AIIH_ADMIN_EMAIL �~���o�� user�F�� dashboard ���U�� API Key �~�| per-key �k��
+- [x] API Keys Tokens ��ݤ��� = �s�����֨��� JS�]�L cache-buster�^�F�T�ӼҪO�[ ?v=random�A�j��s��z�Y�X�{
