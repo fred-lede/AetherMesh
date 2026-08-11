@@ -10,8 +10,8 @@ from runtime.security.database import SessionLocal, engine, init_db
 from runtime.security.models import ApiKey, TokenUsage, User
 from runtime.security.auth.token_tracker import (
     get_api_key_usage,
-    get_token_usage,
     get_token_usage_summary,
+    get_user_usage,
     record_token_usage,
 )
 
@@ -132,6 +132,25 @@ def test_api_key_usage_empty_when_no_keys() -> None:
     try:
         usage = get_api_key_usage(db, api_key_ids=[99999])
         assert usage == {}
+    finally:
+        db.close()
+
+
+def test_user_usage_aggregates_per_user() -> None:
+    db = SessionLocal()
+    try:
+        user_a = _make_user(db, email="ua@test.local")
+        user_b = _make_user(db, email="ub@test.local")
+        record_token_usage(db, user_id=user_a.id, input_tokens=10, output_tokens=5)
+        record_token_usage(db, user_id=user_a.id, input_tokens=20, output_tokens=6)
+        record_token_usage(db, user_id=user_b.id, input_tokens=100, output_tokens=50)
+        usage = get_user_usage(db, user_ids=[user_a.id, user_b.id])
+        assert usage[user_a.id]["record_count"] == 2
+        assert usage[user_a.id]["total_input_tokens"] == 30
+        assert usage[user_a.id]["total_tokens"] == 41
+        assert usage[user_b.id]["record_count"] == 1
+        assert usage[user_b.id]["total_tokens"] == 150
+        assert len(usage) == 2
     finally:
         db.close()
 

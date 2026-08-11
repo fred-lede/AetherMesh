@@ -1196,6 +1196,17 @@ def metrics_providers() -> dict[str, Any]:
     return {"providers": request_metrics.get_provider_metrics()}
 
 
+@api.get("/traces")
+def traces() -> dict[str, Any]:
+    try:
+        response = get_session().get(f"{settings.traces_url}/v1/traces", timeout=5)
+        if response.ok:
+            return response.json()
+        return {"error": f"traces source returned {response.status_code}", "spans": [], "execution_traces": []}
+    except requests.RequestException as exc:
+        return {"error": str(exc), "spans": [], "execution_traces": []}
+
+
 @api.get("/routing/status")
 def routing_status() -> dict[str, Any]:
     return routing_engine.get_routing_status()
@@ -1290,8 +1301,21 @@ def change_password(body: dict[str, Any] = Body(...), db: SASession = Depends(ge
 @api.get("/users")
 def list_users(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
     _require_admin(request)
+    from runtime.security.auth.token_tracker import get_user_usage
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    usage = get_user_usage(db, user_ids=[u.id for u in users])
+    items = []
+    for u in users:
+        item = u.to_dict()
+        item["token_usage"] = usage.get(u.id, {
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "record_count": 0,
+        })
+        items.append(item)
     return JSONResponse(
-        content=[u.to_dict() for u in db.query(User).order_by(User.created_at.desc()).all()],
+        content=items,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
@@ -1356,7 +1380,7 @@ def delete_user(request: Request, user_id: int, db: SASession = Depends(get_db))
 def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> JSONResponse:
     _require_admin(request)
     from runtime.security.auth.api_key import list_api_keys as _list_keys
-    from runtime.security.auth.token_tracker import get_api_key_usage
+    from runtime.security.auth.token_tracker import get_api_key_usage, get_unkeyed_usage
     keys = _list_keys(db)
     user_ids = {k["user_id"] for k in keys}
     users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
@@ -1369,7 +1393,11 @@ def list_api_keys(request: Request, db: SASession = Depends(get_db)) -> JSONResp
             k["id"],
             {"total_input_tokens": 0, "total_output_tokens": 0, "total_tokens": 0, "record_count": 0},
         )
-    return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    unkeyed = get_unkeyed_usage(db, user_ids=list(user_ids) or None)
+    return JSONResponse(
+        content={"keys": keys, "unkeyed_usage": unkeyed},
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @api.post("/security/api-keys")
@@ -1446,7 +1474,7 @@ def list_my_api_keys(request: Request) -> JSONResponse:
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     from runtime.security.auth.api_key import list_api_keys as _list_keys
-    from runtime.security.auth.token_tracker import get_api_key_usage
+    from runtime.security.auth.token_tracker import get_api_key_usage, get_unkeyed_usage
 
     db = SessionLocal()
     try:
@@ -1457,7 +1485,11 @@ def list_my_api_keys(request: Request) -> JSONResponse:
                 k["id"],
                 {"total_input_tokens": 0, "total_output_tokens": 0, "total_tokens": 0, "record_count": 0},
             )
-        return JSONResponse(content=keys, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        unkeyed = get_unkeyed_usage(db, user_ids=[user.id])
+        return JSONResponse(
+            content={"keys": keys, "unkeyed_usage": unkeyed},
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
     finally:
         db.close()
 

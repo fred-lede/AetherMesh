@@ -15,20 +15,26 @@
         return;
       }
       panel.innerHTML = `<table class="table"><thead><tr>
-        <th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th></th>
+        <th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Tokens</th><th>Created</th><th>Last Login</th><th></th>
       </tr></thead><tbody>
-        ${users.map(u => `<tr>
+        ${users.map(u => {
+          const tu = u.token_usage || { total_tokens: 0, total_input_tokens: 0, total_output_tokens: 0, record_count: 0 };
+          const tokenText = tu.total_tokens > 0 ? `${tu.total_tokens.toLocaleString()} · ${tu.record_count.toLocaleString()} req` : '0';
+          const tokenTitle = `In ${tu.total_input_tokens.toLocaleString()} / Out ${tu.total_output_tokens.toLocaleString()} · ${tu.record_count.toLocaleString()} requests`;
+          return `<tr>
           <td>${escapeHtml(u.email)}</td>
           <td>${escapeHtml(u.display_name)}</td>
           <td><span class="pill ${u.role === 'admin' ? 'warn' : 'ok'}">${escapeHtml(u.role)}</span></td>
           <td><span class="pill ${u.is_active ? 'ok' : 'disabled'}">${u.is_active ? 'Active' : 'Disabled'}</span></td>
+          <td title="${escapeHtml(tokenTitle)}">${tokenText}</td>
           <td>${u.created_at ? timeAgo(u.created_at) : '-'}</td>
           <td>${u.last_login_at ? timeAgo(u.last_login_at) : 'Never'}</td>
           <td>
             <button class="btn btn-sm" onclick="editUser(${u.id}, '${escapeHtml(u.email)}', '${escapeHtml(u.display_name)}', '${u.role}', ${u.is_active})">Edit</button>
             <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.email)}')">Delete</button>
           </td>
-        </tr>`).join('')}
+        </tr>`;
+        }).join('')}
       </tbody></table>
       <button class="btn btn-sm" onclick="showCreateUserModal()" style="margin-top:8px">Add User</button>`;
     } catch(e) {

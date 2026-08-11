@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from runtime.orchestration.graph import ExecutionGraph, ExecutionNode, NodeType, NodeStatus
 from runtime.orchestration.graph_executor import GraphExecutor
 from runtime.orchestration.planner import Planner
@@ -183,6 +185,116 @@ def test_memory_wiring_streaming(monkeypatch) -> None:
         pass
     assert len(records) > 0, "memory_manager.episodic.record was never called in streaming path"
     assert records[-1]["success"] is False
+
+
+class _FakeAdapter:
+    def __init__(self, chat_result=None, stream_result=None):
+        self._chat = chat_result
+        self._stream = stream_result
+
+    def is_available(self) -> bool:
+        return True
+
+    def chat(self, payload):
+        return self._chat
+
+    def stream(self, payload):
+        return iter(self._stream or [])
+
+    def responses(self, payload):
+        return self._chat
+
+
+def _make_router(monkeypatch, provider: str) -> "RouterService":
+    from runtime.orchestration.openai_handler import RouterService
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    service = RouterService()
+    service.registry = {
+        "models": [
+            {"name": "gpt-4o", "provider": provider, "capabilities": ["chat", "responses"]}
+        ]
+    }
+    monkeypatch.setattr(service, "_resolve_provider_and_worker", lambda payload, allow_queue=False: (provider, {}))
+    monkeypatch.setattr(service, "_normalize_payload_for_provider", lambda p, provider, worker: p)
+    return service
+
+
+@pytest.mark.parametrize("provider", ["openai", "ollama", "gemini", "nvidia_nim", "ollama_cloud"])
+def test_token_usage_wiring_chat(monkeypatch, provider) -> None:
+    captured: list[dict] = []
+    service = _make_router(monkeypatch, provider)
+    monkeypatch.setattr(
+        "runtime.orchestration.openai_handler.RouterService._record_token_usage",
+        lambda self, user_id, api_key_id, input_tokens, output_tokens, provider, model: captured.append(
+            {"user_id": user_id, "api_key_id": api_key_id, "input_tokens": input_tokens,
+             "output_tokens": output_tokens, "provider": provider, "model": model}
+        ),
+    )
+    monkeypatch.setattr(
+        service, "_adapter",
+        lambda provider, worker: _FakeAdapter(chat_result={
+            "usage": {"prompt_tokens": 11, "completion_tokens": 22},
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        }),
+    )
+    service.handle_chat({"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}, user_id=1, api_key_id=2)
+    assert captured, "record_token_usage never called for chat path"
+    last = captured[-1]
+    assert last["provider"] == provider
+    assert last["model"] == "gpt-4o"
+    assert last["user_id"] == 1
+    assert last["api_key_id"] == 2
+    assert last["input_tokens"] == 11
+    assert last["output_tokens"] == 22
+
+
+@pytest.mark.parametrize("provider", ["openai", "ollama", "ollama_cloud"])
+def test_token_usage_wiring_streaming(monkeypatch, provider) -> None:
+    captured: list[dict] = []
+    service = _make_router(monkeypatch, provider)
+    monkeypatch.setattr(
+        "runtime.orchestration.openai_handler.RouterService._record_token_usage",
+        lambda self, user_id, api_key_id, input_tokens, output_tokens, provider, model: captured.append(
+            {"user_id": user_id, "api_key_id": api_key_id, "input_tokens": input_tokens,
+             "output_tokens": output_tokens, "provider": provider, "model": model}
+        ),
+    )
+    monkeypatch.setattr(
+        service, "_adapter",
+        lambda provider, worker: _FakeAdapter(stream_result=[
+            {"usage": {"prompt_tokens": 33, "completion_tokens": 44},
+             "choices": [{"delta": {"content": "x"}}]},
+        ]),
+    )
+    list(service.handle_streaming_chat(
+        {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}], "stream": True},
+        user_id=1, api_key_id=2,
+    ).iterator)
+    assert captured, "record_token_usage never called for streaming path"
+    last = captured[-1]
+    assert last["provider"] == provider
+    assert last["user_id"] == 1
+    assert last["input_tokens"] == 33
+    assert last["output_tokens"] == 44
+
+
+def test_token_usage_skipped_without_user(monkeypatch) -> None:
+    from runtime.orchestration.openai_handler import RouterService
+    called: list[tuple] = []
+    monkeypatch.setattr(
+        "runtime.orchestration.openai_handler.record_token_usage",
+        lambda db, **kw: called.append(tuple(kw.items())),
+    )
+    service = RouterService()
+    service._record_token_usage(None, None, input_tokens=10, output_tokens=20, provider="openai", model="gpt-4o")
+    assert called == [], "record_token_usage should be skipped when user_id is None"
+    service._record_token_usage(1, 2, input_tokens=10, output_tokens=20, provider="openai", model="gpt-4o")
+    assert len(called) == 1
+    kwargs = dict(called[0])
+    assert kwargs["user_id"] == 1
+    assert kwargs["api_key_id"] == 2
+    assert kwargs["input_tokens"] == 10
+    assert kwargs["output_tokens"] == 20
 
 
 def test_execution_plan_wraps_graph() -> None:

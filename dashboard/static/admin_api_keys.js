@@ -9,9 +9,23 @@
       if (resp.status === 403) { panel.innerHTML = '<span class="pill">Admin access required</span>'; return; }
       if (resp.status === 401) { redirectLogin(); return; }
       if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load API keys</span>'; return; }
-      const keys = await resp.json();
+      const data = await resp.json();
+      const keys = data && Array.isArray(data.keys) ? data.keys : [];
+      const unkeyed = (data && data.unkeyed_usage) || { total_tokens: 0, total_input_tokens: 0, total_output_tokens: 0, record_count: 0 };
+      const keyedTotal = keys.reduce((s, k) => s + ((k.token_usage || {}).total_tokens || 0), 0);
+      const unkeyedPill = unkeyed.total_tokens > 0
+        ? `<span class="pill warn" title="Input: ${unkeyed.total_input_tokens.toLocaleString()}, Output: ${unkeyed.total_output_tokens.toLocaleString()}, Requests: ${unkeyed.record_count.toLocaleString()}">Unkeyed (env key / login): ${unkeyed.total_tokens.toLocaleString()}</span>`
+        : '';
+      const summaryLine = (keyedTotal + unkeyed.total_tokens > 0)
+        ? `<div style="margin:10px 0 2px">
+            <span class="pill ok">Keyed: ${keyedTotal.toLocaleString()}</span>
+            ${unkeyedPill}
+            <span class="pill">Total: ${(keyedTotal + unkeyed.total_tokens).toLocaleString()}</span>
+          </div>`
+        : '';
       if (!keys || keys.length === 0) {
         panel.innerHTML = `<span class="pill">No API keys configured</span>
+          ${summaryLine}
           <button class="btn btn-sm" onclick="createApiKey()" style="margin-top:8px">Generate Key</button>`;
         return;
       }
@@ -33,7 +47,8 @@
         </tr>`;
         }).join('')}
       </tbody></table>
-      <button class="btn btn-sm" onclick="createApiKey()" style="margin-top:8px">Generate Key</button>`;
+      <button class="btn btn-sm" onclick="createApiKey()" style="margin-top:8px">Generate Key</button>
+      ${summaryLine}`;
     } catch(e) {
       panel.innerHTML = '<span class="pill warn">Error</span>';
     }

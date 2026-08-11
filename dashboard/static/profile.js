@@ -52,9 +52,21 @@
       const resp = await fetch('/api/auth/me/api-keys');
       if (resp.status === 401) { redirectLogin(); return; }
       if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load</span>'; return; }
-      const keys = await resp.json();
+      const data = await resp.json();
+      const keys = data && Array.isArray(data.keys) ? data.keys : [];
+      const unkeyed = (data && data.unkeyed_usage) || { total_tokens: 0, total_input_tokens: 0, total_output_tokens: 0, record_count: 0 };
+      const keyedTotal = keys.reduce((s, k) => s + ((k.token_usage || {}).total_tokens || 0), 0);
+      const summaryLine = (keyedTotal + unkeyed.total_tokens > 0)
+        ? `<div style="margin:10px 0 2px">
+            <span class="pill ok">Keyed: ${keyedTotal.toLocaleString()}</span>
+            <span class="pill warn" title="env key / dashboard login requests without an API key">Unkeyed: ${unkeyed.total_tokens.toLocaleString()}</span>
+            <span class="pill">Total: ${(keyedTotal + unkeyed.total_tokens).toLocaleString()}</span>
+          </div>`
+        : '';
       if (!keys || keys.length === 0) {
-        panel.innerHTML = '<span class="pill">No API keys</span> <button class="btn btn-sm" onclick="createMyApiKey()">Generate</button>';
+        panel.innerHTML = `<span class="pill">No API keys</span>
+          ${summaryLine}
+          <button class="btn btn-sm" onclick="createMyApiKey()">Generate</button>`;
         return;
       }
       panel.innerHTML = `<table class="table"><thead><tr>
@@ -74,7 +86,8 @@
         </tr>`;
         }).join('')}
       </tbody></table>
-      <button class="btn btn-sm" onclick="createMyApiKey()" style="margin-top:4px">Generate</button>`;
+      <button class="btn btn-sm" onclick="createMyApiKey()" style="margin-top:4px">Generate</button>
+      ${summaryLine}`;
     } catch(e) { panel.innerHTML = '<span class="pill warn">Error</span>'; }
   }
 
