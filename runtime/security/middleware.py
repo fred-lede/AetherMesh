@@ -54,10 +54,13 @@ AUTH_BYPASS_PATHS: frozenset[str] = frozenset({
     "/redoc",
     "/.well-known/ai-plugin.json",
     "/v1/audio/transcriptions/stream",
+    "/v1/traces",
+    "/v1/traces/export",
 })
 
 AUTH_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/metrics/",
+    "/v1/traces/",
 )
 
 

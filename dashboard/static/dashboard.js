@@ -1180,6 +1180,49 @@
         throw new Error(message);
       }
       renderOverview(await response.json());
+      renderTraces();
+    }
+
+    async function renderTraces() {
+      const panel = document.getElementById('traces-panel');
+      if (!panel) return;
+      try {
+        const response = await fetch('/api/traces');
+        if (response.status === 401) { redirectLogin(); return; }
+        if (!response.ok) {
+          panel.innerHTML = `<span class="muted">Traces source unavailable (${response.status})</span>`;
+          return;
+        }
+        const data = await response.json();
+        if (data.error) {
+          panel.innerHTML = `<span class="muted">Traces unavailable: ${escapeHtml(data.error)}</span>`;
+          return;
+        }
+        const spans = data.spans || [];
+        const traces = data.execution_traces || [];
+        let html = `<div class="mono muted">${spans.length} spans · ${(data.trace_ids || []).length} traces · ${traces.length} execution traces</div>`;
+        if (spans.length) {
+          html += '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Trace</th><th>Span</th><th>Parent</th><th>Elapsed (ms)</th><th>Attributes</th></tr></thead><tbody>';
+          const rows = spans.slice(-200);
+          for (const span of rows) {
+            const attrs = Object.entries(span.attributes || {}).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(' ');
+            html += `<tr><td>${escapeHtml(span.name || '')}</td><td class="mono">${escapeHtml((span.trace_id || '').slice(0, 12))}</td><td class="mono">${escapeHtml((span.span_id || '').slice(0, 12))}</td><td class="mono">${escapeHtml((span.parent_span_id || '—').slice(0, 12))}</td><td>${span.elapsed_ms == null ? '—' : span.elapsed_ms.toFixed(2)}</td><td class="muted">${escapeHtml(attrs)}</td></tr>`;
+          }
+          html += '</tbody></table></div>';
+        } else {
+          html += '<span class="muted">No spans recorded yet.</span>';
+        }
+        if (traces.length) {
+          html += '<div class="table-wrap"><table style="margin-top:12px"><thead><tr><th>Execution</th><th>Duration (ms)</th><th>Spans</th></tr></thead><tbody>';
+          for (const trace of traces.slice(-50)) {
+            html += `<tr><td class="mono">${escapeHtml(trace.execution_id || '')}</td><td>${(trace.total_duration_ms || 0).toFixed(1)}</td><td>${trace.span_count || 0}</td></tr>`;
+          }
+          html += '</tbody></table></div>';
+        }
+        panel.innerHTML = html;
+      } catch (error) {
+        panel.innerHTML = `<span class="muted">Traces unavailable: ${escapeHtml(summarizeError(error))}</span>`;
+      }
     }
 
     async function toggleProvider(event, provider, enable) {

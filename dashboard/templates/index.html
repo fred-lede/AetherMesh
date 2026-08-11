@@ -624,6 +624,7 @@
       <span class="dash-tab" data-tab="providers" onclick="switchTab('providers')">Providers</span>
       {% endif %}
       <span class="dash-tab" data-tab="charts" onclick="switchTab('charts')">Charts</span>
+      <span class="dash-tab" data-tab="traces" onclick="switchTab('traces')">Traces</span>
       <span class="dash-tab" data-tab="system" onclick="switchTab('system')">System</span>
     </div>
 
@@ -925,6 +926,16 @@
       </div>
     </section>
     {% endif %}
+    </div>
+
+    <div class="tab-content" data-tab="traces">
+    <section class="section card">
+      <div class="section-head">
+        <h2>Traces</h2>
+        <span class="mono" style="color: var(--muted);">OTLP-ready spans from the router process</span>
+      </div>
+      <div id="traces-panel"><span class="muted">Loading traces…</span></div>
+    </section>
     </div>
 
   </div>

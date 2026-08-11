@@ -3,6 +3,7 @@ from __future__ import annotations
 """OpenAI-compatible API router. Re-exports from router/openai/ adapters."""
 
 import asyncio
+import inspect
 from pathlib import Path
 import logging
 from typing import Any
@@ -32,6 +33,12 @@ from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_mana
 from router.skills_router import skills_router
 from router.audit_router import router as audit_router
 from router.realtime_router import router as realtime_router
+from router.rag_router import create_rag_router
+from router.sessions_router import create_sessions_router
+from router.usage_router import router as usage_router
+from router.traces_router import router as traces_router
+from runtime.context.execution_context import ExecutionContext
+from runtime.observability.execution_trace import execution_trace_collector
 from runtime.skills.skill_registry import skill_registry
 
 logger = logging.getLogger("openai_router")
@@ -46,6 +53,32 @@ if settings.debug_responses:
     )
 
 add_security_middleware(app, enable_rate_limit=settings.rate_limit_enabled)
+
+_TRACED_PATHS: frozenset[str] = frozenset({"/v1/chat/completions", "/v1/responses"})
+
+
+@app.middleware("http")
+async def request_trace_middleware(request: Request, call_next: Any) -> Any:
+    if request.url.path not in _TRACED_PATHS:
+        return await call_next(request)
+    ctx = ExecutionContext(session_id=request.headers.get("x-session-id", ""))
+    execution_trace_collector.start_trace(ctx)
+    try:
+        response = await call_next(request)
+        original_background = response.background
+
+        async def _finalize() -> None:
+            if original_background is not None:
+                result = original_background()
+                if inspect.isawaitable(result):
+                    await result
+            execution_trace_collector.end_trace(ctx)
+
+        response.background = _finalize
+        return response
+    except BaseException:
+        execution_trace_collector.end_trace(ctx)
+        raise
 
 _cleanup_task: asyncio.Task | None = None
 
@@ -78,6 +111,10 @@ app.include_router(create_responses_router(service))
 app.include_router(create_batches_router(service))
 app.include_router(audit_router)
 app.include_router(realtime_router)
+app.include_router(create_rag_router(service))
+app.include_router(create_sessions_router(service))
+app.include_router(usage_router)
+app.include_router(traces_router)
 
 if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router

@@ -7,6 +7,8 @@ from typing import Any
 
 _current_trace: contextvars.ContextVar[TraceContext | None] = contextvars.ContextVar("trace_context", default=None)
 
+MAX_SPANS = 1000
+
 
 @dataclass
 class Span:
@@ -29,17 +31,35 @@ class TraceContext:
     span_id: str = ""
     parent_span_id: str = ""
 
+    def __enter__(self) -> "TraceContext":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        tracer.end_span(self)
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        for span in tracer._spans:
+            if span.span_id == self.span_id:
+                span.attributes[key] = value
+                return
+
 
 class Tracer:
-    def __init__(self) -> None:
+    def __init__(self, max_spans: int = MAX_SPANS) -> None:
+        self._max_spans = max_spans
         self._spans: list[Span] = []
+
+    def _append_span(self, span: Span) -> None:
+        self._spans.append(span)
+        if len(self._spans) > self._max_spans:
+            del self._spans[: len(self._spans) - self._max_spans]
 
     def start_trace(self, name: str = "request") -> TraceContext:
         trace_id = uuid.uuid4().hex[:16]
         span_id = uuid.uuid4().hex[:16]
         ctx = TraceContext(trace_id=trace_id, span_id=span_id)
         _current_trace.set(ctx)
-        self._spans.append(Span(
+        self._append_span(Span(
             span_id=span_id,
             name=name,
             trace_id=trace_id,
@@ -62,7 +82,7 @@ class Tracer:
             parent_span_id=parent_span_id,
         )
         _current_trace.set(ctx)
-        self._spans.append(Span(
+        self._append_span(Span(
             span_id=span_id,
             parent_span_id=parent_span_id,
             name=name,
