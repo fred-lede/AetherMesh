@@ -630,8 +630,12 @@ class RouterService:
                 if "tools" in original_payload:
                     original_payload["tools"] = self._ensure_openai_tools(original_payload["tools"])
                     original_payload["tools"] = self._filter_openai_tools(original_payload["tools"])
-                if "tool_choice" in original_payload and not original_payload.get("tools"):
-                    original_payload.pop("tool_choice")
+                if "tool_choice" in original_payload:
+                    original_payload["tool_choice"] = self._normalize_tool_choice(
+                        original_payload.get("tool_choice"), original_payload.get("tools")
+                    )
+                    if original_payload["tool_choice"] is None:
+                        original_payload.pop("tool_choice")
                 result = adapter_instance.responses(original_payload)
                 if store:
                     from runtime.responses.response_models import ResponseObject
@@ -1524,6 +1528,40 @@ class RouterService:
             return tools
         return [tool for tool in tools if isinstance(tool, dict) and tool.get("type") == "function"]
 
+    @staticmethod
+    def _normalize_tool_choice(tool_choice: Any, tools: Any) -> Any:
+        if not isinstance(tools, list) or not tools:
+            return None
+        if isinstance(tool_choice, str):
+            return tool_choice if tool_choice in ("auto", "none", "required") else None
+        if not isinstance(tool_choice, dict):
+            return None
+        ttype = tool_choice.get("type")
+        if ttype in ("none", "required"):
+            return ttype
+        if ttype in ("auto", None):
+            return None
+        if ttype == "function":
+            fn = tool_choice.get("function")
+            name = ""
+            if isinstance(fn, dict):
+                name = fn.get("name", "")
+            if not name and isinstance(tool_choice.get("name"), str):
+                name = tool_choice["name"]
+            if not name:
+                return None
+            tool_names: list[str] = []
+            for tool in tools:
+                if not isinstance(tool, dict) or tool.get("type") != "function":
+                    continue
+                tfn = tool.get("function")
+                if isinstance(tfn, dict) and isinstance(tfn.get("name"), str):
+                    tool_names.append(tfn["name"])
+            if name not in tool_names:
+                return None
+            return {"type": "function", "function": {"name": name}}
+        return None
+
     def _normalize_payload_for_provider(
         self,
         payload: dict[str, Any],
@@ -1535,8 +1573,12 @@ class RouterService:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
         if provider == "openai" or is_custom_provider(provider):
             normalized["tools"] = self._filter_openai_tools(normalized.get("tools"))
-        if "tool_choice" in normalized and not normalized.get("tools"):
-            normalized.pop("tool_choice")
+        if "tool_choice" in normalized:
+            normalized["tool_choice"] = self._normalize_tool_choice(
+                normalized.get("tool_choice"), normalized.get("tools")
+            )
+            if normalized["tool_choice"] is None:
+                normalized.pop("tool_choice")
         if provider == "ollama":
             messages = self._extract_messages_from_payload(normalized)
             if messages is not None:

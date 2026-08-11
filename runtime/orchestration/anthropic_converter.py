@@ -200,15 +200,18 @@ class AnthropicRouter:
             openai_tools.append({"type": "function", "function": fn_def})
         return openai_tools
 
-    def _anthropic_tool_choice_to_openai(self, tool_choice: dict[str, Any]) -> dict[str, Any]:
+    def _anthropic_tool_choice_to_openai(self, tool_choice: dict[str, Any]) -> Any:
         ttype = tool_choice.get("type", "auto")
         if ttype == "any":
-            return {"type": "required"}
+            return "required"
         if ttype == "tool":
-            return {"type": "function", "function": {"name": tool_choice.get("name", "")}}
+            name = tool_choice.get("name", "")
+            if not name:
+                return "auto"
+            return {"type": "function", "function": {"name": name}}
         if ttype == "none":
-            return {"type": "none"}
-        return {"type": "auto"}
+            return "none"
+        return "auto"
 
     def _to_anthropic_response(
         self,

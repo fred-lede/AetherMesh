@@ -122,3 +122,12 @@
 - Verified: unkeyed 216,605 + keyed 182,167 = 398,772 (matches Users exactly); 
 ode --check on both JS files; 	est_token_tracker.py 8 passed.
 - Action: restart dashboard (9001) for the new response shape; Ctrl+F5 for the new JS.
+
+### agnes tool_choice 400 修復（2026-08-11）
+- Root cause：_anthropic_tool_choice_to_openai 把 Anthropic {"type":"any"|"none"|"auto"} 轉成 dict {"type":"required"} 等，但 OpenAI ToolChoice untagged enum 只接受字串 "auto"/"none"/"required" 或 {"type":"function","function":{"name"}}。嚴格 Rust serde（agnes）→ data did not match any variant of untagged enum ToolChoice。且 /v1/messages 的 openai_payload 直接送 adapter，無正規化防線。
+- Fix 1（nthropic_converter.py:_anthropic_tool_choice_to_openai）：any→"required"、none→"none"、auto→"auto"、tool+name→function object、tool 無 name→"auto"（皆為合法 variant）
+- Fix 2（openai_handler.py）：新增 _normalize_tool_choice(tool_choice, tools) — 字串只留 auto/none/required；dict 型態轉成對應字串；{"type":"function"} 缺 function/name 或 name 不在 tools → drop；flat 
+ame 欄位正規化成 function object。套用於 _normalize_payload_for_provider（覆蓋 chat/streaming/responses + custom provider）與 handle_responses openai passthrough 分支
+- 	ests/test_tool_choice.py — 新增 21 tests（anthropic 轉換 6 + normalize 11 + payload 整合 4）
+- 驗證：test_tool_choice + test_prompt_caching + test_responses_e2e 39 passed；test_orchestration + test_server_tool_policy + test_web_server_tools 35 passed
+- ?? 需重啟 8002（anthropic_router）載入；8001 亦需重啟（現為 timeout）。另 Ollama 主程式需先恢復，否則 Ollama 路由仍 503

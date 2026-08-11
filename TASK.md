@@ -571,3 +571,11 @@
 - [x] ï¿½ï¿½ï¿½ï¿½ OpenAI path + Ollama/ï¿½ï¿½ï¿½ï¿½ provider ï¿½ï¿½ token usage ï¿½Oï¿½ï¿½ï¿½Gï¿½ì¥»ï¿½Nï¿½wï¿½ï¿½ï¿½ã±µï¿½qï¿½]4 ï¿½ï¿½ path ï¿½ï¿½ï¿½ï¿½ _record_metricsï¿½ï¿½_record_token_usageï¿½^ï¿½F+9 E2E tests ï¿½Ò©ï¿½ chat/streaming ï¿½U provider ï¿½ï¿½ï¿½Oï¿½ï¿½ï¿½Bï¿½Î¦Wï¿½ï¿½ï¿½Lï¿½F33 passed
 - [x] ï¿½ï¿½ï¿½Iï¿½Gusage ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½O user_id is None guard ï¿½X env key ï¿½yï¿½qï¿½nï¿½ï¿½ AIIH_ADMIN_EMAIL ï¿½~ï¿½ï¿½ï¿½oï¿½ï¿½ userï¿½Fï¿½ï¿½ dashboard ï¿½ï¿½ï¿½Uï¿½ï¿½ API Key ï¿½~ï¿½| per-key ï¿½kï¿½ï¿½
 - [x] API Keys Tokens ï¿½ï¿½Ý¤ï¿½ï¿½ï¿½ = ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½Ö¨ï¿½ï¿½ï¿½ JSï¿½]ï¿½L cache-busterï¿½^ï¿½Fï¿½Tï¿½Ó¼ÒªOï¿½[ ?v=randomï¿½Aï¿½jï¿½î­«ï¿½sï¿½ï¿½zï¿½Yï¿½Xï¿½{
+
+## Phase 37 ¡X 8002 Anthropic Provider °·±dÀË¬d¡]2026-08-11¡^??
+- [x] /health 200¡]8002 ¦s¬¡¡^¡F/v1/gpu/status 200¡GRTX 5090 32GB + RTX 4070 Ti 16GB healthy¡A¦ý 0 models loaded¡B0 workers registered
+- [x] POST /v1/messages¡]µL tools¡^¡÷ **503 overloaded_error¡uNo worker was assigned for Ollama provider¡v**¡]Python probe¡FPowerShell ³s½u³Q reset¡^
+- [x] Ollama 122.116.209.1:11434/api/tags ¡÷ WinError 10053 ³s½u³Q¤¤¤î¡F/api/chat ¡÷ timeout ¡÷ **Ollama ¥Dµ{¦¡¤w¦º/µL¦^À³**
+- [x] 8001¡]openai_router¡^/health ¡÷ timeout ¡÷ ºÃ¦ü¦P¦]±¾±¼
+- [x] agnes custom provider¡G¥i¹F¡A¦ý last request 400 	ool_choice: data did not match any variant of untagged enum ToolChoice¡]agnes ÄY®æ Rust serde json_parse_error¡^¡X Codex °e¥Xªº tool_choice value ®æ¦¡¤£²Å
+- [ ] «Ý³B²z¡G­«±Ò Ollama ¡÷ ­«±Ò 8001/8002 Åý workers ­«·sµù¥U¡Fagnes tool_choice 400 »Ý¦bÂàµo«e¥¿³W¤Æ tool_choice¡]²{¶ÈµL tools ®É­éÂ÷¡^
