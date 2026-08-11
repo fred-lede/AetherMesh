@@ -7,7 +7,15 @@ models:
         port: 11434
     capabilities: [chat, tools, vision, audio]
     estimated_vram_mb:
-
+    
+  - name: muse-glimmer:30b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, thinking, tools, vision]
+    estimated_vram_mb:
+    
   - name: gemma4:26b
     provider: ollama
     worker_bindings:
