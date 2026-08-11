@@ -64,14 +64,30 @@ class AnthropicRouter:
             if isinstance(system, str):
                 messages.append({"role": "system", "content": system})
             elif isinstance(system, list):
-                parts: list[str] = []
-                for block in system:
-                    if isinstance(block, str):
-                        parts.append(block)
-                    elif isinstance(block, dict):
-                        parts.append(block.get("text", ""))
-                if parts:
-                    messages.append({"role": "system", "content": "\n".join(parts)})
+                blocks = [b for b in system if isinstance(b, dict)]
+                has_cache = any(isinstance(b.get("cache_control"), dict) for b in blocks)
+                if has_cache:
+                    parts = []
+                    for block in system:
+                        if isinstance(block, str):
+                            parts.append({"type": "text", "text": block})
+                        elif isinstance(block, dict):
+                            part = {"type": "text", "text": block.get("text", "")}
+                            cache = block.get("cache_control")
+                            if isinstance(cache, dict):
+                                part["cache_control"] = cache
+                            parts.append(part)
+                    if parts:
+                        messages.append({"role": "system", "content": parts})
+                else:
+                    parts: list[str] = []
+                    for block in system:
+                        if isinstance(block, str):
+                            parts.append(block)
+                        elif isinstance(block, dict):
+                            parts.append(block.get("text", ""))
+                    if parts:
+                        messages.append({"role": "system", "content": "\n".join(parts)})
 
         for msg in payload.get("messages", []):
             role = msg.get("role", "user")
