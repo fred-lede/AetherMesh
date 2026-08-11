@@ -30,6 +30,7 @@ from runtime.orchestration.provider_router import (
 )
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.structured_output import apply_structured_output
+from runtime.rag.injector import inject_rag_context
 from runtime.memory import memory_manager
 from runtime.security.auth.token_tracker import record_token_usage
 from runtime.security.database import SessionLocal
@@ -159,6 +160,7 @@ class RouterService:
 
     def handle_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
         self._inject_web_search(payload)
+        inject_rag_context(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         prepared_payload, file_ids = _resolve_file_ids_in_payload(prepared_payload)
         request_id = f"req_{uuid.uuid4().hex[:24]}"
@@ -577,6 +579,7 @@ class RouterService:
         from runtime.responses.output_converter import chat_completion_to_response, error_response
         from runtime.responses.response_runtime import response_runtime
 
+        inject_rag_context(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         if self._is_async_requested(prepared_payload):
             return self._enqueue_async_task("/v1/responses", prepared_payload)
