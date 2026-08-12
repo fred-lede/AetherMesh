@@ -414,6 +414,12 @@ def _probe_custom_provider(name: str) -> dict[str, Any]:
     data = settings.load_custom_providers()
     cfg = data.get(name)
     if not isinstance(cfg, dict):
+        for key, value in data.items():
+            if isinstance(value, dict) and key.lower() == name.lower():
+                cfg = value
+                name = key
+                break
+    if not isinstance(cfg, dict):
         return {"name": name, "ok": False, "status": "not_found", "message": f"Provider '{name}' not found"}
     base_url = str(cfg.get("base_url", "")).rstrip("/")
     api_key = str(cfg.get("api_key", "")).strip()

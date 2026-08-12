@@ -378,3 +378,22 @@ class TestDashboardAPI:
             resp = client.post("/api/custom-providers/reload")
             assert resp.status_code == 200
             assert resp.json()["ok"] is True
+
+
+def test_probe_custom_provider_case_insensitive(monkeypatch):
+    from config.settings import Settings, settings
+    from dashboard import dashboard_server
+
+    monkeypatch.setattr(Settings, "load_custom_providers", lambda self: {
+        "OpenCode": {"api_key": "sk-x", "api_type": "openai", "base_url": "https://opencode.ai/zen/v1"},
+    })
+    fake_resp = MagicMock()
+    fake_resp.ok = True
+    fake_resp.elapsed.total_seconds.return_value = 0.5
+    fake_resp.json.return_value = {"data": [{"id": "m1"}, {"id": "m2"}]}
+    with patch.object(dashboard_server, "get_session", return_value=MagicMock(get=MagicMock(return_value=fake_resp))):
+        result = dashboard_server._probe_custom_provider("opencode")
+    assert result["ok"] is True
+    assert result["name"] == "OpenCode"
+    assert result["model_count"] == 2
+    assert result["base_url"] == "https://opencode.ai/zen/v1"
