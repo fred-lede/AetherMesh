@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import tempfile
 import time
+
+os.environ["AIIH_DB_PATH"] = tempfile.mktemp(suffix=".db")
 
 from runtime.security.auth.token_tracker import get_token_usage_breakdown, record_token_usage
 from runtime.security.database import SessionLocal, engine

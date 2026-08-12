@@ -131,3 +131,22 @@ ame Äæ¦ì¥¿³W¤Æ¦¨ function object¡C®M¥Î©ó _normalize_payload_for_provider¡]ÂÐ»\ c
 - 	ests/test_tool_choice.py ¡X ·s¼W 21 tests¡]anthropic Âà´« 6 + normalize 11 + payload ¾ã¦X 4¡^
 - ÅçÃÒ¡Gtest_tool_choice + test_prompt_caching + test_responses_e2e 39 passed¡Ftest_orchestration + test_server_tool_policy + test_web_server_tools 35 passed
 - ?? »Ý­«±Ò 8002¡]anthropic_router¡^¸ü¤J¡F8001 ¥ç»Ý­«±Ò¡]²{¬° timeout¡^¡C¥t Ollama ¥Dµ{¦¡»Ý¥ý«ì´_¡A§_«h Ollama ¸ô¥Ñ¤´ 503
+
+## 2026-08-12 â€” Phase 38: strip `AIIH/` alias prefix so prefixed models route correctly
+
+### Fixes
+- `AIIH/muse-glimmer:30b` requests fell back (gemma4:31b-it-qat / gemma4:e2b) â€” the newly added model was unusable.
+- Root cause: `settings.strip_model_route_prefix` only stripped `anthropic/`, `nvidia_nim/`, `ollama_cloud/`, `ollama/`, `openai/`, `gemini/`, `xtts/` â€” not the `AIIH/` alias prefix. `AIIH/muse-glimmer:30b` never matched the registry â†’ capability routing â†’ `local_model_fallback`; `messages_adapter:162` then overwrote the payload model with the fallback model, so Ollama actually ran the fallback while the response echoed the requested name. `/api/ps` on 192.168.1.200 confirmed gemma4:e2b was loaded.
+- Scope: every `AIIH/<model>` without an alias entry silently ran the fallback (including `AIIH/gemma4:26b`).
+- Fix in `config/settings.py:strip_model_route_prefix`: added `model_alias_prefix()` to the prefix list and made stripping iterative (handles `anthropic/AIIH/...` nesting). `resolve_model_alias` inherits it, and `routing_engine.route` uses it at line 344.
+- Verified: `AIIH/muse-glimmer:30b` â†’ `ollama:muse-glimmer:30b` + worker 192.168.1.200 (no fallback); aliases still resolve (`AIIH/claude-3-5-haiku-agnes-2.0-flash` â†’ agnes).
+- Tests: +2 in `tests/test_routing_engine.py` (multi-layer prefix strip; alias-prefixed model routes to registry not fallback) â€” 34 passed; full suite 709 passed.
+
+## 2026-08-12 â€” Phase 39: Dashboard custom-provider Probe case-sensitivity fix
+
+### Fixes
+- The OpenCode card's Probe button in Dashboard "Providers & Routing" appeared to do nothing (agnes and other cards worked).
+- Root cause: `_probe_provider()` lowercases the name before dispatching (`OpenCode` -> `opencode`), then `_probe_custom_provider()` did a case-sensitive `data.get("opencode")` against custom_providers.json keyed `"OpenCode"` -> returned `{ok: False, status: "not_found"}` (HTTP 200), so the UI reported a failure the user didn't notice.
+- `dashboard/dashboard_server.py:_probe_custom_provider` now falls back to a case-insensitive key scan and returns the canonical stored name.
+- Verified against the live provider: `_probe_provider("OpenCode")` -> `{ok: True, status: "healthy", model_count: 63, latency_ms: 662}`.
+- Tests: +1 in `tests/test_custom_providers.py` (case-insensitive probe) â€” 32 passed.

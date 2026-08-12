@@ -579,3 +579,30 @@
 - [x] 8001¡]openai_router¡^/health ¡÷ timeout ¡÷ ºÃ¦ü¦P¦]±¾±¼
 - [x] agnes custom provider¡G¥i¹F¡A¦ı last request 400 	ool_choice: data did not match any variant of untagged enum ToolChoice¡]agnes ÄY®æ Rust serde json_parse_error¡^¡X Codex °e¥Xªº tool_choice value ®æ¦¡¤£²Å
 - [ ] «İ³B²z¡G­«±Ò Ollama ¡÷ ­«±Ò 8001/8002 Åı workers ­«·sµù¥U¡Fagnes tool_choice 400 »İ¦bÂàµo«e¥¿³W¤Æ tool_choice¡]²{¶ÈµL tools ®É­éÂ÷¡^
+
+## Phase 38 â€” AIIH/ å‰ç¶´æ¨¡å‹è·¯ç”±ä¿®æ­£ï¼ˆmuse-glimmer:30b ç„¡æ³•ä½¿ç”¨ï¼‰âœ… (2026-08-12)
+- [x] ç¾è±¡ï¼š`AIIH/muse-glimmer:30b` è«‹æ±‚å›é€€åˆ° `gemma4:31b-it-qat`/`gemma4:e2b`ï¼Œç„¡æ³•çœŸæ­£ä½¿ç”¨ muse-glimmer
+- [x] æ ¹å› ï¼š`settings.strip_model_route_prefix` åªå‰ `anthropic/` `nvidia_nim/` `ollama_cloud/` `ollama/` `openai/` `gemini/` `xtts/`ï¼Œ**ä¸å‰ `AIIH/`ï¼ˆmodel_alias_prefixï¼‰**ã€‚`AIIH/muse-glimmer:30b` â†’ registry æ¯”å°å¤±æ•— â†’ capability routing â†’ `local_model_fallback`ï¼ˆ8002 è·¯å¾‘å› gemma4:e2bï¼‰ï¼›`messages_adapter:162` å†æŠŠ `routing_decision.model` è¦†å¯«é€² payload â†’ Ollama å¯¦éš›è·‘ fallback æ¨¡å‹ï¼ˆ`/api/ps` ä½è­‰ 192.168.1.200 è¼‰å…¥ gemma4:e2bï¼‰ï¼ŒéŸ¿æ‡‰åªå‡æ€§ echo è«‹æ±‚åç¨±
+- [x] å½±éŸ¿ç¯„åœï¼šæ‰€æœ‰ `AIIH/<model>`ï¼ˆç„¡ alias entryï¼‰è«‹æ±‚éƒ½éœé»˜è·‘ fallback æ¨¡å‹ï¼Œé€£ `AIIH/gemma4:26b` ä¹Ÿæ˜¯
+- [x] ä¿®æ­£ï¼ˆ`config/settings.py:strip_model_route_prefix`ï¼‰ï¼šprefix æ¸…å–®åŠ å…¥ `model_alias_prefix()`ï¼Œæ”¹ç‚ºè¿­ä»£å‰é™¤ï¼ˆ`anthropic/AIIH/...` å¤šå±¤ä¹Ÿå¯å…¨å‰ï¼‰ï¼›`resolve_model_alias` è‡ªå‹•ç¹¼æ‰¿ï¼ˆrouting_engine.route:344 ä¹Ÿç”¨åŒä¸€å‡½å¼ï¼‰
+- [x] ä¿®å¾Œé©—è­‰ï¼š`AIIH/muse-glimmer:30b` â†’ `ollama:muse-glimmer:30b` + worker 192.168.1.200ï¼ˆä¸å† fallbackï¼‰ï¼›`anthropic/AIIH/muse-glimmer:30b` ä¹Ÿæ­£å¸¸ï¼›`AIIH/gemma4:26b` â†’ `gemma4:26b`ï¼ˆåŸæœ¬ä¹Ÿéœé»˜è·‘ e2bï¼Œä¸€ä½µä¿®æ­£ï¼‰ï¼›alias ä»æ­£å¸¸ï¼ˆ`AIIH/claude-3-5-haiku-agnes-2.0-flash` â†’ agnesï¼‰
+- [x] `tests/test_routing_engine.py` â€” æ–°å¢ 2 testsï¼ˆstrip å‰ alias prefix å¤šå±¤ã€alias å‰ç¶´æ¨¡å‹è·¯ç”±åˆ° registry è€Œé fallbackï¼‰ï¼›34 passedï¼›å…¨é‡ 709 passedï¼ˆ22 å€‹æ—¢æœ‰ç’°å¢ƒå¤±æ•—ï¼šdashboard_auth / test_security AIIH_API_KEY / test_file_parser ç¼º pypdf ç­‰ï¼Œèˆ‡æœ¬æ¬¡ç„¡é—œï¼‰
+- [x] âš ï¸ éœ€é‡å•Ÿ 8001/8002 è¼‰å…¥ä¿®æ­£ï¼›å·²ç¢ºèª 8001 æœ‰ /v1/tracesã€8002 ç„¡ï¼ˆanthropic app æœª includeï¼‰
+
+## Phase 39 â€” Dashboard OpenCode card Probe æ²’åæ‡‰ âœ… (2026-08-12)
+- [x] ç¾è±¡ï¼šDashboard Providersã€ŒPROVIDERS & ROUTINGã€å€ OpenCode å¡ç‰‡æŒ‰ Probe æ²’åæ‡‰ï¼ˆagnes/å…¶ä»–å¡ç‰‡æ­£å¸¸ï¼‰
+- [x] æ ¹å› ï¼š`_probe_provider()` å…ˆæŠŠåç¨± `.lower()`ï¼ˆ"OpenCode" â†’ "opencode"ï¼‰å†å‘¼å« `_probe_custom_provider("opencode")`ï¼Œä½†å¾Œè€…å° `settings.load_custom_providers()` çš„ dict åš**å€åˆ†å¤§å°å¯«**çš„ `data.get("opencode")` â†’ None â†’ å› `{ok: False, status: "not_found", message: "Provider 'opencode' not found"}`ï¼ˆHTTP 200ï¼ŒJS é¡¯ç¤º probe failed / çœ‹ä¼¼æ²’åæ‡‰ï¼‰
+- [x] `is_custom_provider()` æœ¬èº«ä¸å€åˆ†å¤§å°å¯«ï¼Œæ‰€ä»¥å…ˆèµ°åˆ° custom probe æ‰ç‚¸
+- [x] ä¿®æ­£ï¼ˆ`dashboard/dashboard_server.py:_probe_custom_provider`ï¼‰ï¼šdict æœªå‘½ä¸­æ™‚æ”¹ç‚ºå¤§å°å¯«ä¸æ•æ„Ÿçš„ key æƒæï¼Œä¸¦å›å‚³**æ­£è¦åŒ– key**ï¼ˆ"OpenCode"ï¼‰
+- [x] é©—è­‰ï¼š`_probe_provider('OpenCode')` å¯¦æ¸¬ â†’ `{ok: True, healthy, model_count: 63, latency_ms: 662}`ï¼ˆé€£ https://opencode.ai/zen/v1ï¼‰
+- [x] `tests/test_custom_providers.py` â€” +1 testï¼ˆå¤§å°å¯«ä¸æ•æ„Ÿ probeï¼‰ï¼›32 passed
+- [x] âš ï¸ éœ€é‡å•Ÿ dashboardï¼ˆ9001ï¼‰è¼‰å…¥ä¿®æ­£
+
+## Phase 40 -??Token ?????Âk¹s¨Æ¥ó½Õ¬d + ´ú¸Õ DB ???Â÷¨¾Å@ (2026-08-12)
+- [x] ½Õ¬d¡Gtoken_usage ??38 ??Âk¹s­«ºâ¡]max id 38 -> 1¡^¡A??³Ñ 29 ?????¬°´ú¸Õ¸ê®Æ + ¯u¹ê¬y¶q
+- [x] ??¦]½T»{¡G	ests/test_usage_export.py:21 ??db.query(TokenUsage).delete() ???¤J´ú¸Õ rows¡]100/50, 200/60, 300/70, user_id=1, api_key_id=2¡^¡A¦ı????? 09:11 °õ¦æ®É??? import ??¤ŞÀº¸j¨ì???¯u??? config/aiih.db¡]¸ÓÀÉ¥¼³] AIIH_DB_PATH¡^¡÷ ??²M???¯u??? 38 ??¬ö¿ı
+- [x] ¦¸­n¦Ã¬V¡G	ests/test_dashboard_auth.py ??13:18 ???¯u??? DB ???¤J´ú¸Õ user me/lex ??api_keys 3/7¡]import ??§Ç bug¡Gengine ?? module ?? import ??¸j©w¡^
+- [x] ­×¥¿ 1¡G	ests/conftest.py ????? conftest ?? import ??±j¨î AIIH_DB_PATH «ü¦V tempfile ¡÷ ???¾ã´ú¸Õ process ¥Ã¤£¸I???¯u??? DB
+- [x] ­×¥¿ 2¡G	ests/test_usage_export.py ??¨­¤]³] temp DB path¡]defense in depth¡A³æ¿W¶]¤]¦w¥ş¡^
+- [x] ??²b???¯u??? DB¡G§R´ú¸Õ users me/alex¡Bkeys 3/7¡Btoken_usage ids 1-3 ¡÷ «ì´_ users=1, api_keys=5, token_usage=26 ??¯u???¬ö¿ı
+- [x] ÅçÃÒ¡Gpytest tests/test_usage_export.py ??passed¡F´ú¸Õ«á¯u??? DB mtime ??COUNT §¹¥ş??ÅÜ
