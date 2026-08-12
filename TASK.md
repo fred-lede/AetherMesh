@@ -628,3 +628,4 @@
 - [x] document server ??在 9500（logs/document_server.log）
 - [ ] 其他 agent ??入：POST /v1/documents/extract（multipart file）；/health ???檢查；可?? AIIH_DOCUMENT_API_KEY ???權
 - [ ] 建議：??需啟用 agent tool ???設 .env AIIH_MINERU_ENABLED=true ???重啟 launcher
+- [x] 決定不加入 Dashboard 卡片（先不加），保持現狀，API /v1/documents/health 已足夠監控
