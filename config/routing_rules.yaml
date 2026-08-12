@@ -10,9 +10,9 @@ model_aliases:
   alias_prefix: AIIH
   entries:
     # Claude tier → local model mapping
-    claude-sonnet-4-glm-5.2: z-ai/glm-5.2      # Opus tier — strongest reasoning(5090)
-    claude-sonnet-4-6-big-pickle: big-pickle               # Sonnet tier — balanced all-round(5090)
-    claude-3-5-haiku-agnes-2.0-flash: agnes-2.0-flash       # Haiku tier — fast & light (4070)
+    claude-sonnet-4-agnes: agnes-2.0-flash      # Opus tier — strongest reasoning(5090)
+    claude-sonnet-4-6-big: big-pickle               # Sonnet tier — balanced all-round(5090)
+    claude-3-5-haiku-muse: muse-glimmer:30b       # Haiku tier — fast & light (4070)
 
 fallback:
   # Explicit local Ollama model used when cloud providers are rate-limited,

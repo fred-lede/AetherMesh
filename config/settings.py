@@ -290,9 +290,18 @@ class Settings:
 
     def strip_model_route_prefix(self, model: str) -> str:
         clean_model = str(model or "")
-        for prefix in ("anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/", "xtts/"):
-            if clean_model.startswith(prefix):
-                return clean_model[len(prefix):]
+        prefixes = ["anthropic/", "nvidia_nim/", "ollama_cloud/", "ollama/", "openai/", "gemini/", "xtts/"]
+        alias_prefix = self.model_alias_prefix()
+        if alias_prefix:
+            prefixes.append(f"{alias_prefix}/")
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes:
+                if clean_model.startswith(prefix):
+                    clean_model = clean_model[len(prefix):]
+                    changed = True
+                    break
         return clean_model
 
     def resolve_model_alias(self, model: str) -> str:

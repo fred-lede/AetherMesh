@@ -569,3 +569,36 @@ def test_save_state_raises_after_all_retries(monkeypatch) -> None:
     monkeypatch.setattr("os.replace", always_fail)
     with pytest.raises(PermissionError):
         engine.set_provider_enabled("ollama", True)
+
+
+# ── alias prefix stripping ─────────────────────────────────────────
+
+def test_strip_model_route_prefix_strips_alias_prefix(monkeypatch) -> None:
+    from config.settings import Settings, settings
+
+    monkeypatch.setattr(Settings, "model_alias_prefix", lambda self: "AIIH")
+    assert settings.strip_model_route_prefix("AIIH/muse-glimmer:30b") == "muse-glimmer:30b"
+    assert settings.strip_model_route_prefix("anthropic/AIIH/muse-glimmer:30b") == "muse-glimmer:30b"
+    assert settings.strip_model_route_prefix("openai/AIIH/gemma4:26b") == "gemma4:26b"
+    assert settings.strip_model_route_prefix("openai/gpt-4.1-mini") == "gpt-4.1-mini"
+    assert settings.resolve_model_alias("AIIH/muse-glimmer:30b") == "muse-glimmer:30b"
+
+
+def test_alias_prefixed_model_routes_to_registry_not_fallback(monkeypatch) -> None:
+    from config.settings import Settings, settings
+
+    monkeypatch.setattr(Settings, "model_alias_prefix", lambda self: "AIIH")
+    engine = ModelRoutingEngine()
+    registry = [{
+        "name": "muse-glimmer:30b",
+        "provider": "ollama",
+        "capabilities": ["chat", "thinking", "tools"],
+        "worker_bindings": [{"node_id": "node-01", "gpu_index": 0}],
+    }]
+    with patch.object(engine, "_first_healthy_binding", return_value={"base_url": "http://192.168.1.200:11434"}):
+        with patch.object(engine, "_provider_available_locked", return_value=True):
+            decision = engine.route("AIIH/muse-glimmer:30b", registry_models=registry)
+    assert decision.provider == "ollama"
+    assert decision.model == "muse-glimmer:30b"
+    assert decision.worker is not None
+    assert "local_model_fallback" not in " ".join(decision.rules_applied)
