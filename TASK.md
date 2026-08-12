@@ -606,3 +606,25 @@
 - [x] 修正 2：	ests/test_usage_export.py ??身也設 temp DB path（defense in depth，單獨跑也安全）
 - [x] ??淨???真??? DB：刪測試 users me/alex、keys 3/7、token_usage ids 1-3 → 恢復 users=1, api_keys=5, token_usage=26 ??真???紀錄
 - [x] 驗證：pytest tests/test_usage_export.py ??passed；測試後真??? DB mtime ??COUNT 完全??變
+
+## Phase 41 -?? MinerU PDF 抽取整合（準備中） (2026-08-12)
+- [x] 評估：適合做選用性 builtin tool（lazy import / subprocess，不進核心依賴）
+- [x] ??建 .venv312（Python 3.12.8）獨立環境（主 .venv 是 3.14，MinerU 只支援 3.10-3.13）
+- [x] 安裝 mineru 3.4.4（新版走 onnxruntime，??需 torch）??CLI 驗證：mineru -p <file> -o <out> -m auto -b pipeline
+- [ ] 首次執行會從 modelscope ??載 layout/OCR ??型（需網路）
+- [ ] 實作 untime/tools/builtin/document.py（document_to_markdown tool）+ Settings 欄位 + 測試
+
+## Phase 41 -?? MinerU PDF 抽取整合 (2026-08-12)
+- [x] ??建 .venv312（Python 3.12.8）獨立環境；主 .venv 3.14 ????MinerU 只支援 3.10-3.13
+- [x] 安裝 mineru 3.4.4 + mineru[pipeline] extras + torch 2.11.0+cu128（RTX 5090 CUDA 可用）
+- [x] ??因排雷：(1) mineru.exe launcher shebang ???誤指向 uv 3.14 → ??用 .venv312\Scripts\python.exe -m mineru.cli.client；(2) ???venv ???父進程繼承 PYTHONHOME/UV_INTERNAL__PYTHONHOME（uv 3.14）→ 3.12 子進程 stdlib ???3.14 ???壞 → converter ?? subprocess env ???除???些???變數
+- [x] ??????untime/documents/mineru_converter.py（subprocess CLI wrapper，輸出 markdown + meta）
+- [x] ??????untime/tools/builtin/document.py：document_to_markdown tool（lazy import，??設禁用，AIIH_MINERU_ENABLED=true ???開）
+- [x] ??????document_server/document_server.py：REST API（port 9500，AIIH_DOCUMENT_PORT）
+- [x] Settings ???位：mineru_enabled/python/backend/method/timeout + document_port/api_key；.env.example ???新
+- [x] Launcher ???入 document_server service
+- [x] 測試：tests/test_document_tool.py ??9 passed（mock，零外部依賴）
+- [x] E2E：???真??? PDF ??pipeline backend → markdown 成功（含首次模型下載，~65s）；API TestClient 上傳抽取成功
+- [x] document server ??在 9500（logs/document_server.log）
+- [ ] 其他 agent ??入：POST /v1/documents/extract（multipart file）；/health ???檢查；可?? AIIH_DOCUMENT_API_KEY ???權
+- [ ] 建議：??需啟用 agent tool ???設 .env AIIH_MINERU_ENABLED=true ???重啟 launcher

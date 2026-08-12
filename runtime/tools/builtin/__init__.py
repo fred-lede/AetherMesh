@@ -16,12 +16,13 @@ def register_all() -> None:
     if _registered:
         return
 
-    from runtime.tools.builtin import filesystem, http_request, python, shell
+    from runtime.tools.builtin import document, filesystem, http_request, python, shell
 
     shell.register(tool_registry)
     filesystem.register(tool_registry)
     python.register(tool_registry)
     http_request.register(tool_registry)
+    document.register(tool_registry)
 
     _registered = True
     logger.info(

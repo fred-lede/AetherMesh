@@ -127,6 +127,15 @@ class Settings:
     otel_export_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_OTEL_EXPORT_ENABLED", "false"))
     traces_url: str = field(default_factory=lambda: os.getenv("AIIH_TRACES_URL", "http://127.0.0.1:8001"))
     max_upload_size_mb: int = field(default_factory=lambda: _env_int("AIIH_MAX_UPLOAD_SIZE_MB", 50))
+    mineru_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_MINERU_ENABLED", "false"))
+    mineru_python: str = field(default_factory=lambda: os.getenv("AIIH_MINERU_PYTHON", "").strip())
+    mineru_timeout_s: int = field(default_factory=lambda: _env_int("AIIH_MINERU_TIMEOUT", 900))
+    mineru_backend: str = field(
+        default_factory=lambda: os.getenv("AIIH_MINERU_BACKEND", "pipeline").strip() or "pipeline"
+    )
+    mineru_method: str = field(
+        default_factory=lambda: os.getenv("AIIH_MINERU_METHOD", "auto").strip() or "auto"
+    )
     allowed_upload_mime_types: list[str] = field(
         default_factory=lambda: _env_csv("AIIH_ALLOWED_UPLOAD_MIME_TYPES",
             ",".join([

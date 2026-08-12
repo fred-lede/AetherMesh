@@ -150,3 +150,21 @@ ame Äæ¦ì¥¿³W¤Æ¦¨ function object¡C®M¥Î©ó _normalize_payload_for_provider¡]ÂÐ»\ c
 - `dashboard/dashboard_server.py:_probe_custom_provider` now falls back to a case-insensitive key scan and returns the canonical stored name.
 - Verified against the live provider: `_probe_provider("OpenCode")` -> `{ok: True, status: "healthy", model_count: 63, latency_ms: 662}`.
 - Tests: +1 in `tests/test_custom_providers.py` (case-insensitive probe) â€” 32 passed.
+
+## 2026-08-12 - Phase 41: MinerU PDF/document extraction (builtin tool + REST API)
+
+### What
+- New builtin agent tool document_to_markdown (PDF/DOCX/PPTX/XLSX/image -> Markdown via MinerU).
+- New REST API server document_server (port 9500) so external agents can POST a document and get Markdown back.
+- Separate Python 3.12 venv .venv312 (main runtime is 3.14; MinerU supports 3.10-3.13). torch 2.11.0+cu128 on RTX 5090.
+- Settings: AIIH_MINERU_ENABLED/PYTHON/BACKEND/METHOD/TIMEOUT, AIIH_DOCUMENT_PORT/API_KEY.
+
+### Gotchas fixed
+- mineru.exe launcher embeds a broken shebang (uv 3.14) -> invoke .venv312\Scripts\python.exe -m mineru.cli.client.
+- Parent uv-managed 3.14 process exports PYTHONHOME/UV_INTERNAL__PYTHONHOME; child 3.12 inherits them and loads 3.14 stdlib (SRE mismatch). Converter strips those vars from the subprocess env.
+- First run downloads layout/OCR models (needs network).
+
+### Verification
+- 9 mocked tests pass (zero external deps).
+- E2E: real PDF through pipeline backend -> Markdown in ~65s; API upload endpoint returns markdown.
+- Server running on port 9500.
