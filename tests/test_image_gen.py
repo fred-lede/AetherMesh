@@ -27,6 +27,10 @@ def test_adapter_generate_returns_images():
     assert images[0].startswith("iVBOR")
     assert images[1].startswith("iVBOR")
     assert mock_session.post.call_count == 2
+    payload = mock_session.post.call_args[1]["json"]
+    assert payload["format"] == "image"
+    assert payload["model"] == "x/z-image-turbo:fp8"
+    assert payload["prompt"] == "a cat"
 
 
 def test_adapter_generate_handles_empty_image():
