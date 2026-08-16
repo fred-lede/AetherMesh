@@ -26,7 +26,6 @@ class ImageGenAdapter:
         payload: dict[str, Any] = {
             "model": model,
             "prompt": prompt,
-            "format": "image",
             "stream": False,
         }
         for _ in range(n):
