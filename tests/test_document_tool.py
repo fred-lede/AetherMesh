@@ -135,3 +135,43 @@ def test_mineru_available(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
         lambda: [str(tmp_path / "python.exe"), "-m", "mineru.cli.client"],
     )
     assert mineru_available() is True
+
+
+def test_convert_document_embeds_images(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from runtime.documents import mineru_converter
+
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+    out = tmp_path / "out"
+    md_dir = out / "doc" / "auto"
+    img_dir = md_dir / "images"
+    img_dir.mkdir(parents=True)
+    img = img_dir / "a1.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0 fakejpeg")
+    (md_dir / "doc.md").write_text(
+        "# converted\n\n![](images/a1.jpg)", encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "runtime.documents.mineru_converter._mineru_command",
+        lambda: [str(tmp_path / "python.exe"), "-m", "mineru.cli.client"],
+    )
+    monkeypatch.setattr(settings, "mineru_python", "")
+
+    def fake_run(cmd, **kwargs):
+        return _Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = convert_document(source, out_dir=out, include_images=True)
+    assert "![](data:image/jpeg;base64," in result["markdown"]
+    assert "images/a1.jpg" not in result["markdown"].split("data:")[0]
+    assert result["image_count"] == 1
+
+
+def test_embed_images_missing_image_keeps_link(tmp_path: Path) -> None:
+    from runtime.documents.mineru_converter import _embed_images_in_markdown
+
+    md_path = tmp_path / "out" / "doc" / "auto" / "doc.md"
+    md_path.parent.mkdir(parents=True)
+    md_path.write_text("![](images/missing.jpg)", encoding="utf-8")
+    result = _embed_images_in_markdown("![](images/missing.jpg)", md_path)
+    assert result == "![](images/missing.jpg)"

@@ -572,13 +572,13 @@
 - [x] ï¿½ï¿½ï¿½Iï¿½Gusage ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½O user_id is None guard ï¿½X env key ï¿½yï¿½qï¿½nï¿½ï¿½ AIIH_ADMIN_EMAIL ï¿½~ï¿½ï¿½ï¿½oï¿½ï¿½ userï¿½Fï¿½ï¿½ dashboard ï¿½ï¿½ï¿½Uï¿½ï¿½ API Key ï¿½~ï¿½| per-key ï¿½kï¿½ï¿½
 - [x] API Keys Tokens ï¿½ï¿½İ¤ï¿½ï¿½ï¿½ = ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½Ö¨ï¿½ï¿½ï¿½ JSï¿½]ï¿½L cache-busterï¿½^ï¿½Fï¿½Tï¿½Ó¼ÒªOï¿½[ ?v=randomï¿½Aï¿½jï¿½î­«ï¿½sï¿½ï¿½zï¿½Yï¿½Xï¿½{
 
-## Phase 37 ¡X 8002 Anthropic Provider °·±dÀË¬d¡]2026-08-11¡^??
-- [x] /health 200¡]8002 ¦s¬¡¡^¡F/v1/gpu/status 200¡GRTX 5090 32GB + RTX 4070 Ti 16GB healthy¡A¦ı 0 models loaded¡B0 workers registered
-- [x] POST /v1/messages¡]µL tools¡^¡÷ **503 overloaded_error¡uNo worker was assigned for Ollama provider¡v**¡]Python probe¡FPowerShell ³s½u³Q reset¡^
-- [x] Ollama 122.116.209.1:11434/api/tags ¡÷ WinError 10053 ³s½u³Q¤¤¤î¡F/api/chat ¡÷ timeout ¡÷ **Ollama ¥Dµ{¦¡¤w¦º/µL¦^À³**
-- [x] 8001¡]openai_router¡^/health ¡÷ timeout ¡÷ ºÃ¦ü¦P¦]±¾±¼
-- [x] agnes custom provider¡G¥i¹F¡A¦ı last request 400 	ool_choice: data did not match any variant of untagged enum ToolChoice¡]agnes ÄY®æ Rust serde json_parse_error¡^¡X Codex °e¥Xªº tool_choice value ®æ¦¡¤£²Å
-- [ ] «İ³B²z¡G­«±Ò Ollama ¡÷ ­«±Ò 8001/8002 Åı workers ­«·sµù¥U¡Fagnes tool_choice 400 »İ¦bÂàµo«e¥¿³W¤Æ tool_choice¡]²{¶ÈµL tools ®É­éÂ÷¡^
+## Phase 37 ï¿½X 8002 Anthropic Provider ï¿½ï¿½ï¿½dï¿½Ë¬dï¿½]2026-08-11ï¿½^??
+- [x] /health 200ï¿½]8002 ï¿½sï¿½ï¿½ï¿½^ï¿½F/v1/gpu/status 200ï¿½GRTX 5090 32GB + RTX 4070 Ti 16GB healthyï¿½Aï¿½ï¿½ 0 models loadedï¿½B0 workers registered
+- [x] POST /v1/messagesï¿½]ï¿½L toolsï¿½^ï¿½ï¿½ **503 overloaded_errorï¿½uNo worker was assigned for Ollama providerï¿½v**ï¿½]Python probeï¿½FPowerShell ï¿½sï¿½uï¿½Q resetï¿½^
+- [x] Ollama 122.116.209.1:11434/api/tags ï¿½ï¿½ WinError 10053 ï¿½sï¿½uï¿½Qï¿½ï¿½ï¿½ï¿½F/api/chat ï¿½ï¿½ timeout ï¿½ï¿½ **Ollama ï¿½Dï¿½{ï¿½ï¿½ï¿½wï¿½ï¿½/ï¿½Lï¿½^ï¿½ï¿½**
+- [x] 8001ï¿½]openai_routerï¿½^/health ï¿½ï¿½ timeout ï¿½ï¿½ ï¿½Ã¦ï¿½ï¿½Pï¿½]ï¿½ï¿½ï¿½ï¿½
+- [x] agnes custom providerï¿½Gï¿½iï¿½Fï¿½Aï¿½ï¿½ last request 400 	ool_choice: data did not match any variant of untagged enum ToolChoiceï¿½]agnes ï¿½Yï¿½ï¿½ Rust serde json_parse_errorï¿½^ï¿½X Codex ï¿½eï¿½Xï¿½ï¿½ tool_choice value ï¿½æ¦¡ï¿½ï¿½ï¿½ï¿½
+- [ ] ï¿½İ³Bï¿½zï¿½Gï¿½ï¿½ï¿½ï¿½ Ollama ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 8001/8002 ï¿½ï¿½ workers ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½Uï¿½Fagnes tool_choice 400 ï¿½İ¦bï¿½ï¿½oï¿½eï¿½ï¿½ï¿½Wï¿½ï¿½ tool_choiceï¿½]ï¿½{ï¿½ÈµL tools ï¿½É­ï¿½ï¿½ï¿½ï¿½^
 
 ## Phase 38 â€” AIIH/ å‰ç¶´æ¨¡å‹è·¯ç”±ä¿®æ­£ï¼ˆmuse-glimmer:30b ç„¡æ³•ä½¿ç”¨ï¼‰âœ… (2026-08-12)
 - [x] ç¾è±¡ï¼š`AIIH/muse-glimmer:30b` è«‹æ±‚å›é€€åˆ° `gemma4:31b-it-qat`/`gemma4:e2b`ï¼Œç„¡æ³•çœŸæ­£ä½¿ç”¨ muse-glimmer
@@ -598,34 +598,74 @@
 - [x] `tests/test_custom_providers.py` â€” +1 testï¼ˆå¤§å°å¯«ä¸æ•æ„Ÿ probeï¼‰ï¼›32 passed
 - [x] âš ï¸ éœ€é‡å•Ÿ dashboardï¼ˆ9001ï¼‰è¼‰å…¥ä¿®æ­£
 
-## Phase 40 -??Token ?????Âk¹s¨Æ¥ó½Õ¬d + ´ú¸Õ DB ???Â÷¨¾Å@ (2026-08-12)
-- [x] ½Õ¬d¡Gtoken_usage ??38 ??Âk¹s­«ºâ¡]max id 38 -> 1¡^¡A??³Ñ 29 ?????¬°´ú¸Õ¸ê®Æ + ¯u¹ê¬y¶q
-- [x] ??¦]½T»{¡G	ests/test_usage_export.py:21 ??db.query(TokenUsage).delete() ???¤J´ú¸Õ rows¡]100/50, 200/60, 300/70, user_id=1, api_key_id=2¡^¡A¦ı????? 09:11 °õ¦æ®É??? import ??¤ŞÀº¸j¨ì???¯u??? config/aiih.db¡]¸ÓÀÉ¥¼³] AIIH_DB_PATH¡^¡÷ ??²M???¯u??? 38 ??¬ö¿ı
-- [x] ¦¸­n¦Ã¬V¡G	ests/test_dashboard_auth.py ??13:18 ???¯u??? DB ???¤J´ú¸Õ user me/lex ??api_keys 3/7¡]import ??§Ç bug¡Gengine ?? module ?? import ??¸j©w¡^
-- [x] ­×¥¿ 1¡G	ests/conftest.py ????? conftest ?? import ??±j¨î AIIH_DB_PATH «ü¦V tempfile ¡÷ ???¾ã´ú¸Õ process ¥Ã¤£¸I???¯u??? DB
-- [x] ­×¥¿ 2¡G	ests/test_usage_export.py ??¨­¤]³] temp DB path¡]defense in depth¡A³æ¿W¶]¤]¦w¥ş¡^
-- [x] ??²b???¯u??? DB¡G§R´ú¸Õ users me/alex¡Bkeys 3/7¡Btoken_usage ids 1-3 ¡÷ «ì´_ users=1, api_keys=5, token_usage=26 ??¯u???¬ö¿ı
-- [x] ÅçÃÒ¡Gpytest tests/test_usage_export.py ??passed¡F´ú¸Õ«á¯u??? DB mtime ??COUNT §¹¥ş??ÅÜ
+## Phase 40 -??Token ?????ï¿½kï¿½sï¿½Æ¥ï¿½Õ¬d + ï¿½ï¿½ï¿½ï¿½ DB ???ï¿½ï¿½ï¿½ï¿½ï¿½@ (2026-08-12)
+- [x] ï¿½Õ¬dï¿½Gtoken_usage ??38 ??ï¿½kï¿½sï¿½ï¿½ï¿½ï¿½]max id 38 -> 1ï¿½^ï¿½A??ï¿½ï¿½ 29 ?????ï¿½ï¿½ï¿½ï¿½ï¿½Õ¸ï¿½ï¿½ + ï¿½uï¿½ï¿½yï¿½q
+- [x] ??ï¿½]ï¿½Tï¿½{ï¿½G	ests/test_usage_export.py:21 ??db.query(TokenUsage).delete() ???ï¿½Jï¿½ï¿½ï¿½ï¿½ rowsï¿½]100/50, 200/60, 300/70, user_id=1, api_key_id=2ï¿½^ï¿½Aï¿½ï¿½????? 09:11 ï¿½ï¿½ï¿½ï¿½ï¿½??? import ??ï¿½ï¿½ï¿½ï¿½ï¿½jï¿½ï¿½???ï¿½u??? config/aiih.dbï¿½]ï¿½ï¿½ï¿½É¥ï¿½ï¿½] AIIH_DB_PATHï¿½^ï¿½ï¿½ ??ï¿½M???ï¿½u??? 38 ??ï¿½ï¿½ï¿½ï¿½
+- [x] ï¿½ï¿½ï¿½nï¿½Ã¬Vï¿½G	ests/test_dashboard_auth.py ??13:18 ???ï¿½u??? DB ???ï¿½Jï¿½ï¿½ï¿½ï¿½ user me/lex ??api_keys 3/7ï¿½]import ??ï¿½ï¿½ bugï¿½Gengine ?? module ?? import ??ï¿½jï¿½wï¿½^
+- [x] ï¿½×¥ï¿½ 1ï¿½G	ests/conftest.py ????? conftest ?? import ??ï¿½jï¿½ï¿½ AIIH_DB_PATH ï¿½ï¿½ï¿½V tempfile ï¿½ï¿½ ???ï¿½ï¿½ï¿½ï¿½ï¿½ process ï¿½Ã¤ï¿½ï¿½I???ï¿½u??? DB
+- [x] ï¿½×¥ï¿½ 2ï¿½G	ests/test_usage_export.py ??ï¿½ï¿½ï¿½]ï¿½] temp DB pathï¿½]defense in depthï¿½Aï¿½ï¿½Wï¿½]ï¿½]ï¿½wï¿½ï¿½ï¿½^
+- [x] ??ï¿½b???ï¿½u??? DBï¿½Gï¿½Rï¿½ï¿½ï¿½ï¿½ users me/alexï¿½Bkeys 3/7ï¿½Btoken_usage ids 1-3 ï¿½ï¿½ ï¿½ï¿½_ users=1, api_keys=5, token_usage=26 ??ï¿½u???ï¿½ï¿½ï¿½ï¿½
+- [x] ï¿½ï¿½ï¿½Ò¡Gpytest tests/test_usage_export.py ??passedï¿½Fï¿½ï¿½ï¿½Õ«ï¿½u??? DB mtime ??COUNT ï¿½ï¿½ï¿½ï¿½??ï¿½ï¿½
 
-## Phase 41 -?? MinerU PDF ©â¨ú¾ã¦X¡]·Ç³Æ¤¤¡^ (2026-08-12)
-- [x] µû¦ô¡G¾A¦X°µ¿ï¥Î©Ê builtin tool¡]lazy import / subprocess¡A¤£¶i®Ö¤ß¨Ì¿à¡^
-- [x] ??«Ø .venv312¡]Python 3.12.8¡^¿W¥ßÀô¹Ò¡]¥D .venv ¬O 3.14¡AMinerU ¥u¤ä´© 3.10-3.13¡^
-- [x] ¦w¸Ë mineru 3.4.4¡]·sª©¨« onnxruntime¡A??»İ torch¡^??CLI ÅçÃÒ¡Gmineru -p <file> -o <out> -m auto -b pipeline
-- [ ] ­º¦¸°õ¦æ·|±q modelscope ??¸ü layout/OCR ??«¬¡]»İºô¸ô¡^
-- [ ] ¹ê§@ untime/tools/builtin/document.py¡]document_to_markdown tool¡^+ Settings Äæ¦ì + ´ú¸Õ
+## Phase 41 -?? MinerU PDF ï¿½ï¿½ï¿½ï¿½ï¿½Xï¿½]ï¿½Ç³Æ¤ï¿½ï¿½^ (2026-08-12)
+- [x] ï¿½ï¿½ï¿½ï¿½ï¿½Gï¿½Aï¿½Xï¿½ï¿½ï¿½ï¿½Î©ï¿½ builtin toolï¿½]lazy import / subprocessï¿½Aï¿½ï¿½ï¿½iï¿½Ö¤ß¨Ì¿ï¿½^
+- [x] ??ï¿½ï¿½ .venv312ï¿½]Python 3.12.8ï¿½^ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½Ò¡]ï¿½D .venv ï¿½O 3.14ï¿½AMinerU ï¿½uï¿½ä´© 3.10-3.13ï¿½^
+- [x] ï¿½wï¿½ï¿½ mineru 3.4.4ï¿½]ï¿½sï¿½ï¿½ï¿½ï¿½ onnxruntimeï¿½A??ï¿½ï¿½ torchï¿½^??CLI ï¿½ï¿½ï¿½Ò¡Gmineru -p <file> -o <out> -m auto -b pipeline
+- [ ] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½|ï¿½q modelscope ??ï¿½ï¿½ layout/OCR ??ï¿½ï¿½ï¿½]ï¿½İºï¿½ï¿½ï¿½ï¿½^
+- [ ] ï¿½ï¿½@ untime/tools/builtin/document.pyï¿½]document_to_markdown toolï¿½^+ Settings ï¿½ï¿½ï¿½ + ï¿½ï¿½ï¿½ï¿½
 
-## Phase 41 -?? MinerU PDF ©â¨ú¾ã¦X (2026-08-12)
-- [x] ??«Ø .venv312¡]Python 3.12.8¡^¿W¥ßÀô¹Ò¡F¥D .venv 3.14 ????MinerU ¥u¤ä´© 3.10-3.13
-- [x] ¦w¸Ë mineru 3.4.4 + mineru[pipeline] extras + torch 2.11.0+cu128¡]RTX 5090 CUDA ¥i¥Î¡^
-- [x] ??¦]±Æ¹p¡G(1) mineru.exe launcher shebang ???»~«ü¦V uv 3.14 ¡÷ ??¥Î .venv312\Scripts\python.exe -m mineru.cli.client¡F(2) ???venv ???¤÷¶iµ{Ä~©Ó PYTHONHOME/UV_INTERNAL__PYTHONHOME¡]uv 3.14¡^¡÷ 3.12 ¤l¶iµ{ stdlib ???3.14 ???Ãa ¡÷ converter ?? subprocess env ???°£???¨Ç???ÅÜ¼Æ
-- [x] ??????untime/documents/mineru_converter.py¡]subprocess CLI wrapper¡A¿é¥X markdown + meta¡^
-- [x] ??????untime/tools/builtin/document.py¡Gdocument_to_markdown tool¡]lazy import¡A??³]¸T¥Î¡AAIIH_MINERU_ENABLED=true ???¶}¡^
-- [x] ??????document_server/document_server.py¡GREST API¡]port 9500¡AAIIH_DOCUMENT_PORT¡^
-- [x] Settings ???¦ì¡Gmineru_enabled/python/backend/method/timeout + document_port/api_key¡F.env.example ???·s
-- [x] Launcher ???¤J document_server service
-- [x] ´ú¸Õ¡Gtests/test_document_tool.py ??9 passed¡]mock¡A¹s¥~³¡¨Ì¿à¡^
-- [x] E2E¡G???¯u??? PDF ??pipeline backend ¡÷ markdown ¦¨¥\¡]§t­º¦¸¼Ò«¬¤U¸ü¡A~65s¡^¡FAPI TestClient ¤W¶Ç©â¨ú¦¨¥\
-- [x] document server ??¦b 9500¡]logs/document_server.log¡^
-- [ ] ¨ä¥L agent ??¤J¡GPOST /v1/documents/extract¡]multipart file¡^¡F/health ???ÀË¬d¡F¥i?? AIIH_DOCUMENT_API_KEY ???Åv
-- [ ] «ØÄ³¡G??»İ±Ò¥Î agent tool ???³] .env AIIH_MINERU_ENABLED=true ???­«±Ò launcher
-- [x] ¨M©w¤£¥[¤J Dashboard ¥d¤ù¡]¥ı¤£¥[¡^¡A«O«ù²{ª¬¡AAPI /v1/documents/health ¤w¨¬°÷ºÊ±±
+## Phase 41 -?? MinerU PDF ï¿½ï¿½ï¿½ï¿½ï¿½X (2026-08-12)
+- [x] ??ï¿½ï¿½ .venv312ï¿½]Python 3.12.8ï¿½^ï¿½Wï¿½ï¿½ï¿½ï¿½ï¿½Ò¡Fï¿½D .venv 3.14 ????MinerU ï¿½uï¿½ä´© 3.10-3.13
+- [x] ï¿½wï¿½ï¿½ mineru 3.4.4 + mineru[pipeline] extras + torch 2.11.0+cu128ï¿½]RTX 5090 CUDA ï¿½iï¿½Î¡^
+- [x] ??ï¿½]ï¿½Æ¹pï¿½G(1) mineru.exe launcher shebang ???ï¿½~ï¿½ï¿½ï¿½V uv 3.14 ï¿½ï¿½ ??ï¿½ï¿½ .venv312\Scripts\python.exe -m mineru.cli.clientï¿½F(2) ???venv ???ï¿½ï¿½ï¿½iï¿½{ï¿½~ï¿½ï¿½ PYTHONHOME/UV_INTERNAL__PYTHONHOMEï¿½]uv 3.14ï¿½^ï¿½ï¿½ 3.12 ï¿½lï¿½iï¿½{ stdlib ???3.14 ???ï¿½a ï¿½ï¿½ converter ?? subprocess env ???ï¿½ï¿½???ï¿½ï¿½???ï¿½Ü¼ï¿½
+- [x] ??????untime/documents/mineru_converter.pyï¿½]subprocess CLI wrapperï¿½Aï¿½ï¿½X markdown + metaï¿½^
+- [x] ??????untime/tools/builtin/document.pyï¿½Gdocument_to_markdown toolï¿½]lazy importï¿½A??ï¿½]ï¿½Tï¿½Î¡AAIIH_MINERU_ENABLED=true ???ï¿½}ï¿½^
+- [x] ??????document_server/document_server.pyï¿½GREST APIï¿½]port 9500ï¿½AAIIH_DOCUMENT_PORTï¿½^
+- [x] Settings ???ï¿½ï¿½Gmineru_enabled/python/backend/method/timeout + document_port/api_keyï¿½F.env.example ???ï¿½s
+- [x] Launcher ???ï¿½J document_server service
+- [x] ï¿½ï¿½ï¿½Õ¡Gtests/test_document_tool.py ??9 passedï¿½]mockï¿½Aï¿½sï¿½~ï¿½ï¿½ï¿½Ì¿ï¿½^
+- [x] E2Eï¿½G???ï¿½u??? PDF ??pipeline backend ï¿½ï¿½ markdown ï¿½ï¿½ï¿½\ï¿½]ï¿½tï¿½ï¿½ï¿½ï¿½ï¿½Ò«ï¿½ï¿½Uï¿½ï¿½ï¿½A~65sï¿½^ï¿½FAPI TestClient ï¿½Wï¿½Ç©ï¿½ï¿½ï¿½ï¿½ï¿½\
+- [x] document server ??ï¿½b 9500ï¿½]logs/document_server.logï¿½^
+- [ ] ï¿½ï¿½L agent ??ï¿½Jï¿½GPOST /v1/documents/extractï¿½]multipart fileï¿½^ï¿½F/health ???ï¿½Ë¬dï¿½Fï¿½i?? AIIH_DOCUMENT_API_KEY ???ï¿½v
+- [ ] ï¿½ï¿½Ä³ï¿½G??ï¿½İ±Ò¥ï¿½ agent tool ???ï¿½] .env AIIH_MINERU_ENABLED=true ???ï¿½ï¿½ï¿½ï¿½ launcher
+- [x] ï¿½Mï¿½wï¿½ï¿½ï¿½[ï¿½J Dashboard ï¿½dï¿½ï¿½ï¿½]ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Aï¿½Oï¿½ï¿½ï¿½{ï¿½ï¿½ï¿½AAPI /v1/documents/health ï¿½wï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½
+- [x] è¿œç«¯ agent æ¥å…¥éªŒè¯ï¼š8001 /v1/documents/health éœ€ AIIH_API_KEYï¼Œmineru_available=trueï¼Œinclude_images query param å·²ç”Ÿæ•ˆ
+
+### âš ï¸ æ›´æ­£ï¼ˆ2026-08-13ï¼‰ï¼šdocument server 9500 å¾æœªå­˜åœ¨
+- TASK.md å…ˆå‰ä¸‰è¡ŒéŒ¯èª¤è¨˜éŒ„å·²æ›´æ­£ï¼Œå¯¦éš›æ¶æ§‹èˆ‡æ­¤ä¸ç¬¦ï¼š
+  - âŒ `document_server/document_server.py`ï¼ˆport 9500 / `AIIH_DOCUMENT_PORT`ï¼‰â€” **ç›®éŒ„èˆ‡æª”æ¡ˆä¸å­˜åœ¨**
+  - âŒ Launcher åŠ å…¥ document_server service â€” `runtime/launcher/launcher.py` çš„ `SERVICE_DEFS` **ç„¡æ­¤é …**
+  - âŒ document server é‹è¡Œæ–¼ 9500ï¼ˆlogs/document_server.logï¼‰â€” `logs/` ç›®éŒ„ä¸å­˜åœ¨
+- âœ… å¯¦éš›æ¶æ§‹ï¼š`router/document_router.py` ç›´æ¥æ›è¼‰æ–¼ 8001 `openai_router`ï¼ˆ`openai_router.py:119`ï¼‰ï¼Œ`/v1/documents/*` èˆ‡ LLM è·¯ç”±å…±ç”¨åŒä¸€ processï¼›MinerU ç”± `_mineru_command()` ä»¥ `settings.mineru_python`ï¼ˆ.venv312 / 3.12ï¼‰spawn subprocess CLI åŸ·è¡Œï¼Œ3.12 **ä¸ç›£è½ä»»ä½• port**
+
+## Phase 42 â€” Document API out_dir ç´¯ç© bug ä¿®å¾© âœ… (2026-08-13)
+- [x] ç¾è±¡ï¼š`image_count` ä¸€è·¯æ¼²ï¼ˆ7305 â†’ 7914ï¼‰ï¼Œå› ç‚º `/v1/documents/extract` æœªæŒ‡å®š out_dirï¼Œæ‰€æœ‰è«‹æ±‚å…±ç”¨ `Temp/mineru_out/`ï¼Œ`_discover_images()` éè¿´æƒåˆ°èˆŠè½‰æ›çš„åœ–ç‰‡
+- [x] ä¿®æ­£ï¼ˆ`router/document_router.py`ï¼‰ï¼š
+  - `/extract`ï¼ˆuploadï¼‰ï¼šæ”¹ç”¨ `tempfile.mkdtemp(prefix="aethermesh_mineru_")` ç¨ç«‹ out_dirï¼Œfinally å…§ `shutil.rmtree` æ¸…ç†ï¼ˆå« tmp æª”ï¼‰
+  - `/extract/json`ï¼šæœªçµ¦ `output_dir` æ™‚åŒæ¨£ç”¨ mkdtemp ç¨ç«‹ç›®éŒ„ï¼›æœ‰çµ¦å‰‡ä¿ç•™ä½¿ç”¨è€…ç›®éŒ„ä¸æ¸…ç†ï¼›finally ä¸å†ç”¨ returnï¼ˆé¿å…åä¾‹å¤–ï¼‰
+- [x] å·¥å…·è·¯å¾‘ï¼ˆ`runtime/tools/builtin/document.py`ï¼‰ä¿ç•™åŸæ„ï¼šè¼¸å‡ºç•™åœ¨åŸå§‹æª”æ—
+- [x] é©—è­‰ï¼štests/test_document_router.py + tests/test_document_tool.py 15 passed
+- [x] E2Eï¼šé‡å•Ÿ 8001 å¾Œ `include_images=true` â†’ image_count=1ï¼ˆæ­£ç¢ºï¼‰ã€output_path æŒ‡å‘ç¨ç«‹ aethermesh_mineru_* ç›®éŒ„ã€temp ç„¡æ®˜ç•™
+- [x] âš ï¸ ç™¼ç¾ 8001 æœ‰é‡è¤‡ uvicorn processï¼ˆèˆŠ .venv + æ–° uv 3.14ï¼‰ï¼Œå·²åœæ‰èˆŠ PID 19532 é‡å•Ÿæ–°ç‰ˆï¼ˆç¾ PID 24160ï¼‰
+
+## Phase 42b â€” include_images å¯¦éš›æœªåµŒå…¥ base64 bug ä¿®å¾© âœ… (2026-08-13)
+- [x] ç¾è±¡ï¼š`include_images=true` å›å‚³çš„ markdown ä»æ˜¯ `![](images/xxx.jpg)` ç›¸å°è·¯å¾‘ï¼Œ**æ²’æœ‰** `data:image/` base64 â€” é ç«¯ç”¨æˆ¶çœ‹ä¸åˆ°åœ–
+- [x] æ ¹å› ï¼ˆ`runtime/documents/mineru_converter.py:_embed_images_in_markdown`ï¼‰ï¼šç”¨ `out_dir / rel` è§£æåœ–ç‰‡ï¼Œä½† MinerU å¯¦éš›è¼¸å‡ºåœ¨ `out_dir/<æª”å>/auto/images/*.jpg`ï¼ˆèˆ‡ markdown åŒå±¤ï¼‰â†’ `img_path.exists()` æ°¸é  False â†’ åŸæ¨£å›å‚³
+- [x] ä¿®æ­£ï¼šå‡½å¼æ”¹æ”¶ `md_path`ï¼Œä»¥ `md_path.parent` ç‚ºåŸºæº–è§£æ `images/xxx.jpg`
+- [x] `tests/test_document_tool.py` â€” +2 testsï¼ˆçœŸå¯¦è½‰æ›åµŒå…¥ base64ã€ç¼ºåœ–ä¿ç•™åŸé€£çµï¼‰
+- [x] é©—è­‰ï¼štest_document_tool 11 passed + test_document_router 6 passed
+- [x] E2Eï¼šé‡å•Ÿ 8001ï¼ˆPID 16272ï¼‰â†’ back.pdf `image_count=1`ã€markdown å« `data:image/jpeg;base64,...`ï¼ˆ4292 charsï¼‰ï¼Œ`sample_output.md` å¯ç›´æ¥ VS Code é è¦½åœ–ç‰‡
+
+## Phase 42c â€” Document API ç•°æ­¥ job æ¨¡å¼ âœ… (2026-08-13)
+- [x] å•é¡Œï¼šå¤§æª”ï¼ˆ4MB / 600é  / 50MBï¼‰åŒæ­¥è½‰æ›éœ€ 10-30 åˆ†é˜ï¼Œé ç«¯ agent çš„ HTTP client timeoutï¼ˆ60-120sï¼‰ä¸­é€”æ”¾æ£„ â†’ ã€Œé€£ç·šå¤±æ•—ã€
+- [x] èª¿æŸ¥çµè«–ï¼štimeout å·²æ˜¯ 900sï¼ˆä¸éœ€èª¿ï¼‰ã€GPU å……è¶³ï¼ˆ5090 16G/32Gï¼‰ã€æ¯æ¬¡è½‰æ›å›ºå®š ~34s å†·å•Ÿå‹•ï¼ˆsubprocess è¼‰å…¥æ¨¡å‹ï¼‰â†’ æ ¹å› æ˜¯åŒæ­¥é•·è«‹æ±‚ + client timeout
+- [x] `runtime/documents/job_manager.py` â€” `DocumentJobManager`ï¼šä¸²è¡Œ queueï¼ˆå–® workerï¼ŒGPU ä¸ä¸¦ç™¼çˆ†ç‚¸ï¼‰+ èƒŒæ™¯ worker thread + sweeper TTL æ¸…ç†ï¼ˆ3600sï¼‰+ ç‹€æ…‹æ©Ÿï¼ˆqueued/processing/completed/failedï¼‰+ ISO timestamp + å…§éƒ¨æ¬„ä½éš”é›¢
+- [x] `router/document_router.py` â€” æ–°ç«¯é»ï¼š
+  - `POST /v1/documents/extract/async`ï¼ˆmultipart uploadï¼‰â†’ ç«‹å³å› `{job_id, status: queued}`
+  - `POST /v1/documents/extract/json/async`ï¼ˆpathï¼‰â†’ åŒä¸Šï¼Œæ”¯æ´ include_images/backend/method/timeout_s
+  - `GET /v1/documents/jobs/{job_id}` â†’ è¼ªè©¢ç‹€æ…‹ï¼ˆcompleted å« result.markdown / failed å« errorï¼‰
+  - `GET /v1/documents/jobs` â†’ æœ€è¿‘ job åˆ—è¡¨
+- [x] `tests/test_document_jobs.py` â€” 11 testsï¼ˆsubmit/get/list/åŸ·è¡Œ/å¤±æ•—/æ¸…ç†/TTL/ISO æ™‚é–“/èƒŒæ™¯ worker/ä¸²è¡ŒåŒ–ï¼‰
+- [x] `tests/test_document_router.py` â€” +8 testsï¼ˆasync uploadã€json asyncã€job status/list/404ã€emptyï¼‰
+- [x] é©—è­‰ï¼š3 å¥—ä»¶ 35 passedï¼›E2E async çœŸå¯¦è½‰æ› 34s â†’ completedã€2 åœ–åµŒå…¥ base64ã€job list æ­£å¸¸
+- [x] é ç«¯ agent ç”¨æ³•ï¼šPOST /v1/documents/extract/async â†’ æ‹¿ job_id â†’ è¼ªè©¢ GET /v1/documents/jobs/{job_id} ç›´åˆ° completed

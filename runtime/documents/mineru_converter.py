@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -54,12 +56,51 @@ def _find_markdown_output(out_dir: Path) -> Path | None:
     return candidates[0] if candidates else None
 
 
+def _discover_images(out_dir: Path) -> list[dict[str, str]]:
+    """Return list of {rel_path, abs_path, mime} for images under out_dir."""
+    images: list[dict[str, str]] = []
+    for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.gif", "*.bmp"):
+        for p in sorted(out_dir.rglob(ext)):
+            rel = str(p.relative_to(out_dir))
+            images.append({"rel_path": rel, "abs_path": str(p), "mime": _mime_for(p)})
+    return images
+
+
+def _mime_for(path: Path) -> str:
+    ext = path.suffix.lower()
+    return {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+        ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
+    }.get(ext, "application/octet-stream")
+
+
+def _embed_images_in_markdown(markdown: str, md_path: Path) -> str:
+    """Replace ![](images/xxx.jpg) with base64 data URIs, resolving relative to the markdown file."""
+    base_dir = md_path.parent
+
+    def _replace(match: re.Match) -> str:
+        rel = match.group(1)
+        img_path = (base_dir / rel).resolve()
+        if not img_path.exists():
+            return match.group(0)
+        try:
+            data = img_path.read_bytes()
+            mime = _mime_for(img_path)
+            b64 = base64.b64encode(data).decode("ascii")
+            return f"![](data:{mime};base64,{b64})"
+        except OSError:
+            return match.group(0)
+
+    return re.sub(r"!\[\]\((images/[^)]+)\)", _replace, markdown)
+
+
 def convert_document(
     file_path: str | Path,
     out_dir: str | Path | None = None,
     backend: str | None = None,
     method: str | None = None,
     timeout_s: int | None = None,
+    include_images: bool = False,
 ) -> dict[str, Any]:
     source = Path(file_path)
     if not source.exists():
@@ -101,10 +142,15 @@ def convert_document(
     if md_path is None:
         raise MinerUError(f"MinerU finished but produced no markdown in {out_dir}")
     content = md_path.read_text(encoding="utf-8", errors="replace")
+    images = _discover_images(out_dir)
+    if include_images:
+        content = _embed_images_in_markdown(content, md_path)
     return {
         "markdown": content,
         "source": str(source),
         "output_path": str(md_path),
         "duration_ms": duration_ms,
         "chars": len(content),
+        "image_count": len(images),
+        "images": [{"rel_path": i["rel_path"], "mime": i["mime"]} for i in images] if not include_images else [],
     }
