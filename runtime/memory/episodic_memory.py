@@ -3,10 +3,13 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger("memory.episodic")
+
+_MAX_RECORDS = 5000
 
 
 @dataclass
@@ -25,8 +28,8 @@ class EpisodicRecord:
 
 
 class EpisodicMemory:
-    def __init__(self) -> None:
-        self._records: list[EpisodicRecord] = []
+    def __init__(self, max_records: int = _MAX_RECORDS) -> None:
+        self._records: deque[EpisodicRecord] = deque(maxlen=max_records)
 
     def record(self, **kwargs: Any) -> EpisodicRecord:
         record = EpisodicRecord(**kwargs)
@@ -47,7 +50,10 @@ class EpisodicMemory:
         return matched[-limit:]
 
     def recent(self, limit: int = 10) -> list[EpisodicRecord]:
-        return self._records[-limit:]
+        if limit >= len(self._records):
+            return list(self._records)
+        start = len(self._records) - limit
+        return [self._records[i] for i in range(start, len(self._records))]
 
     def failures(self, limit: int = 10) -> list[EpisodicRecord]:
         return [r for r in self._records if not r.success][-limit:]

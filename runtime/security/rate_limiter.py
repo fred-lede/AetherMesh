@@ -26,12 +26,27 @@ class TokenBucket:
 
 
 class RateLimiter:
+    _SWEEP_INTERVAL_S = 60.0
+    _IDLE_TTL_S = 3600.0
+
     def __init__(self, default_rate: float = 10.0, default_burst: int = 20) -> None:
         self._buckets: dict[str, TokenBucket] = {}
         self.default_rate = default_rate
         self.default_burst = default_burst
+        self._last_sweep = time.time()
+
+    def _sweep_idle(self) -> None:
+        now = time.time()
+        if now - self._last_sweep < self._SWEEP_INTERVAL_S:
+            return
+        self._last_sweep = now
+        cutoff = now - self._IDLE_TTL_S
+        stale = [key for key, bucket in self._buckets.items() if bucket.last_refill < cutoff]
+        for key in stale:
+            del self._buckets[key]
 
     def _get_bucket(self, key: str) -> TokenBucket:
+        self._sweep_idle()
         if key not in self._buckets:
             self._buckets[key] = TokenBucket(self.default_rate, self.default_burst)
         return self._buckets[key]

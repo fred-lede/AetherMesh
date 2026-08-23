@@ -1141,6 +1141,119 @@ def custom_providers_reload() -> dict[str, Any]:
     return {"ok": True, "providers": list(reloaded.keys())}
 
 
+@api.get("/notifications")
+def notifications_get(request: Request) -> dict[str, Any]:
+    """Return notification channel config (secrets masked) + watchdog settings."""
+    _require_admin(request)
+    from runtime.alerting.alert_manager import get_alert_manager
+
+    def _hint(secret: Any) -> str:
+        s = str(secret or "")
+        return f"••••{s[-4:]}" if len(s) >= 8 else ""
+
+    mgr = get_alert_manager()
+    channels = mgr.config.get("channels", {})
+    if not isinstance(channels, dict):
+        channels = {}
+
+    def _ch(name: str) -> dict[str, Any]:
+        cfg = channels.get(name, {})
+        return cfg if isinstance(cfg, dict) else {}
+
+    tg = _ch("telegram")
+    sc = _ch("synology_chat")
+    wd = mgr.config.get("watchdog", {})
+    if not isinstance(wd, dict):
+        wd = {}
+    tg_token = str(tg.get("bot_token", "") or "")
+    sc_url = str(sc.get("webhook_url", "") or "")
+    return {
+        "channels": {
+            "telegram": {
+                "enabled": bool(tg.get("enabled")),
+                "chat_id": str(tg.get("chat_id", "")),
+                "min_severity": str(tg.get("min_severity", "warning")),
+                "has_bot_token": bool(tg_token.strip()),
+                "bot_token_hint": _hint(tg_token),
+            },
+            "synology_chat": {
+                "enabled": bool(sc.get("enabled")),
+                "min_severity": str(sc.get("min_severity", "warning")),
+                "has_webhook_url": bool(sc_url.strip()),
+                "webhook_url_hint": _hint(sc_url),
+            },
+        },
+        "watchdog": wd,
+    }
+
+
+@api.put("/notifications")
+def notifications_put(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Merge-save notification config. Empty secret fields keep existing values."""
+    _require_admin(request)
+    from runtime.alerting.alert_manager import get_alert_manager
+
+    mgr = get_alert_manager()
+    channels = mgr.config.setdefault("channels", {})
+    if not isinstance(channels, dict):
+        channels = {}
+
+    incoming = body.get("channels", {})
+    if isinstance(incoming, dict):
+        for name in ("telegram", "synology_chat"):
+            updates = incoming.get(name)
+            if not isinstance(updates, dict):
+                continue
+            merged = dict(channels.get(name)) if isinstance(channels.get(name), dict) else {}
+            if "enabled" in updates:
+                merged["enabled"] = bool(updates["enabled"])
+            if "min_severity" in updates:
+                sev = str(updates["min_severity"]).lower()
+                if sev in ("info", "warning", "critical"):
+                    merged["min_severity"] = sev
+            for plain_key in ("chat_id", "webhook_url"):
+                if plain_key in updates:
+                    merged[plain_key] = str(updates.get(plain_key) or "").strip()
+            token = str(updates.get("bot_token") or "").strip()
+            if token:
+                merged["bot_token"] = token
+            channels[name] = merged
+
+    wd_updates = body.get("watchdog")
+    if isinstance(wd_updates, dict):
+        wd = dict(mgr.config.get("watchdog") or {})
+        for key, value in wd_updates.items():
+            if isinstance(value, dict) and isinstance(wd.get(key), dict):
+                sub = dict(wd[key])
+                for skey, sval in value.items():
+                    if isinstance(sval, dict) and isinstance(sub.get(skey), dict):
+                        sub[skey] = {**sub[skey], **sval}
+                    else:
+                        sub[skey] = sval
+                wd[key] = sub
+            elif isinstance(value, dict):
+                wd[key] = value
+            else:
+                wd[key] = value
+        mgr.config["watchdog"] = wd
+
+    mgr.save_config()
+    return {"ok": True}
+
+
+@api.post("/notifications/test/{channel}")
+def notifications_test(channel: str, request: Request) -> dict[str, Any]:
+    """Send a test message through the given channel."""
+    _require_admin(request)
+    from runtime.alerting.alert_manager import get_alert_manager
+
+    mgr = get_alert_manager()
+    ok, message = mgr.send_test(channel)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"ok": True, "message": message}
+
+
 @api.get("/web-search/status")
 def web_search_status() -> dict[str, Any]:
     from runtime.tools.web_search import web_search_manager

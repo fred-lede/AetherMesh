@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any
 
 from runtime.events.event import RuntimeEvent
@@ -8,11 +9,13 @@ from runtime.events.bus import runtime_event_bus
 from runtime.events.event_types import EventType
 from runtime.observability.metrics import metrics_collector
 
+_MAX_DURATION_SAMPLES = 1000
+
 
 class EventMetricsCollector:
     def __init__(self) -> None:
         self._event_counts: dict[str, int] = {}
-        self._event_durations: dict[str, list[float]] = {}
+        self._event_durations: dict[str, deque[float]] = {}
         self._start_time: float = time.time()
 
     def record_event(self, event: RuntimeEvent) -> None:
@@ -20,7 +23,10 @@ class EventMetricsCollector:
         self._event_counts[type_name] = self._event_counts.get(type_name, 0) + 1
         metrics_collector.increment(f"events.{type_name}.count")
         if event.duration_ms > 0:
-            self._event_durations.setdefault(type_name, []).append(event.duration_ms)
+            bucket = self._event_durations.setdefault(
+                type_name, deque(maxlen=_MAX_DURATION_SAMPLES)
+            )
+            bucket.append(event.duration_ms)
             metrics_collector.record(f"events.{type_name}.duration_ms", event.duration_ms)
 
     def get_count(self, event_type: EventType | str = "") -> int:
@@ -34,8 +40,8 @@ class EventMetricsCollector:
 
     def avg_duration(self, event_type: EventType | str) -> float:
         key = event_type.value if isinstance(event_type, EventType) else event_type
-        durations = self._event_durations.get(key, [])
-        return sum(durations) / len(durations) if durations else 0.0
+        durations = self._event_durations.get(key)
+        return (sum(durations) / len(durations)) if durations else 0.0
 
     def snapshot(self) -> dict[str, Any]:
         return {

@@ -973,6 +973,25 @@ Control plane metrics snapshot:
 Common error codes: `provider_timeout`, `runner_stopped`, `provider_unreachable`,
 `worker_unavailable`, `control_plane_unavailable`, `queued_sync_not_supported`.
 
+### Notifications & Watchdog
+
+The launcher runs a built-in watchdog (`runtime/health/watchdog.py`) that monitors every
+service: process liveness, `/health` responsiveness (hang detection), per-process RSS
+memory, and host disk space. When a rule trips it dispatches alerts through
+**Telegram** (bot token + chat ID) and/or **Synology Chat** (incoming webhook).
+
+- Configure in **Dashboard → System → Notifications & Watchdog** (admin only), with
+  per-channel test buttons. Settings live in `config/notifications.json` (gitignored);
+  saving from the Dashboard hot-reloads the watchdog via file mtime — no restart needed.
+- Thresholds are configurable: check interval, health timeout, hang failures before
+  alerting, RSS warn/critical (MB), disk free warn/critical (%).
+- Optional auto-restart: when a service stays dead/unresponsive past
+  `restart_after_s`, the watchdog restarts it through the launcher, guarded by
+  `cooldown_s` and `max_per_day` caps (crossing the cap raises a CRITICAL alert).
+  Use `exclude` to opt services out.
+
+See `config/notifications.json.example` for the full schema.
+
 ## Validation
 
 ```bash

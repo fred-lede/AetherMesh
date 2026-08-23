@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any
+
+_MAX_BROADCAST_LOG = 1000
 
 
 class SharedMemory:
     def __init__(self) -> None:
         self._agent_scoped: dict[str, dict[str, Any]] = {}
         self._global: dict[str, Any] = {}
-        self._broadcast_log: list[dict[str, Any]] = []
+        self._broadcast_log: deque[dict[str, Any]] = deque(maxlen=_MAX_BROADCAST_LOG)
 
     def write(self, agent_id: str, key: str, value: Any) -> None:
         self._agent_scoped.setdefault(agent_id, {})[key] = value

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any
+
+_MAX_HISTOGRAM_SAMPLES = 1000
 
 
 class MetricsCollector:
     def __init__(self) -> None:
         self._counters: dict[str, int] = defaultdict(int)
-        self._histograms: dict[str, list[float]] = defaultdict(list)
+        self._histograms: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=_MAX_HISTOGRAM_SAMPLES)
+        )
         self._gauges: dict[str, float] = {}
 
     def increment(self, metric: str, value: int = 1) -> None:

@@ -151,3 +151,4 @@ config/custom_providers.json
 
 # MinerU separate venv (Py3.12, torch/cuda deps ~3GB)
 .venv312/
+config/notifications.json

@@ -1,0 +1,32 @@
+{
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "bot_token": "123456789:AAAA-your-bot-token-here",
+      "chat_id": "-1001234567890",
+      "min_severity": "warning"
+    },
+    "synology_chat": {
+      "enabled": false,
+      "webhook_url": "https://your-nas:5001/webapi/entry.cgi?api=SYNO.Chat.External&method=incoming&version=2&token=...",
+      "min_severity": "warning"
+    }
+  },
+  "watchdog": {
+    "enabled": true,
+    "interval_s": 30,
+    "health_timeout_s": 10,
+    "hang_failures_to_alert": 3,
+    "rules": {
+      "service_rss_mb": {"warn": 4096, "critical": 8192},
+      "disk_free_pct": {"warn": 15.0, "critical": 5.0}
+    },
+    "auto_restart": {
+      "enabled": false,
+      "restart_after_s": 60,
+      "cooldown_s": 1800,
+      "max_per_day": 4,
+      "exclude": ["task_worker"]
+    }
+  }
+}

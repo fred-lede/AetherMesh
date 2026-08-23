@@ -611,6 +611,11 @@ class ModelRoutingEngine:
         cached = self._worker_health_cache.get(base_url)
         if cached and now - cached[0] < self._worker_health_cache_ttl:
             return cached[1]
+        if len(self._worker_health_cache) > 512:
+            cutoff = now - self._worker_health_cache_ttl * 2
+            stale = [k for k, (ts, _) in self._worker_health_cache.items() if ts < cutoff]
+            for key in stale:
+                del self._worker_health_cache[key]
         try:
             resp = requests.get(f"{base_url}/api/tags", timeout=2)
             alive = resp.ok

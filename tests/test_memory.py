@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
 from runtime.memory.short_term import ShortTermMemory
 from runtime.memory.semantic_memory import SemanticMemory
 from runtime.memory.episodic_memory import EpisodicMemory
 from runtime.memory.memory_manager import MemoryManager
+from runtime.sessions.session_store import session_store
+
+
+@pytest.fixture(autouse=True)
+def _isolate_session_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_store, "_path", tmp_path / "sessions.json")
+    session_store._sessions.clear()
+    yield
+    session_store._sessions.clear()
 
 
 def test_short_term_roundtrip() -> None:

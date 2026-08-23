@@ -168,3 +168,13 @@ ame ��쥿�W�Ʀ� function object�C�M�Ω� _normalize_payload_for_provider�]�л\ c
 - 9 mocked tests pass (zero external deps).
 - E2E: real PDF through pipeline backend -> Markdown in ~65s; API upload endpoint returns markdown.
 - Server running on port 9500.
+
+## 2026-08-23 — Phase 43: Watchdog + Telegram/Synology Chat 告警 + 記憶體治理
+- 新增 runtime/alerting/（Notifier ABC、TelegramNotifier、SynologyChatNotifier、AlertManager：per-rule cooldown / min_severity / mtime 熱重載 / 測試發送）
+- 新增 runtime/health/watchdog.py：launcher 內背景 thread，per-service process alive + /health hang 探測 + psutil RSS + 磁碟空間；auto-restart 可設定 restart_after_s / cooldown_s / max_per_day / exclude，達上限發 CRITICAL
+- Launcher 整合：restart_service() 公開方法；start_all 自動啟動 watchdog、stop_all 停止
+- Dashboard：System tab 新增「Notifications & Watchdog」admin 面板（通道設定 + 測試按鈕 + watchdog/auto-restart 參數）；API GET/PUT /api/notifications（secrets 遮罩）、POST /api/notifications/test/{channel}
+- 設定：config/notifications.json（gitignored）+ notifications.json.example；dashboard 存檔免重啟生效（mtime 熱重載）
+- Phase 33 無界記憶體修復：metrics histograms、event durations（deque maxlen=1000）、episodic records（5000）、rate_limiter buckets TTL 掃描、shared_memory broadcast log（1000）、routing_engine worker health cache 驅逐
+- 測試：test_alerting.py 17 + test_watchdog.py 12 新增；test_memory.py 加 session_store 隔離 fixture 修復跨運行污染
+- 全量 776 passed / 20 failed（stash 對照證實失敗集合與乾淨 codebase 完全一致，皆為既有環境/污染問題）

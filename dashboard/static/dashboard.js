@@ -1606,3 +1606,200 @@
         }
       };
     }
+
+    let _notifConfig = null;
+
+    function _escAttr(value) {
+      return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function loadNotificationSettings() {
+      const panel = document.getElementById('notifications-panel');
+      if (!panel) return;
+      try {
+        _notifConfig = await mutateDashboard('/api/notifications');
+        renderNotificationsPanel(panel);
+      } catch (err) {
+        panel.innerHTML = `<span class="muted">Failed to load: ${_escAttr(err.message)}</span>`;
+      }
+    }
+
+    function _sevSelect(id, current) {
+      const opts = ['info', 'warning', 'critical'].map((s) =>
+        `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('');
+      return `<select id="${id}" style="padding:4px;">${opts}</select>`;
+    }
+
+    function renderNotificationsPanel(panel) {
+      const cfg = _notifConfig || {};
+      const ch = cfg.channels || {};
+      const tg = ch.telegram || {};
+      const sc = ch.synology_chat || {};
+      const wd = cfg.watchdog || {};
+      const rules = wd.rules || {};
+      const rss = rules.service_rss_mb || {};
+      const disk = rules.disk_free_pct || {};
+      const ar = wd.auto_restart || {};
+
+      panel.innerHTML = `
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:280px;">
+            <h4 style="margin:0 0 8px;">Telegram</h4>
+            <label style="display:block;font-size:0.85rem;margin-bottom:6px;">
+              <input type="checkbox" id="ntf-tg-enabled" ${tg.enabled ? 'checked' : ''}> Enabled
+              ${tg.has_bot_token
+                ? `<span style="color:#22c55e;font-weight:600;margin-left:6px;">● 已設定</span><span class="mono" style="color:var(--muted);margin-left:6px;">${_escAttr(tg.bot_token_hint || '')}</span>`
+                : '<span style="color:#94a3b8;margin-left:6px;">○ 未設定</span>'}
+            </label>
+            <div style="font-size:0.85rem;margin-bottom:4px;">Bot Token</div>
+            <input type="password" id="ntf-tg-token"
+                   placeholder="${tg.has_bot_token ? `已儲存 ${tg.bot_token_hint || ''} — 留空保持不變，輸入新值可覆蓋` : '貼上 Bot Token（格式：123456:ABC-DEF...）'}"
+                   style="width:100%;margin-bottom:2px;padding:5px;${tg.has_bot_token ? 'border-color:#22c55e;' : ''}">
+            ${tg.has_bot_token ? '<div style="font-size:0.75rem;color:#22c55e;margin-bottom:4px;">✓ 已安全儲存於 config/notifications.json</div>' : '<div style="height:18px;"></div>'}
+            <div style="font-size:0.85rem;margin-bottom:4px;">Chat ID</div>
+            <input type="text" id="ntf-tg-chatid" value="${_escAttr(tg.chat_id || '')}" placeholder="-1001234567890 or 12345678"
+                   style="width:100%;margin-bottom:6px;padding:5px;">
+            <div style="font-size:0.85rem;margin-bottom:4px;">Min severity</div>
+            ${_sevSelect('ntf-tg-sev', tg.min_severity || 'warning')}
+            <button class="btn" style="margin-top:10px;padding:5px 12px;" onclick="testNotificationChannel('telegram', this)">Send test message</button>
+          </div>
+
+          <div style="flex:1;min-width:280px;">
+            <h4 style="margin:0 0 8px;">Synology Chat</h4>
+            <label style="display:block;font-size:0.85rem;margin-bottom:6px;">
+              <input type="checkbox" id="ntf-sc-enabled" ${sc.enabled ? 'checked' : ''}> Enabled
+              ${sc.has_webhook_url
+                ? `<span style="color:#22c55e;font-weight:600;margin-left:6px;">● 已設定</span><span class="mono" style="color:var(--muted);margin-left:6px;">${_escAttr(sc.webhook_url_hint || '')}</span>`
+                : '<span style="color:#94a3b8;margin-left:6px;">○ 未設定</span>'}
+            </label>
+            <div style="font-size:0.85rem;margin-bottom:4px;">Incoming Webhook URL</div>
+            <input type="text" id="ntf-sc-webhook"
+                   placeholder="${sc.has_webhook_url ? `已儲存 ${sc.webhook_url_hint || ''} — 留空保持不變，輸入新值可覆蓋` : 'https://nas:5001/webapi/entry.cgi?api=SYNO.Chat.External...'}"
+                   style="width:100%;margin-bottom:2px;padding:5px;${sc.has_webhook_url ? 'border-color:#22c55e;' : ''}">
+            ${sc.has_webhook_url ? '<div style="font-size:0.75rem;color:#22c55e;margin-bottom:4px;">✓ 已安全儲存於 config/notifications.json</div>' : '<div style="height:18px;"></div>'}
+            <div style="font-size:0.85rem;margin-bottom:4px;">Min severity</div>
+            ${_sevSelect('ntf-sc-sev', sc.min_severity || 'warning')}
+            <button class="btn" style="margin-top:10px;padding:5px 12px;" onclick="testNotificationChannel('synology_chat', this)">Send test message</button>
+          </div>
+
+          <div style="flex:1.4;min-width:320px;">
+            <h4 style="margin:0 0 8px;">Watchdog</h4>
+            <label style="display:block;font-size:0.85rem;margin-bottom:6px;">
+              <input type="checkbox" id="ntf-wd-enabled" ${wd.enabled !== false ? 'checked' : ''}> Watchdog enabled
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.85rem;">
+              <label>Interval (s)<input type="number" id="ntf-wd-interval" value="${wd.interval_s || 30}" min="5" style="width:100%;padding:4px;"></label>
+              <label>Health timeout (s)<input type="number" id="ntf-wd-timeout" value="${wd.health_timeout_s || 10}" min="1" style="width:100%;padding:4px;"></label>
+              <label>Hang failures to alert<input type="number" id="ntf-wd-hangfail" value="${wd.hang_failures_to_alert || 3}" min="1" style="width:100%;padding:4px;"></label>
+              <label>RSS warn / critical (MB)
+                <div style="display:flex;gap:4px;">
+                  <input type="number" id="ntf-rss-warn" value="${rss.warn || 4096}" style="width:100%;padding:4px;">
+                  <input type="number" id="ntf-rss-crit" value="${rss.critical || ''}" placeholder="critical" style="width:100%;padding:4px;">
+                </div>
+              </label>
+              <label>Disk free warn % / critical %
+                <div style="display:flex;gap:4px;">
+                  <input type="number" id="ntf-disk-warn" value="${disk.warn ?? 15}" step="0.5" style="width:100%;padding:4px;">
+                  <input type="number" id="ntf-disk-crit" value="${disk.critical ?? 5}" step="0.5" style="width:100%;padding:4px;">
+                </div>
+              </label>
+            </div>
+            <h4 style="margin:12px 0 8px;">Auto-restart</h4>
+            <label style="display:block;font-size:0.85rem;margin-bottom:6px;">
+              <input type="checkbox" id="ntf-ar-enabled" ${ar.enabled ? 'checked' : ''}> Enable auto-restart on dead/unresponsive services
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:0.85rem;">
+              <label>Restart after (s)<input type="number" id="ntf-ar-after" value="${ar.restart_after_s ?? 60}" min="0" style="width:100%;padding:4px;"></label>
+              <label>Cooldown (s)<input type="number" id="ntf-ar-cooldown" value="${ar.cooldown_s ?? 1800}" min="0" style="width:100%;padding:4px;"></label>
+              <label>Max / day<input type="number" id="ntf-ar-maxday" value="${ar.max_per_day ?? 4}" min="0" style="width:100%;padding:4px;"></label>
+            </div>
+            <div style="font-size:0.85rem;margin:6px 0 4px;">Exclude services (comma-separated)</div>
+            <input type="text" id="ntf-ar-exclude" value="${_escAttr((ar.exclude || []).join(', '))}" placeholder="task_worker" style="width:100%;padding:4px;">
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
+          <button class="btn btn-primary" style="padding:6px 18px;" onclick="saveNotificationSettings(this)">Save settings</button>
+          <span id="ntf-save-status" class="mono" style="color:var(--muted);"></span>
+        </div>`;
+    }
+
+    async function saveNotificationSettings(button) {
+      if (!_notifConfig) return;
+      const restore = setButtonBusy(button, 'Saving...');
+      const statusEl = document.getElementById('ntf-save-status');
+      try {
+        const val = (id) => document.getElementById(id)?.value;
+        const num = (id, fallback = null) => {
+          const raw = val(id);
+          return raw === '' || raw === undefined ? fallback : Number(raw);
+        };
+        const wdOld = _notifConfig.watchdog || {};
+        const body = {
+          channels: {
+            telegram: {
+              enabled: document.getElementById('ntf-tg-enabled')?.checked || false,
+              bot_token: val('ntf-tg-token')?.trim() || '',
+              chat_id: val('ntf-tg-chatid')?.trim() || '',
+              min_severity: val('ntf-tg-sev') || 'warning',
+            },
+            synology_chat: {
+              enabled: document.getElementById('ntf-sc-enabled')?.checked || false,
+              webhook_url: val('ntf-sc-webhook')?.trim() || '',
+              min_severity: val('ntf-sc-sev') || 'warning',
+            },
+          },
+          watchdog: {
+            ...wdOld,
+            enabled: document.getElementById('ntf-wd-enabled')?.checked || false,
+            interval_s: Math.max(5, num('ntf-wd-interval', 30)),
+            health_timeout_s: Math.max(1, num('ntf-wd-timeout', 10)),
+            hang_failures_to_alert: Math.max(1, num('ntf-wd-hangfail', 3)),
+            rules: {
+              ...((wdOld.rules || {})),
+              service_rss_mb: {
+                warn: num('ntf-rss-warn', 4096),
+                ...(num('ntf-rss-crit') ? { critical: num('ntf-rss-crit') } : {}),
+              },
+              disk_free_pct: { warn: num('ntf-disk-warn', 15), critical: num('ntf-disk-crit', 5) },
+            },
+            auto_restart: {
+              enabled: document.getElementById('ntf-ar-enabled')?.checked || false,
+              restart_after_s: Math.max(0, num('ntf-ar-after', 60)),
+              cooldown_s: Math.max(0, num('ntf-ar-cooldown', 1800)),
+              max_per_day: Math.max(0, num('ntf-ar-maxday', 4)),
+              exclude: (val('ntf-ar-exclude') || '').split(',').map((s) => s.trim()).filter(Boolean),
+            },
+          },
+        };
+        await mutateDashboard('/api/notifications', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (statusEl) statusEl.textContent = 'Saved.';
+        setOperationStatus('Notification settings saved.', 'ok');
+        await loadNotificationSettings();
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Failed: ${err.message}`;
+        setOperationStatus(`Failed: ${err.message}`, 'bad');
+      } finally {
+        restore();
+      }
+    }
+
+    async function testNotificationChannel(channel, button) {
+      const restore = setButtonBusy(button, 'Sending...');
+      try {
+        const result = await mutateDashboard(`/api/notifications/test/${channel}`, { method: 'POST' });
+        setOperationStatus(`Test message sent via ${channel}.`, 'ok');
+      } catch (err) {
+        setOperationStatus(`Test failed (${channel}): ${err.message}`, 'bad');
+      } finally {
+        restore();
+      }
+    }
+
+    if (document.getElementById('notifications-panel')) {
+      loadNotificationSettings().catch(() => {});
+    }

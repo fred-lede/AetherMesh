@@ -141,6 +141,7 @@ class ServiceProcess:
         self._stopped = False
 
     def start(self) -> None:
+        self._stopped = False
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = open(self.log_path, "a", encoding="utf-8")
         self.log_file.write(
@@ -239,6 +240,7 @@ class Launcher:
             print(f"  [{name:<16}] started  (port {str(port):<5}  log: {log_path})")
 
         self._register_signals()
+        self._start_watchdog()
         print()
         self.status()
 
@@ -246,6 +248,7 @@ class Launcher:
             self._wait_loop()
 
     def stop_all(self) -> None:
+        self._stop_watchdog()
         print()
         for name in list(self.services.keys()):
             sp = self.services[name]
@@ -266,6 +269,35 @@ class Launcher:
             print(f"  {name:<20} {port:<6} {s:<14} {sp.uptime if sp else '-'}")
         total = len(SERVICE_DEFS)
         print(f"  {running}/{total} running")
+
+    def restart_service(self, name: str) -> bool:
+        sp = self.services.get(name)
+        if sp is None:
+            return False
+        print(f"  [{time.strftime('%H:%M:%S')}] restarting {name}...")
+        try:
+            sp.stop()
+        except Exception as exc:
+            print(f"  [watchdog] stop {name} error: {exc}")
+        sp.start()
+        return True
+
+    def _start_watchdog(self) -> None:
+        try:
+            from runtime.health.watchdog import Watchdog
+
+            self.watchdog = Watchdog(
+                get_services=lambda: dict(self.services),
+                restart_fn=self.restart_service,
+            )
+            self.watchdog.start()
+        except Exception as exc:
+            print(f"  [watchdog] failed to start: {exc}")
+
+    def _stop_watchdog(self) -> None:
+        wd = getattr(self, "watchdog", None)
+        if wd is not None:
+            wd.stop()
 
     def _register_signals(self) -> None:
         def _handler(sig: int, frame: object) -> None:

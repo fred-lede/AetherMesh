@@ -669,3 +669,43 @@
 - [x] `tests/test_document_router.py` — +8 tests（async upload、json async、job status/list/404、empty）
 - [x] 驗證：3 套件 35 passed；E2E async 真實轉換 34s → completed、2 圖嵌入 base64、job list 正常
 - [x] 遠端 agent 用法：POST /v1/documents/extract/async → 拿 job_id → 輪詢 GET /v1/documents/jobs/{job_id} 直到 completed
+
+## Phase 43 — Watchdog 系統資源監控 + Telegram/Synology Chat 告警 🟡 (2026-08-23)
+### 已完成
+- [x] 使用者確認：Telegram bot 尚未建立（回家再建，UI 先做好）、自動重啟要做（時間可設定）、Phase 33 記憶體清單要一起修
+- [x] `runtime/alerting/notifier_base.py` — Severity enum + Alert dataclass + Notifier ABC
+- [x] `runtime/alerting/telegram_notifier.py` — Bot Token + chat_id → sendMessage（缺設定時 skip + warn）
+- [x] `runtime/alerting/synology_notifier.py` — Webhook URL → POST json.dumps({"text": ...})
+- [x] `runtime/alerting/alert_manager.py` — AlertManager（config load/save/update、per-rule cooldown、min_severity per channel、send_test、get_alert_manager singleton 讀 config/notifications.json）
+- [x] `runtime/health/watchdog.py` — Watchdog thread：per-service process alive + /health HTTP 探測（hang 偵測）+ psutil RSS、disk free %、規則評估（warn/critical 門檻 + hang_failures_to_alert）、auto_restart（restart_after_s / cooldown_s / max_per_day / exclude 可設定，達上限發 CRITICAL）、merged_watchdog_config() 預設值合併
+- [x] `runtime/health/__init__.py` — re-export
+### 已完成（2026-08-23 全部實作完畢）
+- [x] 使用者確認：Telegram bot 尚未建立（回家再建，UI 先做好）、自動重啟要做（時間可設定）、Phase 33 記憶體清單要一起修
+- [x] `runtime/alerting/notifier_base.py` — Severity enum + Alert dataclass + Notifier ABC
+- [x] `runtime/alerting/telegram_notifier.py` — Bot Token + chat_id → sendMessage（缺設定時 skip + warn）
+- [x] `runtime/alerting/synology_notifier.py` — Webhook URL → POST json.dumps({"text": ...})
+- [x] `runtime/alerting/alert_manager.py` — AlertManager（config load/save/update、per-rule cooldown、min_severity per channel、空 secret 保持原值、reload_if_changed mtime 熱重載、send_test、get_alert_manager singleton）
+- [x] `runtime/health/watchdog.py` — Watchdog thread：per-service process alive + /health HTTP 探測（hang 偵測）+ psutil RSS、disk free %、規則評估、auto_restart（restart_after_s / cooldown_s / max_per_day / exclude 可設定，達上限發 CRITICAL）、merged_watchdog_config()
+- [x] `runtime/health/__init__.py` — re-export
+- [x] Launcher 整合：`restart_service()` 公開方法（ServiceProcess.start 重置 `_stopped`）、`_start_watchdog()` 於 start_all 啟動、stop_all 停止 watchdog
+- [x] Dashboard API：`GET /api/notifications`（secrets 遮罩成 has_bot_token/has_webhook_url）、`PUT /api/notifications`（合併式儲存，watchdog 淺深度 merge）、`POST /api/notifications/test/{channel}`
+- [x] Dashboard UI（System tab admin 區塊）：Telegram/Synology Chat 通道卡片（enabled、token/webhook 輸入、min_severity、測試按鈕）+ Watchdog 設定（interval、timeout、RSS/disk 門檻）+ Auto-restart（enabled、restart_after_s、cooldown_s、max_per_day、exclude）
+- [x] `config/notifications.json.example` + .gitignore `config/notifications.json`
+- [x] 熱重載機制：dashboard 存檔 → launcher 端 AlertManager.reload_if_changed()（mtime）+ Watchdog 每輪重讀 config，免重啟生效
+- [x] Phase 33 記憶體修復：
+  - [x] `metrics.py` _histograms → deque(maxlen=1000)
+  - [x] `event_metrics.py` _event_durations → deque(maxlen=1000)
+  - [x] `episodic_memory.py` _records → deque(maxlen=5000)（recent() 改索引存取）
+  - [x] `rate_limiter.py` _buckets 每 60s 掃描、閒置 >3600s 驅逐
+  - [x] `shared_memory.py` _broadcast_log → deque(maxlen=1000)
+  - [x] `routing_engine.py` _worker_health_cache >512 時清除過期 key
+- [x] 測試：tests/test_alerting.py（17）+ tests/test_watchdog.py（12）全過；test_memory 加 session_store 隔離 fixture（修復跨運行污染）
+- [x] 全量驗證：776 passed / 20 failed——**stash 對照確認 20 個失敗在乾淨 codebase 完全相同**（custom_providers×11 auth 污染、capabilities×1 IP、dashboard_auth×2、file_parser×4 缺套件、security×2 env），與本次改動無關
+
+## Pending / 後續
+- [x] Secrets 欄位 UI 改善（2026-08-23）：存檔後欄位清空易誤解為未輸入 → 後端 GET /api/notifications 回傳遮罩提示（••••+後4碼），前端顯示「● 已設定」綠色徽章 + 綠框 + placeholder「已儲存 ••••xxxx — 留空保持不變」；未設定顯示灰色「○ 未設定」（dashboard_server.py + dashboard.js）
+- [x] API 權限修補（2026-08-23）：GET/PUT /api/notifications 與 POST /api/notifications/test/{channel} 補上 `_require_admin(request)`——UI 卡片原本就只在 admin 區塊渲染，但 API 端點漏了 role 檢查，一般登入用戶可讀寫通知設定
+- [ ] Telegram bot 建立後：Dashboard 填入 bot token + chat_id → 測試按鈕驗證
+- [ ] Synology Chat webhook URL 建立後同上
+- [ ] 實機驗證 auto-restart：手動 kill 某服務觀察通知 + 自動拉起
+- [ ] （既有問題，非本次引入）test_custom_providers 11 個 401 失敗為跨測試 auth 污染，乾淨 codebase 亦復現，待另案排查污染源
