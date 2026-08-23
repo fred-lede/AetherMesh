@@ -16,6 +16,14 @@ models:
     capabilities: [chat, thinking, tools, vision]
     estimated_vram_mb:
     
+  - name: nemotron-3.5-lightning:30b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11434
+    capabilities: [chat, thinking, tools]
+    estimated_vram_mb:    
+    
   - name: gemma4:26b
     provider: ollama
     worker_bindings:
@@ -24,7 +32,7 @@ models:
     capabilities: [chat, thinking, tools, vision, audio]
     estimated_vram_mb:
 
-  - name: qwen3.6:27b
+  - name: qwen3.8:27b
     provider: ollama
     worker_bindings:
       - node_id: node-01
@@ -37,8 +45,6 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11434
-        ollama_options:
-          num_ctx: 32768
     capabilities: [chat, thinking, tools, vision, audio]
     estimated_vram_mb:
     
@@ -47,8 +53,6 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11434
-        ollama_options:
-          num_ctx: 32768
     capabilities: [chat, tools]
     estimated_vram_mb:
 
@@ -67,14 +71,6 @@ models:
         port: 11434
     capabilities: [chat, thinking, tools, vision]
     estimated_vram_mb:
-
-  - name: nemotron-cascade-2:30b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools]
-    estimated_vram_mb:
     
   - name: north-mini-code-1.0:q4_K_M
     provider: ollama
@@ -91,8 +87,6 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11434
-        ollama_options:
-          num_ctx: 32768
     capabilities: [chat, tools]
     estimated_vram_mb: 
     
@@ -110,19 +104,11 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
-        ollama_options:
-          num_ctx: 32768
       - node_id: node-p40-01
         port: 11434
-        ollama_options:
-          num_ctx: 16384
       - node_id: node-p40-01
         port: 11435
-        ollama_options:
-          num_ctx: 16384
     capabilities: [chat, thinking, tools, vision, audio]
-    ollama_options:
-      num_ctx: 32768
     estimated_vram_mb:
     
   - name: gemma4:e4b
@@ -241,16 +227,16 @@ models:
     provider: nvidia_nim
     worker_ports: []
     capabilities: [chat, thinking, tools]
+    
+  - name: minimaxai/minimax-m3
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, vision, thinking, tools]
 
   - name: minimaxai/minimax-m2.7
     provider: nvidia_nim
     worker_ports: []
     capabilities: [chat, tools]
-    
-  - name:  moonshotai/kimi-k2.6
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
     
   - name:  google/diffusiongemma-26b-a4b-it
     provider: nvidia_nim
@@ -267,7 +253,7 @@ models:
     worker_ports: []
     capabilities: [chat, thinking, tools]
 
-  - name: deepseek-ai/deepseek-v4-flash
+  - name: deepseek-ai/deepseek-v4-flash-0731
     provider: nvidia_nim
     worker_ports: []
     capabilities: [chat, thinking, tools]
@@ -281,16 +267,6 @@ models:
     provider: agnes
     worker_ports: []
     capabilities: [chat, thinking, tools]
-
-  - name: qwen3-coder:480b
-    provider: ollama_cloud
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-
-  - name: qwen3-vl:235b
-    provider: ollama_cloud
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
     
   # ── Local TTS ──────────────────────────────────────────────
   - name: xtts-v2
