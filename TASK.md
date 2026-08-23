@@ -709,3 +709,4 @@
 - [ ] Synology Chat webhook URL 建立後同上
 - [ ] 實機驗證 auto-restart：手動 kill 某服務觀察通知 + 自動拉起
 - [ ] （既有問題，非本次引入）test_custom_providers 11 個 401 失敗為跨測試 auth 污染，乾淨 codebase 亦復現，待另案排查污染源
+- [x] 文件更新 + commit + push（2026-08-23）：README 新增 Notifications & Watchdog 章節；兩個 commit——e67a507（models.yaml 模型登錄）與 c4c6d46（Phase 43 完整功能，26 files +1626 行）已推送至 origin/main。junk 檔案（config/sessions.json、test_*、sample_output.md）未納入版本控制
