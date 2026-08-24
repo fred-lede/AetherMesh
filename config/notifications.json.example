@@ -17,6 +17,8 @@
     "interval_s": 30,
     "health_timeout_s": 10,
     "hang_failures_to_alert": 3,
+    "startup_grace_s": 180,
+    "exclude_services": [],
     "rules": {
       "service_rss_mb": {"warn": 4096, "critical": 8192},
       "disk_free_pct": {"warn": 15.0, "critical": 5.0}

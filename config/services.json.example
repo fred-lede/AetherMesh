@@ -1,0 +1,4 @@
+{
+  "openai_router": {"enabled": true},
+  "task_worker": {"enabled": false}
+}

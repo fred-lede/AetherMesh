@@ -973,6 +973,14 @@ Control plane metrics snapshot:
 Common error codes: `provider_timeout`, `runner_stopped`, `provider_unreachable`,
 `worker_unavailable`, `control_plane_unavailable`, `queued_sync_not_supported`.
 
+### Service Control
+
+Dashboard → System → **Service Control** (admin only) toggles launcher services on/off.
+Desired state lives in `config/services.json`; the launcher reconciles within ~1s
+(stopping disabled services, starting re-enabled ones) and the watchdog skips
+disabled services entirely — no health checks, no alerts, no auto-restart. A service
+stopped this way is flagged `intentionally_stopped`, distinguishing it from a crash.
+
 ### Notifications & Watchdog
 
 The launcher runs a built-in watchdog (`runtime/health/watchdog.py`) that monitors every

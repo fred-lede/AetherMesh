@@ -30,6 +30,8 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "interval_s": 30,
     "health_timeout_s": 10,
     "hang_failures_to_alert": 3,
+    "startup_grace_s": 180,
+    "exclude_services": [],
     "rules": {
         "service_rss_mb": {"warn": 4096, "critical": 8192},
         "disk_free_pct": {"warn": 15.0, "critical": 5.0},
@@ -71,6 +73,8 @@ class ServiceCheckResult:
     healthy: bool | None = None
     rss_mb: float | None = None
     detail: str = ""
+    in_grace: bool = False
+    startup_age_s: float | None = None
 
 
 @dataclass(slots=True)
@@ -153,7 +157,13 @@ class Watchdog:
         self.last_summary = {
             "timestamp": time.time(),
             "services": {
-                r.name: {"alive": r.alive, "healthy": r.healthy, "rss_mb": r.rss_mb}
+                r.name: {
+                    "alive": r.alive,
+                    "healthy": r.healthy,
+                    "rss_mb": r.rss_mb,
+                    "in_grace": r.in_grace,
+                    "startup_age_s": r.startup_age_s,
+                }
                 for r in results
             },
             "disk_free_pct": disk_pct,
@@ -182,12 +192,28 @@ class Watchdog:
         except Exception:
             return None
 
+    @staticmethod
+    def _process_age_s(pid: int, now: float) -> float | None:
+        try:
+            import psutil
+
+            return max(0.0, now - psutil.Process(pid).create_time())
+        except Exception:
+            return None
+
     def _check_services(self, cfg: dict[str, Any]) -> list[ServiceCheckResult]:
         timeout = float(cfg.get("health_timeout_s", 10))
+        grace_s = float(cfg.get("startup_grace_s", 180))
+        excluded = set(cfg.get("exclude_services") or [])
         services = self._get_services() or {}
         now = time.time()
         results: list[ServiceCheckResult] = []
         for name, sp in services.items():
+            if name in excluded:
+                continue
+            if getattr(sp, "intentionally_stopped", False):
+                self._states.pop(name, None)
+                continue
             result = ServiceCheckResult(name=name)
             state = self._states.setdefault(name, _ServiceState())
 
@@ -201,6 +227,10 @@ class Watchdog:
                 result.alive = poll is None
                 if result.alive:
                     result.rss_mb = self._rss_mb(pid)
+                    age = self._process_age_s(pid, now)
+                    if age is not None:
+                        result.startup_age_s = round(age, 1)
+                        result.in_grace = age < grace_s
 
             if result.alive:
                 port = self._port_for(name)
@@ -257,6 +287,13 @@ class Watchdog:
         hang_alert_after = int(cfg.get("hang_failures_to_alert", 3))
         rss_rule = cfg.get("rules", {}).get("service_rss_mb", {})
 
+        if result.in_grace:
+            state.dead_since = None
+            state.consecutive_hang = 0
+            state.hang_since = None
+            self._rss_alerts(result, rss_rule)
+            return
+
         if not result.alive:
             if state.dead_since is None:
                 state.dead_since = now
@@ -306,6 +343,9 @@ class Watchdog:
             state.consecutive_hang = 0
             state.hang_since = None
 
+        self._rss_alerts(result, rss_rule)
+
+    def _rss_alerts(self, result: ServiceCheckResult, rss_rule: dict[str, Any]) -> None:
         if result.rss_mb is not None and isinstance(rss_rule, dict) and rss_rule.get("warn"):
             warn_mb = float(rss_rule["warn"])
             critical_mb = rss_rule.get("critical")

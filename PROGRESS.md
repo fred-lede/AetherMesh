@@ -178,3 +178,8 @@ ame ��쥿�W�Ʀ� function object�C�M�Ω� _normalize_payload_for_provider�]�л\ c
 - Phase 33 無界記憶體修復：metrics histograms、event durations（deque maxlen=1000）、episodic records（5000）、rate_limiter buckets TTL 掃描、shared_memory broadcast log（1000）、routing_engine worker health cache 驅逐
 - 測試：test_alerting.py 17 + test_watchdog.py 12 新增；test_memory.py 加 session_store 隔離 fixture 修復跨運行污染
 - 全量 776 passed / 20 failed（stash 對照證實失敗集合與乾淨 codebase 完全一致，皆為既有環境/污染問題）
+
+## 2026-08-24 — Service Control（期望狀態機制）+ Watchdog 誤判修復
+- 根因：openai_router 重啟後啟動期（Tavily/Serper 初始化重試）被 watchdog 誤判為無回應，連發告警。新增 startup_grace_s（預設 180s，以 psutil create_time 計 process 啟齡）消除此類誤報。
+- 新增 Service Control：config/services.json 為期望狀態來源；Dashboard System 新增卡片（GET/PUT /api/services，admin only）；launcher 每 1s reconcile 自動 stop/start；watchdog 跳過 intentionally_stopped 服務（不監控不告警不重啟），與 crash 明確區分。
+- 測試：+16（tests/test_launcher.py 10、tests/test_services_api.py 6、test_watchdog.py +2）；全量 797 passed / 20 failed 與既有基準一致，零回歸。

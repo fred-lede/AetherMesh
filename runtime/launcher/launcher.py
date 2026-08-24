@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -139,9 +140,11 @@ class ServiceProcess:
         self.log_file: TextIO | None = None
         self.thread: threading.Thread | None = None
         self._stopped = False
+        self.intentionally_stopped = False
 
     def start(self) -> None:
         self._stopped = False
+        self.intentionally_stopped = False
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = open(self.log_path, "a", encoding="utf-8")
         self.log_file.write(
@@ -180,8 +183,10 @@ class ServiceProcess:
 
     def stop(self, timeout: float = 5.0) -> None:
         if self.process is None or self.process.poll() is not None:
+            self.intentionally_stopped = True
             return
         self._stopped = True
+        self.intentionally_stopped = True
         self.process.terminate()
         try:
             self.process.wait(timeout=timeout)
@@ -221,6 +226,49 @@ class Launcher:
         self.log_dir = Path(log_dir)
         self.services: dict[str, ServiceProcess] = {}
         self._running = False
+        self._services_cfg_mtime: float | None = None
+        self._services_cfg: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _services_config_path() -> Path:
+        from config.settings import settings
+
+        return Path(settings.config_path("services.json"))
+
+    def _load_desired(self) -> dict[str, dict[str, Any]]:
+        try:
+            path = self._services_config_path()
+            if not path.exists():
+                self._services_cfg = {}
+                self._services_cfg_mtime = None
+                return self._services_cfg
+            mtime = path.stat().st_mtime
+            if mtime == self._services_cfg_mtime:
+                return self._services_cfg
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self._services_cfg = data if isinstance(data, dict) else {}
+            self._services_cfg_mtime = mtime
+        except (OSError, ValueError) as exc:
+            print(f"  [launcher] services.json read error: {exc}")
+            self._services_cfg = {}
+        return self._services_cfg
+
+    def desired_enabled(self, name: str) -> bool:
+        entry = self._load_desired().get(name)
+        if isinstance(entry, dict):
+            return bool(entry.get("enabled", True))
+        return True
+
+    def _reconcile_services(self) -> None:
+        for name, sp in list(self.services.items()):
+            want = self.desired_enabled(name)
+            st = sp.status
+            if not want and st == "running":
+                print(f"  [{time.strftime('%H:%M:%S')}] stopping {name} (disabled via services.json)")
+                sp.stop()
+            elif want and sp.intentionally_stopped and st != "running":
+                print(f"  [{time.strftime('%H:%M:%S')}] starting {name} (re-enabled via services.json)")
+                sp.start()
 
     def start_all(self, names: list[str] | None = None, daemon: bool = False) -> None:
         if names is None:
@@ -235,6 +283,11 @@ class Launcher:
             log_path = self.log_dir / f"{name}.log"
             sp = ServiceProcess(name=name, cmd=cmd, log_path=log_path)
             self.services[name] = sp
+            if not self.desired_enabled(name):
+                sp.intentionally_stopped = True
+                port = svc.get("port_default", "-")
+                print(f"  [{name:<16}] skipped  (port {str(port):<5}  disabled via services.json)")
+                continue
             sp.start()
             port = svc.get("port_default", "-")
             print(f"  [{name:<16}] started  (port {str(port):<5}  log: {log_path})")
@@ -311,6 +364,10 @@ class Launcher:
     def _wait_loop(self) -> None:
         try:
             while self._running:
+                try:
+                    self._reconcile_services()
+                except Exception as exc:
+                    print(f"  [launcher] reconcile error: {exc}")
                 time.sleep(1)
         except KeyboardInterrupt:
             self.stop_all()

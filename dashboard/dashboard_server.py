@@ -1254,6 +1254,63 @@ def notifications_test(channel: str, request: Request) -> dict[str, Any]:
     return {"ok": True, "message": message}
 
 
+def _services_config_path() -> Path:
+    return Path(settings.config_path("services.json"))
+
+
+@api.get("/services")
+def services_get(request: Request) -> dict[str, Any]:
+    """Desired on/off state for launcher-managed services."""
+    _require_admin(request)
+    from runtime.launcher.launcher import SERVICE_DEFS
+
+    data: dict[str, Any] = {}
+    try:
+        path = _services_config_path()
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+    except (OSError, ValueError):
+        data = {}
+    services = [
+        {
+            "name": s["name"],
+            "port": s.get("port_default"),
+            "enabled": bool(data.get(s["name"], {}).get("enabled", True)),
+        }
+        for s in SERVICE_DEFS
+    ]
+    return {"services": services}
+
+
+@api.put("/services/{name}")
+def service_put(name: str, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Set desired enabled/disabled state; the launcher reconciles within seconds."""
+    _require_admin(request)
+    from runtime.launcher.launcher import SERVICE_DEFS
+
+    valid = {s["name"] for s in SERVICE_DEFS}
+    if name not in valid:
+        raise HTTPException(status_code=404, detail=f"unknown service: {name}")
+    enabled = bool(body.get("enabled", True))
+    path = _services_config_path()
+    data: dict[str, Any] = {}
+    try:
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+    except (OSError, ValueError):
+        data = {}
+    entry = data.get(name) if isinstance(data.get(name), dict) else {}
+    entry["enabled"] = enabled
+    data[name] = entry
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "name": name, "enabled": enabled}
+
+
 @api.get("/web-search/status")
 def web_search_status() -> dict[str, Any]:
     from runtime.tools.web_search import web_search_manager

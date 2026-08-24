@@ -1625,6 +1625,50 @@
       }
     }
 
+    async function loadServiceControl() {
+      const panel = document.getElementById('svc-panel');
+      if (!panel) return;
+      try {
+        const data = await mutateDashboard('/api/services');
+        const rows = (data.services || []).map((s) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:0.9rem;">
+            <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleLauncherService('${s.name}', this)">
+            <span class="mono">${s.name}</span>
+            <span style="color:var(--muted);font-size:0.8rem;">port ${s.port ?? '-'}</span>
+            <span id="svc-state-${s.name}" style="margin-left:auto;font-size:0.8rem;${s.enabled ? 'color:#22c55e;' : 'color:#94a3b8;'}">${s.enabled ? '● enabled' : '○ disabled'}</span>
+          </label>`).join('');
+        panel.innerHTML = `
+          <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">
+            取消勾選 → launcher 會在數秒內停止該服務，watchdog 同時停止監控（不再告警）；重新勾選 → 自動啟動並恢復監控。
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${rows}</div>`;
+      } catch (err) {
+        panel.innerHTML = `<span class="muted">Failed to load: ${_escAttr(err.message)}</span>`;
+      }
+    }
+
+    async function toggleLauncherService(name, checkbox) {
+      const stateEl = document.getElementById(`svc-state-${name}`);
+      const enabled = checkbox.checked;
+      if (stateEl) { stateEl.textContent = '…saving'; stateEl.style.color = 'var(--muted)'; }
+      try {
+        await mutateDashboard(`/api/services/${name}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        if (stateEl) {
+          stateEl.textContent = enabled ? '● enabled' : '○ disabled';
+          stateEl.style.color = enabled ? '#22c55e' : '#94a3b8';
+        }
+        setOperationStatus(`${name} ${enabled ? 'enabled' : 'disabled'} — launcher will reconcile shortly.`, 'ok');
+      } catch (err) {
+        checkbox.checked = !enabled;
+        if (stateEl) { stateEl.textContent = enabled ? '○ disabled' : '● enabled'; stateEl.style.color = enabled ? '#94a3b8' : '#22c55e'; }
+        setOperationStatus(`Failed: ${err.message}`, 'bad');
+      }
+    }
+
     function _sevSelect(id, current) {
       const opts = ['info', 'warning', 'critical'].map((s) =>
         `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('');
@@ -1641,6 +1685,8 @@
       const rss = rules.service_rss_mb || {};
       const disk = rules.disk_free_pct || {};
       const ar = wd.auto_restart || {};
+      const allServices = ['control_plane', 'openai_router', 'anthropic_router', 'dashboard', 'metrics', 'node_agent', 'worker_agent', 'task_worker'];
+      const excludedSet = new Set(wd.exclude_services || []);
 
       panel.innerHTML = `
         <div style="display:flex;gap:24px;flex-wrap:wrap;">
@@ -1692,6 +1738,7 @@
               <label>Interval (s)<input type="number" id="ntf-wd-interval" value="${wd.interval_s || 30}" min="5" style="width:100%;padding:4px;"></label>
               <label>Health timeout (s)<input type="number" id="ntf-wd-timeout" value="${wd.health_timeout_s || 10}" min="1" style="width:100%;padding:4px;"></label>
               <label>Hang failures to alert<input type="number" id="ntf-wd-hangfail" value="${wd.hang_failures_to_alert || 3}" min="1" style="width:100%;padding:4px;"></label>
+              <label>Startup grace (s)<input type="number" id="ntf-wd-grace" value="${wd.startup_grace_s ?? 180}" min="0" style="width:100%;padding:4px;" title="剛啟動的服務在此秒數內不會觸發無回應告警"></label>
               <label>RSS warn / critical (MB)
                 <div style="display:flex;gap:4px;">
                   <input type="number" id="ntf-rss-warn" value="${rss.warn || 4096}" style="width:100%;padding:4px;">
@@ -1714,8 +1761,13 @@
               <label>Cooldown (s)<input type="number" id="ntf-ar-cooldown" value="${ar.cooldown_s ?? 1800}" min="0" style="width:100%;padding:4px;"></label>
               <label>Max / day<input type="number" id="ntf-ar-maxday" value="${ar.max_per_day ?? 4}" min="0" style="width:100%;padding:4px;"></label>
             </div>
-            <div style="font-size:0.85rem;margin:6px 0 4px;">Exclude services (comma-separated)</div>
+            <div style="font-size:0.85rem;margin:6px 0 4px;">Exclude from auto-restart (comma-separated)</div>
             <input type="text" id="ntf-ar-exclude" value="${_escAttr((ar.exclude || []).join(', '))}" placeholder="task_worker" style="width:100%;padding:4px;">
+            <h4 style="margin:12px 0 8px;">Monitored services</h4>
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px;">取消勾選 = 完全不監控、不告警、不重啟</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:0.85rem;">
+              ${allServices.map((s) => `<label><input type="checkbox" class="ntf-wd-svc" value="${s}" ${excludedSet.has(s) ? '' : 'checked'}> ${s}</label>`).join('')}
+            </div>
           </div>
         </div>
         <div style="margin-top:14px;display:flex;align-items:center;gap:12px;">
@@ -1755,6 +1807,8 @@
             interval_s: Math.max(5, num('ntf-wd-interval', 30)),
             health_timeout_s: Math.max(1, num('ntf-wd-timeout', 10)),
             hang_failures_to_alert: Math.max(1, num('ntf-wd-hangfail', 3)),
+            startup_grace_s: Math.max(0, num('ntf-wd-grace', 180)),
+            exclude_services: Array.from(document.querySelectorAll('.ntf-wd-svc')).filter((el) => !el.checked).map((el) => el.value),
             rules: {
               ...((wdOld.rules || {})),
               service_rss_mb: {
@@ -1802,4 +1856,5 @@
 
     if (document.getElementById('notifications-panel')) {
       loadNotificationSettings().catch(() => {});
+      loadServiceControl().catch(() => {});
     }

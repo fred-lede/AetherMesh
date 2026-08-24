@@ -115,6 +115,108 @@ class TestServiceChecks:
         assert any("記憶體" in t for t in titles)
 
 
+class TestExcludeAndGrace:
+    def test_exclude_services_skips_entirely(self) -> None:
+        wd, alerts = _watchdog({"openai_router": FakeSP(status="crashed(1)")})
+        original_load = wd.load_config
+
+        def load():
+            cfg = original_load()
+            cfg["exclude_services"] = ["openai_router"]
+            return cfg
+
+        wd.load_config = load
+        summary = wd.check_once()
+        assert "openai_router" not in summary["services"]
+        calls = [
+            c
+            for c in alerts.dispatch.call_args_list
+            if "openai_router" in str(c.kwargs.get("rule_key", ""))
+            or "openai_router" in str(c.kwargs.get("title", ""))
+        ]
+        assert calls == []
+
+    def test_startup_grace_suppresses_hang_alert(self, monkeypatch) -> None:
+        import requests as requests_lib
+
+        def timeout(url, timeout=None):
+            raise requests_lib.ConnectionError("no response")
+
+        monkeypatch.setattr(watchdog_mod.requests, "get", timeout)
+        monkeypatch.setattr(Watchdog, "_process_age_s", staticmethod(lambda pid, now: 5.0))
+        wd, alerts = _watchdog({"openai_router": FakeSP(pid=1234)})
+        original_load = wd.load_config
+
+        def load():
+            cfg = original_load()
+            cfg["hang_failures_to_alert"] = 1
+            return cfg
+
+        wd.load_config = load
+        summary = wd.check_once()
+        svc = summary["services"]["openai_router"]
+        assert svc["healthy"] is False
+        assert svc["in_grace"] is True
+        titles = [str(c.kwargs.get("title", "")) for c in alerts.dispatch.call_args_list]
+        assert not any("無回應" in t for t in titles)
+
+    def test_startup_grace_expires_allows_alert(self, monkeypatch) -> None:
+        import requests as requests_lib
+
+        def timeout(url, timeout=None):
+            raise requests_lib.ConnectionError("no response")
+
+        monkeypatch.setattr(watchdog_mod.requests, "get", timeout)
+        monkeypatch.setattr(Watchdog, "_process_age_s", staticmethod(lambda pid, now: 9999.0))
+        wd, alerts = _watchdog({"openai_router": FakeSP(pid=1234)})
+        original_load = wd.load_config
+
+        def load():
+            cfg = original_load()
+            cfg["hang_failures_to_alert"] = 1
+            return cfg
+
+        wd.load_config = load
+        wd.check_once()
+        titles = [str(c.kwargs.get("title", "")) for c in alerts.dispatch.call_args_list]
+        assert any("無回應" in t for t in titles)
+
+    def test_no_pid_info_defaults_out_of_grace(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            watchdog_mod.requests,
+            "get",
+            lambda url, timeout=None: MagicMock(status_code=200),
+        )
+        wd, alerts = _watchdog({"openai_router": FakeSP(status="running")})
+        summary = wd.check_once()
+        svc = summary["services"]["openai_router"]
+        assert svc["in_grace"] is False
+        assert svc["alive"] is True
+
+    def test_intentionally_stopped_service_skipped(self) -> None:
+        sp = SimpleNamespace(
+            status="stopped",
+            process=None,
+            intentionally_stopped=True,
+        )
+        wd, alerts = _watchdog({"openai_router": sp})
+        summary = wd.check_once()
+        assert "openai_router" not in summary["services"]
+        calls = [
+            c
+            for c in alerts.dispatch.call_args_list
+            if "openai_router" in str(c.kwargs.get("rule_key", ""))
+        ]
+        assert calls == []
+
+    def test_intentional_flag_reset_on_restart(self) -> None:
+        sp = SimpleNamespace(status="running", process=None, intentionally_stopped=False)
+        wd, alerts = _watchdog({"openai_router": sp})
+        summary = wd.check_once()
+        assert "openai_router" in summary["services"]
+        assert summary["services"]["openai_router"]["alive"] is True
+
+
 class TestAutoRestart:
     def _wd_with_restart(self, services, **ar_overrides):
         ar = {"enabled": True, "restart_after_s": 0, "cooldown_s": 0}

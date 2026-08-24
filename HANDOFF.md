@@ -25,3 +25,6 @@ State: all features implemented and tested; **not yet deployed** (server restart
 - 設定檔：config/notifications.json（channels: telegram/synology_chat；watchdog: interval/rules/auto_restart）。Dashboard System tab 可線上編輯+測試，mtime 熱重載免重啟
 - 當機偵測原理：/health 探測 timeout = event loop 卡死前兆；連續 N 次失敗即告警，持續逾 restart_after_s 自動重啟（有 cooldown + 每日上限防護）
 - 已知待辦：Telegram bot token / Synology webhook 由使用者自行建立後於 Dashboard 填入；test_custom_providers 的 11 個 401 為既有跨測試 auth 污染（乾淨 codebase 復現），污染源待排查
+
+## 2026-08-24 補充 — Service Control
+- config/services.json = 服務期望狀態（gitignored，範本 services.json.example）。Dashboard Service Control 卡片寫入 → launcher 每 1s reconcile（stop/start）→ watchdog 跳過 intentionally_stopped 服務。watchdog 另有 startup_grace_s=180 防啟動期誤報、exclude_services 永久排除清單。注意：openai_router(8001) 是 OpenAI 相容總入口，停用會斷所有 OpenAI 格式 API。
