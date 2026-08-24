@@ -43,6 +43,14 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "max_per_day": 4,
         "exclude": [],
     },
+    "ollama_deep_check": {
+        "enabled": False,
+        "base_url": "http://127.0.0.1:11434",
+        "interval_s": 120,
+        "timeout_s": 30,
+        "model": "",
+        "failures_to_alert": 2,
+    },
 }
 
 
@@ -61,6 +69,11 @@ def merged_watchdog_config(section: dict[str, Any] | None) -> dict[str, Any]:
             merged["rules"] = rules
         elif key == "auto_restart" and isinstance(value, dict):
             merged["auto_restart"] = {**_DEFAULT_CONFIG["auto_restart"], **value}
+        elif key == "ollama_deep_check" and isinstance(value, dict):
+            merged["ollama_deep_check"] = {
+                **_DEFAULT_CONFIG["ollama_deep_check"],
+                **value,
+            }
         else:
             merged[key] = value
     return merged
@@ -109,6 +122,8 @@ class Watchdog:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._states: dict[str, _ServiceState] = {}
+        self._ollama_failures = 0
+        self._ollama_last_run = 0.0
         self.last_summary: dict[str, Any] = {}
 
     def load_config(self) -> dict[str, Any]:
@@ -154,6 +169,7 @@ class Watchdog:
         cfg = self.load_config()
         results = self._check_services(cfg)
         disk_pct = self._check_disk(cfg)
+        ollama_info = self._check_ollama(cfg)
         self.last_summary = {
             "timestamp": time.time(),
             "services": {
@@ -167,6 +183,7 @@ class Watchdog:
                 for r in results
             },
             "disk_free_pct": disk_pct,
+            "ollama": ollama_info,
         }
         return self.last_summary
 
@@ -247,6 +264,62 @@ class Watchdog:
             self._evaluate_service(cfg, state, result, now)
             results.append(result)
         return results
+
+    def _check_ollama(self, cfg: dict[str, Any]) -> dict[str, Any] | None:
+        oc = cfg.get("ollama_deep_check") or {}
+        if not isinstance(oc, dict) or not oc.get("enabled", False):
+            return None
+        interval = max(30, int(oc.get("interval_s", 120)))
+        now = time.time()
+        if now - self._ollama_last_run < interval:
+            return self.last_summary.get("ollama")
+        self._ollama_last_run = now
+
+        from runtime.health.ollama_probe import probe_ollama
+
+        result = probe_ollama(
+            base_url=str(oc.get("base_url", "http://127.0.0.1:11434")),
+            timeout_s=float(oc.get("timeout_s", 30)),
+            model=str(oc.get("model", "")),
+        )
+        info: dict[str, Any] = {
+            "status": result.status,
+            "model": result.model,
+            "latency_ms": result.latency_ms,
+            "stale_vram": result.stale_vram,
+            "detail": result.detail,
+        }
+
+        if result.status in ("unreachable", "infer_failed"):
+            self._ollama_failures += 1
+            threshold = int(oc.get("failures_to_alert", 2))
+            if self._ollama_failures >= threshold:
+                title = (
+                    "Ollama 無回應" if result.status == "unreachable" else "Ollama 推論失敗"
+                )
+                self._alerts.dispatch(
+                    title=f"{title}（深度檢查）",
+                    message=(
+                        f"連續 {self._ollama_failures} 次失敗。{result.detail}"
+                        + (f"\n注意：註冊表顯示已載入但 VRAM 為 0（runner 可能已死）。" if result.stale_vram else "")
+                    ),
+                    severity=Severity.WARNING,
+                    rule_key="ollama_deep",
+                    cooldown_s=600,
+                )
+        elif result.status == "ok":
+            if self._ollama_failures >= int(oc.get("failures_to_alert", 2)):
+                self._alerts.dispatch(
+                    title="Ollama 恢復（深度檢查）",
+                    message=f"{result.model or 'ollama'} 推論通過（{result.latency_ms} ms）",
+                    severity=Severity.INFO,
+                    rule_key="ollama_recovered",
+                    cooldown_s=60,
+                )
+            self._ollama_failures = 0
+        else:
+            logger.debug("ollama deep check idle (%sms)", result.latency_ms)
+        return info
 
     def _check_disk(self, cfg: dict[str, Any]) -> float | None:
         try:

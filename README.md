@@ -1000,6 +1000,13 @@ memory, and host disk space. When a rule trips it dispatches alerts through
 
 See `config/notifications.json.example` for the full schema.
 
+**Ollama deep health check**: a shallow `/api/tags` probe cannot detect a dead
+inference runner (Ollama answers instantly while every generation hangs). When
+`watchdog.ollama_deep_check.enabled` is true, the watchdog periodically runs a
+1-token generation against the first loaded model and alerts after
+`failures_to_alert` consecutive failures (WARNING, with recovery INFO). An idle
+Ollama (nothing loaded) is treated as healthy; set `model` to pin a specific one.
+
 ## Validation
 
 ```bash

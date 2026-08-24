@@ -29,6 +29,14 @@
       "cooldown_s": 1800,
       "max_per_day": 4,
       "exclude": ["task_worker"]
+    },
+    "ollama_deep_check": {
+      "enabled": true,
+      "base_url": "http://127.0.0.1:11434",
+      "interval_s": 120,
+      "timeout_s": 30,
+      "model": "",
+      "failures_to_alert": 2
     }
   }
 }
