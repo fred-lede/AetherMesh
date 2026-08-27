@@ -154,3 +154,7 @@ config/custom_providers.json
 config/notifications.json
 
 config/services.json
+
+runtime/launcher/launcher.pid
+runtime/launcher/launcher_sentry.json
+logs/launcher_supervisor.log

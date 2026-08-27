@@ -294,6 +294,7 @@ class Launcher:
 
         self._register_signals()
         self._start_watchdog()
+        self._write_supervisor_sentinel()
         print()
         self.status()
 
@@ -347,6 +348,30 @@ class Launcher:
         except Exception as exc:
             print(f"  [watchdog] failed to start: {exc}")
 
+    def _write_supervisor_sentinel(self) -> None:
+        """Write pid + sentry port files so the standalone supervisor can tell
+        whether the launcher (and hence the whole stack) is alive."""
+        try:
+            launch_dir = Path(__file__).resolve().parent
+            target_dir = getattr(self, "_sentinel_dir", launch_dir)
+            pid_file = target_dir / "launcher.pid"
+            pid_file.write_text(str(os.getpid()), encoding="utf-8")
+            sentry: dict[str, int] = {}
+            for svc in SERVICE_DEFS:
+                name = svc["name"]
+                sp = self.services.get(name)
+                if sp is None or sp.status != "running":
+                    continue
+                port = svc.get("port_default")
+                if port is not None:
+                    sentry[name] = int(port)
+            if sentry:
+                (target_dir / "launcher_sentry.json").write_text(
+                    json.dumps(sentry, indent=2), encoding="utf-8"
+                )
+        except Exception as exc:
+            print(f"  [launcher] sentinel write error: {exc}")
+
     def _stop_watchdog(self) -> None:
         wd = getattr(self, "watchdog", None)
         if wd is not None:
@@ -363,11 +388,18 @@ class Launcher:
 
     def _wait_loop(self) -> None:
         try:
+            counter = 0
             while self._running:
                 try:
                     self._reconcile_services()
                 except Exception as exc:
                     print(f"  [launcher] reconcile error: {exc}")
+                counter += 1
+                if counter % 30 == 0:
+                    try:
+                        self._write_supervisor_sentinel()
+                    except Exception:
+                        pass
                 time.sleep(1)
         except KeyboardInterrupt:
             self.stop_all()

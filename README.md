@@ -981,6 +981,29 @@ Desired state lives in `config/services.json`; the launcher reconciles within ~1
 disabled services entirely — no health checks, no alerts, no auto-restart. A service
 stopped this way is flagged `intentionally_stopped`, distinguishing it from a crash.
 
+### Boot Auto-Start & Self-Healing
+
+By default the launcher runs in the foreground, so if the console/session is killed
+(or the whole python stack dies) everything stops silently — the in-process watchdog
+cannot recover because it dies with the launcher.
+
+A **standalone supervisor** (`runtime/launcher/supervisor.py`) fixes this. It runs as
+its own persistent process and:
+
+1. On startup, boot-starts the stack if nothing is running (`python -m runtime.launcher
+   supervise`).
+2. Every interval (default 30s) checks launcher liveness via the pid file
+   (`runtime/launcher/launcher.pid`) plus sentry HTTP ports written by the launcher
+   (`launcher_sentry.json`, port 8001/9001/etc).
+3. If the whole stack is dead, re-runs `start_all.bat` to bring it back, with a 60s
+   anti-crash-loop cooldown. Logs to `logs/launcher_supervisor.log`.
+
+Windows boot setup: the `AIIH-Platform` scheduled task (Boot trigger) now runs
+`scripts/start_supervisor.bat` instead of `start_all.bat` directly, with an unlimited
+execution time limit and restart-on-failure, so the entire stack recovers automatically
+after a reboot or a full-stack crash. Ollama is managed separately by the
+`AIIH-Ollama-DualGPU` task.
+
 ### Notifications & Watchdog
 
 The launcher runs a built-in watchdog (`runtime/health/watchdog.py`) that monitors every

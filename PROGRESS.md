@@ -183,3 +183,10 @@ ame ��쥿�W�Ʀ� function object�C�M�Ω� _normalize_payload_for_provider�]�л\ c
 - 根因：openai_router 重啟後啟動期（Tavily/Serper 初始化重試）被 watchdog 誤判為無回應，連發告警。新增 startup_grace_s（預設 180s，以 psutil create_time 計 process 啟齡）消除此類誤報。
 - 新增 Service Control：config/services.json 為期望狀態來源；Dashboard System 新增卡片（GET/PUT /api/services，admin only）；launcher 每 1s reconcile 自動 stop/start；watchdog 跳過 intentionally_stopped 服務（不監控不告警不重啟），與 crash 明確區分。
 - 測試：+16（tests/test_launcher.py 10、tests/test_services_api.py 6、test_watchdog.py +2）；全量 797 passed / 20 failed 與既有基準一致，零回歸。
+
+## 2026-08-28 — 整棧自癒：Standalone Supervisor + 開機自動復活
+- 根因：openai_router exit 0xC000013A（外部終止）+ launcher 前景執行 + AIIH-Platform 排程任務 ExecutionTimeLimit=PT72H → 服務棧整組掛掉後靜默，無 watchdog 自癒也無告警。
+- 新增 runtime/launcher/supervisor.py（獨立常駐）：監控 launcher.pid + launcher_sentry.json（活躍服務 port），整棧死亡即重跑 start_all.bat；60s anti-crash-loop cooldown；log 至 logs/launcher_supervisor.log。
+- launcher 現在於啟動與每 30s 寫入 pid/sentry sentinel；新增 runtime/supervisor_util.py（probe_port/probe_http）與 python -m runtime.launcher supervise entry point。
+- 重設 AIIH-Platform 排程任務：執行 scripts/start_supervisor.bat、ExecutionTimeLimit=PT0S（無限）、S4U logon、restart-on-failure —— 開機即整棧自癒，不再靠手動。
+- 測試：+11（tests/test_supervisor.py）；全量 819 passed / 20 failed（與既有基準一致，零回歸）。

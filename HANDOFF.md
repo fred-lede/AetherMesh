@@ -28,3 +28,8 @@ State: all features implemented and tested; **not yet deployed** (server restart
 
 ## 2026-08-24 補充 — Service Control
 - config/services.json = 服務期望狀態（gitignored，範本 services.json.example）。Dashboard Service Control 卡片寫入 → launcher 每 1s reconcile（stop/start）→ watchdog 跳過 intentionally_stopped 服務。watchdog 另有 startup_grace_s=180 防啟動期誤報、exclude_services 永久排除清單。注意：openai_router(8001) 是 OpenAI 相容總入口，停用會斷所有 OpenAI 格式 API。
+
+## 2026-08-28 — 整棧自癒機制（重要）
+- 之前『跑一天就卡』根因：launcher 前景執行 + AIIH-Platform 排程 ExecutionTimeLimit=PT72H + 0xC000013A 外部終止 → 整棧靜默死亡。in-process watchdog 隨 launcher 一起死，無法自癒。
+- 現在：獨立 supervisor（python -m runtime.launcher supervise）常駐監控，整棧死即重拉；launcher 寫 runtime/launcher/launcher.pid + launcher_sentry.json 供判活。AIIH-Platform 排程已改為執行 scripts/start_supervisor.bat、ExecutionTimeLimit=PT0S、S4U logon、restart-on-failure。
+- 注意：AIIH-Platform 排程曾以 Password logon 記錄 fred 憑證；本次改 S4U（不需密碼）。若排程任務無法以 S4U 於開機後正確啟動（需檔案權限），可能需手動重填密碼：schtasks /Change /TN AIIH-Platform /RU fred /RP <password>。
