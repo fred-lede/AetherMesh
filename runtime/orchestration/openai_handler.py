@@ -1460,7 +1460,19 @@ class RouterService:
         return required.issubset(capabilities)
 
     def _apply_generation_defaults(self, payload: dict[str, Any]) -> dict[str, Any]:
+        model = str(payload.get("model", ""))
+        if payload.get("max_tokens") is not None or payload.get("max_completion_tokens") is not None:
+            return payload
+        if settings.default_max_tokens <= 0 or not self._model_is_thinking(model):
+            return payload
+        payload["max_tokens"] = int(settings.default_max_tokens)
         return payload
+
+    def _model_is_thinking(self, model: str) -> bool:
+        for entry in self.registry.get("models", []):
+            if entry.get("name") == model:
+                return "thinking" in (entry.get("capabilities") or [])
+        return False
 
     @staticmethod
     def _ensure_openai_tools(tools: Any) -> Any:
