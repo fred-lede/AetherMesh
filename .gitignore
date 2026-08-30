@@ -157,4 +157,5 @@ config/services.json
 
 runtime/launcher/launcher.pid
 runtime/launcher/launcher_sentry.json
+runtime/launcher/supervisor.pid
 logs/launcher_supervisor.log

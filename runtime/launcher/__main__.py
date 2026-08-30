@@ -1,18 +1,88 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 from runtime.launcher import Launcher
 
 
+SUPERVISOR_PID_FILE = Path("runtime/launcher/supervisor.pid")
+
+
+def _supervisor_already_running() -> bool:
+    try:
+        if not SUPERVISOR_PID_FILE.exists():
+            return False
+        raw = SUPERVISOR_PID_FILE.read_text(encoding="utf-8").strip()
+        pid = int(raw)
+        if pid <= 0:
+            return False
+        import psutil
+
+        return psutil.pid_exists(pid)
+    except Exception:
+        return False
+
+
+def _spawn_detached_supervisor(check_interval: float, python_exe: str) -> int:
+    """Spawn a detached background process running the supervisor loop.
+
+    Returns the detached child's PID. The parent returns immediately so that
+    Task Scheduler sees the task as completed successfully.
+    """
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = (
+            subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.CREATE_NO_WINDOW
+        )
+    env = os.environ.copy()
+    env["AIIH_SUPERVISOR_FORE"] = "1"
+    cmd = [python_exe, "-m", "runtime.launcher", "supervise", "--check-interval", str(check_interval)]
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(repo_root),
+        creationflags=creationflags,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
+    return proc.pid
+
+
 def run_supervisor(check_interval: float = 30.0) -> None:
-    """Blocking entry point for the standalone launcher supervisor."""
+    """Blocking entry point for the standalone launcher supervisor.
+
+    When AIIH_SUPERVISOR_FORE is set, run the supervisor loop in the
+    foreground (this is the detached worker). Otherwise, spawn a detached
+    worker and return so the calling bat/scheduler exits cleanly.
+    """
     import logging
     import signal as _signal
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     from runtime.launcher.supervisor import LauncherSupervisor
+
+    if not os.environ.get("AIIH_SUPERVISOR_FORE"):
+        if _supervisor_already_running():
+            print("supervisor already running", flush=True)
+            return
+        pid = _spawn_detached_supervisor(check_interval, sys.executable)
+        SUPERVISOR_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SUPERVISOR_PID_FILE.write_text(str(pid), encoding="utf-8")
+        print(f"supervisor spawned (pid {pid})", flush=True)
+        # Detach from any inherited console/handles and exit immediately so the
+        # caller (cmd.exe, Task Scheduler) sees the task as completed.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
 
     sup = LauncherSupervisor(check_interval_s=check_interval)
     sentry_file = sup._pid_file.with_name("launcher_sentry.json")
@@ -26,11 +96,20 @@ def run_supervisor(check_interval: float = 30.0) -> None:
 
     def _halt(_sig, _frame):
         sup.stop()
+        try:
+            SUPERVISOR_PID_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
         sys.exit(0)
 
     _signal.signal(_signal.SIGINT, _halt)
     _signal.signal(_signal.SIGTERM, _halt)
-    _signal.pause()
+    if hasattr(_signal, "pause"):
+        _signal.pause()
+    else:
+        # Windows: signal.pause() is unavailable. Block until the supervisor
+        # thread's stop event is set by _halt().
+        sup._stop_event.wait()
 
 
 def main() -> None:
