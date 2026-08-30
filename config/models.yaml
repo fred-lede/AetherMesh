@@ -136,7 +136,23 @@ models:
     worker_bindings:
       - node_id: node-01
         port: 11435
-    capabilities: [tools, vision]
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+    capabilities: [chat, vision]
+    estimated_vram_mb:
+    
+  - name: deepseek-ocr:3b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+    capabilities: [chat, vision]
     estimated_vram_mb:
 
   - name: translategemma:12b
@@ -162,8 +178,44 @@ models:
         port: 11435
     capabilities: [chat, thinking, tools, vision]
     estimated_vram_mb:
+    
+  - name: qwen3-embedding:8b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+    capabilities: [embeddings]
+    estimated_vram_mb:
+
+  - name: nomic-embed-text-v2-moe:latest
+    provider: ollama
+    worker_bindings:
+      - node_id: node-01
+        port: 11435
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+    capabilities: [embeddings]
+    estimated_vram_mb:
 
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
+  - name: ornith-1.5:9b
+    provider: ollama
+    worker_bindings:
+      - node_id: node-p40-01
+        port: 11434
+      - node_id: node-p40-01
+        port: 11435
+      - node_id: node-01
+        port: 11435
+    capabilities: [chat, vision]
+    estimated_vram_mb:
+
   - name: qwen3.5:9b
     provider: ollama
     worker_bindings:
@@ -176,7 +228,7 @@ models:
     capabilities: [chat, thinking, tools, vision]
     estimated_vram_mb:
 
-  - name: qwen3-embedding:8b
+  - name: medgemma1.5:4b
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
@@ -185,10 +237,10 @@ models:
         port: 11435
       - node_id: node-01
         port: 11435
-    capabilities: [embeddings]
+    capabilities: [chat, vision]
     estimated_vram_mb:
 
-  - name: nomic-embed-text-v2-moe:latest
+  - name: translategemma:4b
     provider: ollama
     worker_bindings:
       - node_id: node-p40-01
@@ -197,19 +249,7 @@ models:
         port: 11435
       - node_id: node-01
         port: 11435
-    capabilities: [embeddings]
-    estimated_vram_mb:
-
-  - name: nomic-embed-text:latest
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [embeddings]
+    capabilities: [chat, vision]
     estimated_vram_mb:
 
   # ── Cloud providers ─────────────────────────────────────────
