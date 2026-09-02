@@ -303,10 +303,25 @@ models:
     worker_ports: []
     capabilities: [chat, thinking, tools]
     
+  - name: ox-alpha-free
+    provider: OpenCode
+    worker_ports: []
+    capabilities: [chat, thinking, tools, vision]
+    
   - name: agnes-2.0-flash
     provider: agnes
     worker_ports: []
     capabilities: [chat, thinking, tools]
+    
+  - name: DeepSeek-V4-Flash-Vision-Exp
+    provider: AMD
+    worker_ports: []
+    capabilities: [chat, thinking, tools, vision]
+    
+  - name: Qwen3.8-Flash-Next
+    provider: AMD
+    worker_ports: []
+    capabilities: [chat, thinking, tools, vision]
     
   # ── Local TTS ──────────────────────────────────────────────
   - name: xtts-v2
