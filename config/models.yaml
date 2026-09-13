@@ -262,11 +262,11 @@ models:
     provider: gemini
     worker_ports: []
     capabilities: [chat, responses, embeddings, tools]
-
-  - name: z-ai/glm-5.2
+    
+  - name: z-ai/glm-5.3-flash
     provider: nvidia_nim
     worker_ports: []
-    capabilities: [chat, thinking, tools]
+    capabilities: [chat, vision, thinking, tools]
     
   - name: minimaxai/minimax-m3
     provider: nvidia_nim
@@ -278,6 +278,11 @@ models:
     worker_ports: []
     capabilities: [chat, tools]
     
+  - name: moonshotai/kimi-k3
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, vision, thinking, tools]
+    
   - name:  google/diffusiongemma-26b-a4b-it
     provider: nvidia_nim
     worker_ports: []
@@ -288,7 +293,7 @@ models:
     worker_ports: []
     capabilities: [chat, vision]
 
-  - name: deepseek-ai/deepseek-v4-pro
+  - name: deepseek-ai/deepseek-v4-pro-0813
     provider: nvidia_nim
     worker_ports: []
     capabilities: [chat, thinking, tools]
@@ -322,6 +327,16 @@ models:
     provider: AMD
     worker_ports: []
     capabilities: [chat, thinking, tools, vision]
+    
+  - name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, thinking, tools, vision]
+    
+  - name: nvidia/nemotron-3.5-lightning-30b-a3b
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, thinking, tools]
     
   # ── Local TTS ──────────────────────────────────────────────
   - name: xtts-v2
