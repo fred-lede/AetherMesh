@@ -728,3 +728,5 @@
 - **Next action**: Confirm functionality via AetherMesh UI or run test cases.
 
 - [x] Ollama 深度檢查誤報修復 (2026-09-13) watchdog 連續 18 次 'nomic-embed-text-v2-moe 推論失敗 400' 告警：根因是 ollama_deep_check.model 空白時 probe 自動選「目前第一個載入的模型」，剛好是 embedding 模型（nomic-embed-text-v2-moe 無法跑 /api/generate）。修復：config/notifications.json 的 watchdog.ollama_deep_check.model 設為 qwen3.5:0.8b（最小 chat 模型 1.0GB，低干擾）；mtime 熱重載免重啟。已用 probe_ollama 直跑驗證 status=ok。
+
+- [x] 深度檢查探測改走 11435 + 範本同步 (2026-09-13) 11434 探測曾 read timeout 30s（與主載入模型搶資源），config/notifications.json 的 ollama_deep_check.base_url 改為 http://127.0.0.1:11435（GPU1 專用 Ollama，probe_ollama 直跑驗證 status=ok）；notifications.json.example 範本同步更新 base_url=11435，新機開箱即用。watchdog mtime 熱重載免重啟。
