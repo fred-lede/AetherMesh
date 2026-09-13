@@ -705,8 +705,8 @@
 ## Pending / 後續
 - [x] Secrets 欄位 UI 改善（2026-08-23）：存檔後欄位清空易誤解為未輸入 → 後端 GET /api/notifications 回傳遮罩提示（••••+後4碼），前端顯示「● 已設定」綠色徽章 + 綠框 + placeholder「已儲存 ••••xxxx — 留空保持不變」；未設定顯示灰色「○ 未設定」（dashboard_server.py + dashboard.js）
 - [x] API 權限修補（2026-08-23）：GET/PUT /api/notifications 與 POST /api/notifications/test/{channel} 補上 `_require_admin(request)`——UI 卡片原本就只在 admin 區塊渲染，但 API 端點漏了 role 檢查，一般登入用戶可讀寫通知設定
-- [ ] Telegram bot 建立後：Dashboard 填入 bot token + chat_id → 測試按鈕驗證
-- [ ] Synology Chat webhook URL 建立後同上
+- [x] Telegram bot 已建立（config/notifications.json enabled + bot_token + chat_id=8409351929）
+- [x] Synology Chat webhook 已建立（config/notifications.json enabled + webhook_url）
 - [ ] 實機驗證 auto-restart：手動 kill 某服務觀察通知 + 自動拉起
 - [ ] （既有問題，非本次引入）test_custom_providers 11 個 401 失敗為跨測試 auth 污染，乾淨 codebase 亦復現，待另案排查污染源
 - [x] 文件更新 + commit + push（2026-08-23）：README 新增 Notifications & Watchdog 章節；兩個 commit——e67a507（models.yaml 模型登錄）與 c4c6d46（Phase 43 完整功能，26 files +1626 行）已推送至 origin/main。junk 檔案（config/sessions.json、test_*、sample_output.md）未納入版本控制
@@ -720,3 +720,11 @@
 - [x] Hermes 彙整新聞卡住修復 (2026-08-28) 診斷: 非 Ollama 卡死，muse-glimmer 深度思考模型在 max_tokens 設小(60~200)時把全部配額拿去思考，finish_reason=length 且 output 空白；且 auto web search 的 Tavily(422)/Serper(400) key 額度用完。修復: (A) config/settings.py 新增 default_max_tokens(AIIH_DEFAULT_MAX_TOKENS 預設 1024)，openai_handler._apply_generation_defaults 在模型具 thinking capability 且 client 未傳 max_tokens 時注入，_model_is_thinking 查 registry；(B) .env 設 AIIH_WEB_TOOLS_AUTO_SEARCH=false。新增 tests/test_generation_defaults.py 5 tests。已重啟 openai_router 驗證: 未傳 max_tokens 請求注入後 completion_tokens=859/finish=stop/有完整內容（原先 blank/length），無 web search 錯誤干擾。全量 25 tests(test_orchestration)+5(new) passed 零回歸。程式碼修改未 commit。
 
 - [x] 排程重啟失敗修復 (2026-08-31) 根因: runtime/launcher/__main__.py run_supervisor 兩個 Windows bug: (1) signal.pause() 在 Windows 不存在 (AttributeError 立即拋出)，supervisor 啟動即崩；(2) 入口進程 spawn detached child 後沒強制退出，orphan 累積。修法: (a) hasattr(_signal,'pause') 檢查，無則改用 sup._stop_event.wait() 阻塞；(b) 入口 spawn + 寫 supervisor.pid 後 os._exit(0) 強制退出；(c) _spawn_detached_supervisor 用 DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW + DEVNULL stdin/stdout/stderr；(d) _supervisor_already_running() 用 psutil 驗活 + supervisor.pid 檔避免重複 spawn。新增 tests/test_supervisor_detach.py 4 tests。驗證: cmd.exe /c start_supervisor.bat 在 <1s 返回 exit 0、supervisor.pid 寫入、stack 7 ports 全活；殺 launcher 後 supervisor 在 30s 內自動重啟 (log: 'launcher not alive — restarting')。54 passed (supervisor + launcher + supervisor_detach + generation_defaults + orchestration) 零回歸。
+
+## 目前的狀態 (2026-09-01)
+- **git pull 完成**: Local BEHEAD is up to date with origin/main (`5564d46`)
+- **Working Tree Status**: M TASK.md (only, 即 doc state); untracked junk files (logs/test outputs) present
+- **Pending**: (1) Verify auto-restart end-to-end (kill service to see if watchdog triggers Telegram notification properly with new bot token) (2) Resolve auth pollution errors in custom_providers test suite.
+- **Next action**: Confirm functionality via AetherMesh UI or run test cases.
+
+- [x] Ollama 深度檢查誤報修復 (2026-09-13) watchdog 連續 18 次 'nomic-embed-text-v2-moe 推論失敗 400' 告警：根因是 ollama_deep_check.model 空白時 probe 自動選「目前第一個載入的模型」，剛好是 embedding 模型（nomic-embed-text-v2-moe 無法跑 /api/generate）。修復：config/notifications.json 的 watchdog.ollama_deep_check.model 設為 qwen3.5:0.8b（最小 chat 模型 1.0GB，低干擾）；mtime 熱重載免重啟。已用 probe_ollama 直跑驗證 status=ok。
