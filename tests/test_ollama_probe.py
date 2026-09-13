@@ -7,7 +7,7 @@ import requests
 from unittest.mock import MagicMock
 
 import runtime.health.watchdog as watchdog_mod
-from runtime.health.ollama_probe import probe_ollama
+from runtime.health.ollama_probe import probe_ollama, _pick_probe_model
 from runtime.health.watchdog import Watchdog, merged_watchdog_config
 
 
@@ -173,3 +173,32 @@ class TestMergedConfig:
         assert oc["enabled"] is True
         assert oc["timeout_s"] == 30
         assert oc["base_url"] == "http://127.0.0.1:11434"
+
+
+class TestPickProbeModel:
+    def test_pick_smallest_chat_model(self):
+        loaded = [
+            {"name": "large-chat", "size_vram": 20000000000},
+            {"name": "small-chat", "size_vram": 1000000000},
+            {"name": "embed-model", "size_vram": 100000000},
+        ]
+        assert _pick_probe_model(loaded) == "small-chat"
+
+    def test_fallback_when_all_embedding(self):
+        loaded = [
+            {"name": "embed-1", "size_vram": 100},
+            {"name": "embed-2", "size_vram": 50},
+        ]
+        # fallback picks smallest when no chat models found
+        assert _pick_probe_model(loaded) == "embed-2"
+
+    def test_empty_list_returns_empty_string(self):
+        assert _pick_probe_model([]) == ""
+
+    def test_case_insensitive_embed_filtering(self):
+        loaded = [
+            {"name": "nomic-embed-text-v2-moe", "size_vram": 100},
+            {"name": "embeddinggemma-300m", "size_vram": 50},
+            {"name": "qwen3.5:0.8b", "size_vram": 500000000},
+        ]
+        assert _pick_probe_model(loaded) == "qwen3.5:0.8b"

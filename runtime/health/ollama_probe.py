@@ -8,6 +8,26 @@ import requests
 
 logger = logging.getLogger("health.ollama_probe")
 
+_EMBED_KEYWORDS = frozenset({"embed", "embedding"})
+
+
+def _pick_probe_model(loaded: list[dict]) -> str:
+    """Pick the smallest non-embedding model from currently loaded models, or
+    fall back to the first entry. Embedding-only models cannot run /api/generate
+    and would always produce 400 errors for a chat probe."""
+    candidates = [
+        m for m in loaded
+        if not any(kw in m.get("name", "").lower() for kw in _EMBED_KEYWORDS)
+    ]
+    if not candidates:
+        candidates = loaded
+    if not candidates:
+        return ""
+    return min(
+        candidates,
+        key=lambda m: m.get("size_vram", 0),
+    ).get("name", "")
+
 
 @dataclass(slots=True)
 class ProbeResult:
@@ -44,7 +64,10 @@ def probe_ollama(
         return ProbeResult(status="idle", latency_ms=int((time.time() - started) * 1000))
 
     stale_vram = all(not m.get("size_vram") for m in loaded)
-    target = model or loaded[0].get("name", "")
+    if model:
+        target = model
+    else:
+        target = _pick_probe_model(loaded)
 
     try:
         gen = http.post(
