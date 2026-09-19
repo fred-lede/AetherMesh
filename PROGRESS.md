@@ -190,3 +190,15 @@ ame ��쥿�W�Ʀ� function object�C�M�Ω� _normalize_payload_for_provider�]�л\ c
 - launcher 現在於啟動與每 30s 寫入 pid/sentry sentinel；新增 runtime/supervisor_util.py（probe_port/probe_http）與 python -m runtime.launcher supervise entry point。
 - 重設 AIIH-Platform 排程任務：執行 scripts/start_supervisor.bat、ExecutionTimeLimit=PT0S（無限）、S4U logon、restart-on-failure —— 開機即整棧自癒，不再靠手動。
 - 測試：+11（tests/test_supervisor.py）；全量 819 passed / 20 failed（與既有基準一致，零回歸）。
+
+## 2026-09-19 Rerank: /v1/rerank via standalone llama.cpp reranker
+- Discovery: AetherMesh's bundled Ollama 0.34.1 does NOT expose /api/rerank (404). Rerank is served by a dedicated llama-server --rerank process.
+- Tested real model: BGE-Reranker-v2-M3 running on 127.0.0.1:11436 (Qwen3-reranker-0.6b stopped, keep one port).
+- New providers/rerank_adapter.py (RerankAdapter): POST {base_url}/rerank (llama.cpp native) -> OpenAI-compatible /v1/rerank shape; top_n clamp, unsupported-method guards, health_check.
+- Settings: AIIH_RERANK_BASE_URL (default http://127.0.0.1:11436) -> rerank_default_base_url.
+- Wired provider_router.adapter()/resolve_provider/provider_for_model/ROUTE_PREFIXES + routing_engine ROUTING_PROVIDERS/CLOUD_PROVIDERS + rerank capability scores + openai_handler cloud-provider branch.
+- capabilities.required_openai_capabilities now returns {"rerank"} for query+documents payloads.
+- models.yaml: added rerank/bge-reranker-v2-m3 (provider: rerank, port 11436).
+- Tests: tests/test_rerank_adapter.py (8 tests pass); routing/capability/embedding suites still green (74 pass). One pre-existing env failure unchanged.
+- Cross-platform deployment: scripts/start-rerank-server.sh + .bat, systemd/aiih-rerank.service, launchd/com.aiih.rerank.plist.example, docs/providers/rerank-deployment.md, .env.example.
+- Verified: RerankAdapter against live 11436 returns correct reranked rows. /v1/rerank takes effect after router restart.

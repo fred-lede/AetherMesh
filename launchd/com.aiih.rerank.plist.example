@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.aiih.rerank</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>__ROOT_DIR__/scripts/start-rerank-server.sh</string>
+      <string>bge-reranker-v2-m3</string>
+      <string>11436</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__ROOT_DIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>AIIH_RERANK_HOST</key>
+      <string>127.0.0.1</string>
+      <key>AIIH_RERANK_DEVICE</key>
+      <string>0</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__ROOT_DIR__/logs/launchd-rerank.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__ROOT_DIR__/logs/launchd-rerank.err.log</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+  </dict>
+</plist>

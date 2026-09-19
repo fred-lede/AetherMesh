@@ -1374,7 +1374,7 @@ class RouterService:
 
             for current_model in try_models:
                 provider = canonical_provider_name(payload.get("provider") or provider_for_model(current_model, self.registry))
-                if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud") or is_custom_provider(provider):
+                if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank") or is_custom_provider(provider):
                     if current_model == original_model:
                         return provider, None
                     continue

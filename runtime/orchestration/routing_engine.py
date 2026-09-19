@@ -26,10 +26,11 @@ CAPABILITY_PROVIDER_SCORES = {
     "vision": {"openai": 95, "gemini": 98, "ollama": 80, "ollama_cloud": 85, "nvidia_nim": 88},
     "audio": {"ollama": 90, "openai": 85, "gemini": 92, "nvidia_nim": 70, "ollama_cloud": 75},
     "embeddings": {"ollama": 90, "openai": 95, "gemini": 88, "nvidia_nim": 85, "ollama_cloud": 60},
+    "rerank": {"rerank": 100, "ollama": 90, "openai": 85, "nvidia_nim": 85},
 }
 
-ROUTING_PROVIDERS = ["ollama", "openai", "gemini", "nvidia_nim", "ollama_cloud"]
-CLOUD_PROVIDERS = ["openai", "gemini", "nvidia_nim", "ollama_cloud"]
+ROUTING_PROVIDERS = ["ollama", "openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank"]
+CLOUD_PROVIDERS = ["openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank"]
 CLOUD_PROVIDER_ENDPOINTS = {
     "openai": ("OPENAI_API_BASE", "OPENAI_API_KEY", "https://api.openai.com/v1"),
     "gemini": ("GEMINI_API_BASE", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta"),

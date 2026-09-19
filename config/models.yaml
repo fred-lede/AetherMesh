@@ -203,6 +203,15 @@ models:
     capabilities: [embeddings]
     estimated_vram_mb:
 
+  # ── Standalone llama.cpp reranker (AIIH_RERANK_BASE_URL) ────
+  - name: rerank/bge-reranker-v2-m3
+    provider: rerank
+    worker_bindings:
+      - node_id: node-01
+        port: 11436
+    capabilities: [rerank]
+    estimated_vram_mb:
+
   # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
   - name: ornith-1.5:9b
     provider: ollama
@@ -264,6 +273,11 @@ models:
     capabilities: [chat, responses, embeddings, tools]
     
   - name: z-ai/glm-5.3-flash
+    provider: nvidia_nim
+    worker_ports: []
+    capabilities: [chat, vision, thinking, tools]
+    
+  - name: z-ai/glm-5.3
     provider: nvidia_nim
     worker_ports: []
     capabilities: [chat, vision, thinking, tools]

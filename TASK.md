@@ -4,6 +4,25 @@
 
 ---
 
+## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
+- [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）
+- [x] 啟動 BGE-Reranker-v2-M3 於 127.0.0.1:11436（停用 Qwen3 於 11437）
+- [x] 新增 `providers/rerank_adapter.py`（`RerankAdapter`，llama.cpp → OpenAI 相容格式轉換）
+- [x] `config/settings.py` 新增 `rerank_default_base_url`（`AIIH_RERANK_BASE_URL`，預設 :11436）
+- [x] `provider_router.py`：`adapter()` 工廠、`resolve_provider`、`provider_for_model`、`ROUTE_PREFIXES` 註冊 `rerank`
+- [x] `routing_engine.py`：`ROUTING_PROVIDERS`/`CLOUD_PROVIDERS` 加入 `rerank` + rerank 能力分數
+- [x] `openai_handler.py`：`_resolve_provider_and_worker` 將 `rerank` 視為直連 provider
+- [x] `capabilities.py`：`required_openai_capabilities` 辨識 rerank payload → `{"rerank"}`
+- [x] `models.yaml`：新增 `rerank/bge-reranker-v2-m3` (provider: rerank, port 11436)
+- [x] 測試 `tests/test_rerank_adapter.py`（8 測試，全過）
+- [x] 跨平台佈署：`scripts/start-rerank-server.sh`、`start-rerank-server.bat`、`systemd/aiih-rerank.service`、`launchd/com.aiih.rerank.plist.example`、`docs/providers/rerank-deployment.md`
+- [x] 支援指定 GPU：`AIIH_RERANK_DEVICE`（傳 `-mg N`，預設 GPU 1 = RTX 4070 Ti SUPER）
+- [x] GPU offload 啟用：Ollama 附帶 llama-server 為 CPU-only，下載官方 llama.cpp CUDA 12.4 版至 `C:\ai\tools\llama-cpp\b10964`，`AIIH_LLAMA_SERVER` 指向它；reranker 現跑 GPU 1 (RTX 4070 Ti SUPER, ~408MiB)
+- [x] 驗證：adapter 直連 11436 實際 rerank 成功；`/v1/rerank` 需重啟 router 後生效
+- [x] 跨平台 GPU backend 釐清：Windows/Linux 用 CUDA 版；macOS 用 Metal 版（Ollama 附帶即 Metal，llama.cpp 無 MPS backend）；修正 shell 腳本 macOS 預設 `-mg 0`、launchd `AIIH_RERANK_DEVICE=0`
+
+---
+
 ## Phase 1 — Platform Repositioning ✅ (2026-05-07)
 - [x] README 標題/副標題更新
 - [x] Dashboard branding 更新

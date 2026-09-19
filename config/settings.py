@@ -175,6 +175,9 @@ class Settings:
     image_gen_default_worker: str = field(
         default_factory=lambda: os.getenv("AIIH_IMAGE_GEN_DEFAULT_WORKER", "http://192.168.1.100:11434")
     )
+    rerank_default_base_url: str = field(
+        default_factory=lambda: os.getenv("AIIH_RERANK_BASE_URL", "http://127.0.0.1:11436")
+    )
 
     @property
     def tls_enabled(self) -> bool:

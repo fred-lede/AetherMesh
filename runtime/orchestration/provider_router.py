@@ -30,6 +30,11 @@ try:
 except ImportError:
     ImageGenAdapter = None  # type: ignore[assignment, misc]
 
+try:
+    from providers.rerank_adapter import RerankAdapter
+except ImportError:
+    RerankAdapter = None  # type: ignore[assignment, misc]
+
 NVIDIA_PREFIXES = (
     "meta/", "mistralai/", "nvidia/", "google/", "microsoft/", "baichuan-inc/",
     "deepseek/", "upstage/", "snowflake/", "ibm/", "yola/", "writer/", "z-ai/",
@@ -189,6 +194,13 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
         if ImageGenAdapter is None:
             raise ValueError("ImageGen adapter not available")
         return _get_image_gen_adapter()
+    if provider == "rerank":
+        if RerankAdapter is None:
+            raise ValueError("Rerank adapter not available")
+        base_url = None
+        if worker is not None:
+            base_url = worker.get("base_url")
+        return RerankAdapter(base_url=base_url, worker=worker)
     if provider in _CUSTOM_PROVIDERS:
         cfg = _CUSTOM_PROVIDERS[provider]
         return OpenAIAdapter(api_key=cfg["api_key"], base_url=cfg["base_url"])
@@ -298,7 +310,7 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
     for prefix, hinted_provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
             stripped = model[len(prefix):]
-            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts", "asr", "image_gen"):
+            if hinted_provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "xtts", "asr", "image_gen", "rerank"):
                 return hinted_provider, None
             for item in registry.get("models", []):
                 if item.get("name") == stripped:
@@ -312,7 +324,7 @@ def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[st
     for item in registry.get("models", []):
         if item.get("name") in (model, clean_model):
             p = canonical_provider_name(str(item.get("provider", "ollama")))
-            if p in ("openai", "gemini", "nvidia_nim", "ollama_cloud"):
+            if p in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank"):
                 return p, None
             if p == "ollama":
                 bindings = item.get("worker_bindings", [])
@@ -345,6 +357,7 @@ ROUTE_PREFIXES = {
     "xtts/": "xtts",
     "asr/": "asr",
     "image_gen/": "image_gen",
+    "rerank/": "rerank",
 }
 
 

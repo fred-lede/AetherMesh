@@ -1,0 +1,24 @@
+[Unit]
+Description=AetherMesh llama.cpp Reranker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Point AIIH_LLAMA_SERVER at a CUDA build of llama.cpp for GPU offload.
+# Ollama's bundled llama-server is CPU-only on Linux. Example:
+#   Environment=AIIH_LLAMA_SERVER=/opt/llama-cpp/llama-server
+Environment=AIIH_LLAMA_SERVER=/usr/local/bin/llama-server
+Environment=AIIH_RERANK_HOST=127.0.0.1
+Environment=AIIH_RERANK_CTX_SIZE=8192
+Environment=AIIH_RERANK_DEVICE=1
+# Model name argument; port defaults to 11436.
+ExecStart=/bin/bash /opt/aethermesh/scripts/start-rerank-server.sh bge-reranker-v2-m3 11436
+Restart=always
+RestartSec=3
+# Run as the same user that owns the Ollama model store.
+User=aethermesh
+Group=aethermesh
+
+[Install]
+WantedBy=multi-user.target

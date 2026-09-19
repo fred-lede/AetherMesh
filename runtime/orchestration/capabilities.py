@@ -7,6 +7,9 @@ def required_openai_capabilities(payload: dict[str, Any]) -> set[str]:
     if "input" in payload and "messages" not in payload:
         return {"embeddings"}
 
+    if "query" in payload and "documents" in payload and "messages" not in payload:
+        return {"rerank"}
+
     required = {"chat"}
     if payload.get("tools"):
         required.add("tools")
