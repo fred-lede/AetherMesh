@@ -167,6 +167,8 @@ llama-server --model <path-to-bge-blob> --rerank --host 127.0.0.1 --port 11436 -
 
 ## 系統服務（自動啟動）
 
+rerank 已納入 launcher 的 `SERVICE_DEFS`，**若你的 AetherMesh 用 launcher 啟動（`start_all.bat` / `start_supervisor.bat`），rerank 會自動一併啟動並由 watchdog 監督，無需下面各平台的獨立服務**。獨立服務僅供不使用 launcher 的部署。
+
 ### Linux (systemd)
 
 ```bash
@@ -186,13 +188,21 @@ launchctl load ~/Library/LaunchAgents/com.aiih.rerank.plist
 
 ### Windows
 
-用工作排程器或 `sc create` 指向 `start-rerank-server.bat`。簡單作法：
+rerank 已納入 launcher 的 `SERVICE_DEFS`（`runtime/launcher/launcher.py`），launcher 會自動啟動並由 watchdog 監督（掛了自動重啟）。因此**只需排程啟動 `scripts/start_supervisor.bat`**，rerank 會隨 launcher 一併拉起，不需額外 `sc create`。
+
+前置：先持久化 GPU binary 路徑（見上方「Windows (NVIDIA)」），否則會用 CPU-only 版：
 
 ```bat
-:: 先持久化 GPU binary 路徑（見上方「Windows (NVIDIA)」），否則會用 CPU-only 版
 setx AIIH_LLAMA_SERVER "C:\ai\tools\llama-cpp\b10964\llama-server.exe"
-sc create aiih-rerank binPath= "cmd /c C:\ai\AetherMesh\scripts\start-rerank-server.bat" start= auto
 ```
+
+launcher 內建的 rerank 命令等同執行：
+
+```bat
+cmd /c scripts\start-rerank-server.bat bge-reranker-v2-m3 11436
+```
+
+若想用其他模型/port，改 `_rerank_command()`（launcher.py）中的模型名與 port。
 
 ## 驗證
 

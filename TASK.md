@@ -20,6 +20,7 @@
 - [x] GPU offload 啟用：Ollama 附帶 llama-server 為 CPU-only，下載官方 llama.cpp CUDA 12.4 版至 `C:\ai\tools\llama-cpp\b10964`，`AIIH_LLAMA_SERVER` 指向它；reranker 現跑 GPU 1 (RTX 4070 Ti SUPER, ~408MiB)
 - [x] 驗證：adapter 直連 11436 實際 rerank 成功；`/v1/rerank` 需重啟 router 後生效
 - [x] 跨平台 GPU backend 釐清：Windows/Linux 用 CUDA 版；macOS 用 Metal 版（Ollama 附帶即 Metal，llama.cpp 無 MPS backend）；修正 shell 腳本 macOS 預設 `-mg 0`、launchd `AIIH_RERANK_DEVICE=0`
+- [x] 納入 launcher 監督：`runtime/launcher/launcher.py` `SERVICE_DEFS` 加 `rerank`（port 11436），`_cmd_for`/`_rerank_command()` 支援外部 `cmd /c start-rerank-server.bat`（Linux 用 `.sh`）；`runtime/health/watchdog.py` `_PORT_ENV_MAP` 加 `rerank` → 11436 健康檢查。Windows 排程只需 `start_supervisor.bat`，不需獨立 `sc create`；文件同步更新
 
 ---
 

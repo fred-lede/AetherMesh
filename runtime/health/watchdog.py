@@ -23,6 +23,7 @@ _PORT_ENV_MAP = {
     "metrics": ("AIIH_METRICS_PORT", 9100),
     "node_agent": ("AIIH_NODE_PORT", 9400),
     "worker_agent": ("AIIH_WORKER_PORT", 9300),
+    "rerank": ("AIIH_RERANK_BASE_URL", 11436),
 }
 
 _DEFAULT_CONFIG: dict[str, Any] = {

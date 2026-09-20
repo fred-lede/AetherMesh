@@ -92,6 +92,14 @@ SERVICE_DEFS: list[dict[str, Any]] = [
         "desc": "Async task queue worker",
         "python_module": "ai_queue.task_worker",
     },
+    {
+        "name": "rerank",
+        "module": None,
+        "host": "127.0.0.1",
+        "port_env": None,
+        "port_default": 11436,
+        "desc": "llama.cpp rerank server (llama-server --rerank)",
+    },
 ]
 
 
@@ -104,7 +112,19 @@ def _port(svc: dict[str, Any]) -> int:
     return svc["port_default"]
 
 
+def _rerank_command() -> list[str]:
+    root = Path(__file__).resolve().parent.parent.parent
+    port = _port({"name": "rerank", "port_env": None, "port_default": 11436})
+    if os.name == "nt":
+        script = root / "scripts" / "start-rerank-server.bat"
+        return ["cmd", "/c", str(script), "bge-reranker-v2-m3", str(port)]
+    script = root / "scripts" / "start-rerank-server.sh"
+    return ["/bin/bash", str(script), "bge-reranker-v2-m3", str(port)]
+
+
 def _cmd_for(svc: dict[str, Any]) -> list[str]:
+    if svc.get("name") == "rerank":
+        return _rerank_command()
     pm = svc.get("python_module")
     if pm:
         return [sys.executable, "-m", pm]
