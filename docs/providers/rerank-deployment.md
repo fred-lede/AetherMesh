@@ -31,21 +31,39 @@ reranker 模型很小（~600MB），單一 GPU 即可。llama.cpp 的 GPU backen
 
 > **注意**：llama.cpp **沒有 MPS backend**（MPS 是 PyTorch 的 API）。macOS 用的是 **Metal**。
 
-### Windows / Linux (CUDA)
+Ollama 隨附的 `llama-server` 在 NVIDIA 平台是 **CPU-only 建置**，`-mg N` 無效。要啟用 GPU，把 `AIIH_LLAMA_SERVER` 指向 llama.cpp **CUDA 版** binary。
 
-Ollama 隨附的 `llama-server` 在這些平台是 **CPU-only 建置**，`-mg N` 無效。要啟用 GPU，把 `AIIH_LLAMA_SERVER` 指向 llama.cpp **CUDA 版** binary：
+#### Windows (NVIDIA)
 
-1. 從 https://github.com/ggml-org/llama.cpp 的 nightly release 下載 `*-bin-win-cuda-12.4-x64.zip`（NVIDIA 適用）
+1. 從 https://github.com/ggml-org/llama.cpp 的 nightly release 下載 `*-bin-win-cuda-12.4-x64.zip`
 2. 解壓後設定：
-   ```
+   ```bat
    set AIIH_LLAMA_SERVER=C:\ai\tools\llama-cpp\b10964\llama-server.exe
    ```
+3. 用 `llama-server.exe --list-devices` 驗證偵測到 GPU。
+
+#### Linux (NVIDIA)
+
+1. 從 https://github.com/ggml-org/llama.cpp 的 nightly release 下載對應的 Linux CUDA build（例如 `llama.cpp-b...-bin-ubuntu-x64-cuda-cu12.4.tar.gz`），或安裝 llama.cpp 的 CUDA 版至 `/usr/local/bin/llama-server`：
+   ```bash
+   # 以 Ubuntu x64 CUDA 12.4 為例（版本號視 release 而定）
+   wget https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz
+   sudo tar -xzf llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz -C /usr/local
+   ```
+2. 設定 binary 路徑：
+   ```bash
+   export AIIH_LLAMA_SERVER=/usr/local/bin/llama-server
+   ```
 3. 用 `llama-server --list-devices` 驗證偵測到 GPU。
+
+#### 選 GPU（Windows 與 Linux 通用）
 
 用 `AIIH_RERANK_DEVICE`（CUDA ordinal，傳 `-mg N`）選 GPU：
 
 - `AIIH_RERANK_DEVICE=0`：第一張離散 GPU
 - `AIIH_RERANK_DEVICE=1`：第二張離散 GPU（預設）
+
+在 bash 設定：`export AIIH_RERANK_DEVICE=1`；在 cmd 設定：`set AIIH_RERANK_DEVICE=1`。亦可寫入 `scripts/start-rerank-server.sh`（Linux/macOS）或 `.bat`（Windows）。
 
 ### macOS (Metal)
 
@@ -72,6 +90,40 @@ Ollama 附帶的 macOS `llama-server` 已是 Metal 版，直接用即可，無�
 呼叫時 model 名用 `rerank/bge-reranker-v2-m3`。
 
 > 既有 `bge-reranker-v2-m3:latest`、`pdurugyan/qwen3-reranker-0.6b-q8_0:latest` 是透過 Ollama `/api/rerank` 的路徑，在本環境不可用。
+
+## 調用方式
+
+端點：`POST /v1/rerank`（OpenAI 相容格式），需 `AIIH_API_KEY`。model 名用 `rerank/bge-reranker-v2-m3`。
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/v1/rerank \
+  -H "Authorization: Bearer $AIIH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rerank/bge-reranker-v2-m3",
+    "query": "What is the capital of France?",
+    "documents": ["Paris is the capital of France.", "Apples grow on trees."],
+    "top_n": 1
+  }'
+```
+
+OpenAI Python SDK：
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8001/v1", api_key="<AIIH_API_KEY>")
+
+resp = client.rerank.create(
+    model="rerank/bge-reranker-v2-m3",
+    query="What is the capital of France?",
+    documents=["Paris is the capital of France.", "Apples grow on trees."],
+    top_n=1,
+)
+print(resp.data[0].relevance_score)
+```
+
+> 若你的 SDK 沒有內建 `rerank`，可改用 `client.post("/rerank", json=payload)`。
 
 ## 前置需求
 
