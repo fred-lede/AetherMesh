@@ -74,6 +74,24 @@ def test_fetch_ollama_falls_back_to_parameters(mock_post):
 
 
 @patch("runtime.orchestration.model_context.requests.post")
+def test_fetch_ollama_uses_model_info_context_length(mock_post):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"model_info": {"gemma4.context_length": 131072}}
+    mock_post.return_value = mock_resp
+    assert fetch_context_length("gemma4:e2b", provider="ollama", base_url="http://x:11434") == 131072
+
+
+@patch("runtime.orchestration.model_context.requests.post")
+def test_fetch_ollama_model_info_prefers_arch_over_general(mock_post):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "model_info": {"general.context_length": 4096, "qwen3.context_length": 262144}
+    }
+    mock_post.return_value = mock_resp
+    assert fetch_context_length("qwen3.8:27b", provider="ollama", base_url="http://x:11434") == 262144
+
+
+@patch("runtime.orchestration.model_context.requests.post")
 def test_fetch_ollama_request_failure(mock_post):
     mock_post.side_effect = requests.RequestException("boom")
     assert fetch_context_length("llama3", provider="ollama", base_url="http://x:11434") is None

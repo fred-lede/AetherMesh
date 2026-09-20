@@ -38,8 +38,10 @@ AetherMesh 用**模型層**的上下文長度來判斷某個模型能否容納�
 
 抓取來源：
 
-- **Ollama**：`POST {base_url}/api/show` → `context_length` / `parameters.num_ctx`
-- **雲端 (OpenAI 相容)**：`GET {base_url}/models` → 依序嘗試欄位 `context_window` / `context_length` / `max_context_window` / `max_context_length` / `max_model_len` / `max_sequence_length`
+- **Ollama**：`POST {base_url}/api/show`。依序嘗試頂層 `context_length` → `parameters.num_ctx` → `model_info.{architecture}.context_length`（例 `gemma4.context_length`）。
+- **雲端 (OpenAI 相容)**：`GET {base_url}/models` → 依序嘗試欄位 `context_window` / `context_length` / `max_context_window` / `max_context_length` / `max_model_len` / `max_sequence_length`。
+
+> **多 worker / 遠端節點**：Ollama 模型若 `worker_bindings` 有多個 binding（含遠端節點），`refresh` 會依序嘗試每個 binding（透過 `cluster.yaml` 的 `node_hosts` 解析 IP），直到抓到 ctx 為止。離線節點會優雅略過，不中斷。
 
 掃描 models.yaml 中所有**未設定** `context_length` 的模型並自動抓取：
 
