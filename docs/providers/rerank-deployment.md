@@ -50,10 +50,11 @@ Ollama 隨附的 `llama-server` 在 NVIDIA 平台是 **CPU-only 建置**，`-mg 
    wget https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz
    sudo tar -xzf llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz -C /usr/local
    ```
-2. 設定 binary 路徑：
+2. 設定 binary 路徑（`export` 只對當前 shell 有效，重開終端即失效）：
    ```bash
    export AIIH_LLAMA_SERVER=/usr/local/bin/llama-server
    ```
+   **持久化**：啟動腳本在 `AIIH_LLAMA_SERVER` 未設定時回退到 `/usr/local/bin/llama-server`（Linux 預設路徑），所以只要 binary 放在該路徑即可；systemd service 已用 `Environment=AIIH_LLAMA_SERVER=...` 寫死此值（見 `systemd/aiih-rerank.service`），重啟服務仍有效，無需額外設定。
 3. 用 `llama-server --list-devices` 驗證偵測到 GPU。
 
 #### 選 GPU（Windows 與 Linux 通用）
