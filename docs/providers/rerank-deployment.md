@@ -51,6 +51,7 @@ Ollama 隨附的 `llama-server` 在 NVIDIA 平台是 **CPU-only 建置**，`-mg 
    wget https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz
    sudo tar -xzf llama.cpp-b10964-bin-ubuntu-x64-cuda-cu12.4.tar.gz -C /usr/local
    ```
+   > **版本無關**：llama.cpp 是獨立 binary，**不依賴 torch**。其 CUDA build 的版本只需 **NVIDIA 驅動**支持，與環境中的 torch `+cu128` 無關。cu12.4 build 僅需驅動 ≥ 525（新 GPU 建議 ≥ 550）；能跑 torch cu128 的機器驅動必然足夠，直接使用即可。
 2. 設定 binary 路徑（`export` 只對當前 shell 有效，重開終端即失效）：
    ```bash
    export AIIH_LLAMA_SERVER=/usr/local/bin/llama-server
