@@ -48,3 +48,6 @@ Add to `CLOUD_PROVIDER_ENDPOINTS` if it's a cloud provider.
 MY_PROVIDER_API_KEY=sk-...
 MY_PROVIDER_BASE_URL=https://api.example.com/v1
 ```
+
+### 6. Set Model Context Length
+Context length is a **per-model** attribute. Set `context_length` in `config/models.yaml` for each model, or auto-fetch it via the CLI. See [model-context.md](model-context.md).

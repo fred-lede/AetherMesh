@@ -21,6 +21,7 @@
 - [x] 驗證：adapter 直連 11436 實際 rerank 成功；`/v1/rerank` 需重啟 router 後生效
 - [x] 跨平台 GPU backend 釐清：Windows/Linux 用 CUDA 版；macOS 用 Metal 版（Ollama 附帶即 Metal，llama.cpp 無 MPS backend）；修正 shell 腳本 macOS 預設 `-mg 0`、launchd `AIIH_RERANK_DEVICE=0`
 - [x] 納入 launcher 監督：`runtime/launcher/launcher.py` `SERVICE_DEFS` 加 `rerank`（port 11436），`_cmd_for`/`_rerank_command()` 支援外部 `cmd /c start-rerank-server.bat`（Linux 用 `.sh`）；`runtime/health/watchdog.py` `_PORT_ENV_MAP` 加 `rerank` → 11436 健康檢查。Windows 排程只需 `start_supervisor.bat`，不需獨立 `sc create`；文件同步更新
+- [x] 模型級上下文長度：新增 `runtime/orchestration/model_context.py`（`resolve_context_length`/`resolve_effective_max_context`/`fetch_context_length`/`refresh_auto_context`）+ `model_context_cli.py`（`fetch`/`refresh --write` CLI）；`provider_scoring.py` 與 `execution_selector.py` 改用模型 ctx（models.yaml `context_length` → 自動快取 → provider fallback）；13 個測試；docs/providers/model-context.md
 
 ---
 

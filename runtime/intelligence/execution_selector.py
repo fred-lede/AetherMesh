@@ -154,10 +154,10 @@ class ExecutionSelector:
     def _context_penalty(self, provider: str, context: ScoringContext) -> float:
         if not context.estimated_input_tokens:
             return 0.0
-        caps = provider_capability_registry.get_capabilities(provider)
-        if not caps:
-            return 0.0
-        if context.estimated_input_tokens > caps.max_context:
+        from runtime.orchestration.model_context import resolve_effective_max_context
+
+        max_ctx = resolve_effective_max_context(provider, context.model)
+        if context.estimated_input_tokens > max_ctx:
             return -20.0
         return 0.0
 

@@ -202,3 +202,12 @@ ame 欄位正規化成 function object。套用於 _normalize_payload_for_provider（覆蓋 c
 - Tests: tests/test_rerank_adapter.py (8 tests pass); routing/capability/embedding suites still green (74 pass). One pre-existing env failure unchanged.
 - Cross-platform deployment: scripts/start-rerank-server.sh + .bat, systemd/aiih-rerank.service, launchd/com.aiih.rerank.plist.example, docs/providers/rerank-deployment.md, .env.example.
 - Verified: RerankAdapter against live 11436 returns correct reranked rows. /v1/rerank takes effect after router restart.
+
+## 2026-09-21 ??Model-level context length (per-model token window)
+- Context length is now a **per-model** attribute, not per-provider. config/models.yaml accepts a context_length field per model.
+- New untime/orchestration/model_context.py: esolve_effective_max_context(provider, model) resolution order = models.yaml \context_length\ -> auto-fetch cache -> provider fallback (gemini 200K / openai 128K / nim 128K / ollama 32K / ollama_cloud 32K).
+- Auto-fetch: Ollama via \POST /api/show\ (\context_length\/parameters.num_ctx); cloud OpenAI-compat via \GET /models\ trying \context_window\/\context_length\/\max_context_window\/\max_context_length\/\max_model_len\/\max_sequence_length\/
+um_ctx.
+- New CLI \untime.orchestration.model_context_cli\: \etch <model> [--provider --base-url --api-key]\ and \efresh [--write]\.
+- \provider_scoring.py\ and \execution_selector.py\ now use model ctx instead of provider-only \max_context\ for context penalty.
+- Tests: +13 in \	ests/test_model_context.py\; docs in \docs/providers/model-context.md\.

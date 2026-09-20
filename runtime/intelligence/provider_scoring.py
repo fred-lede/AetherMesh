@@ -113,7 +113,7 @@ class ProviderCapabilityRegistry:
         score += cap_match * 0.25
         breakdown["capability_match"] = cap_match
 
-        if context.estimated_input_tokens and context.estimated_input_tokens > caps.max_context:
+        if context.estimated_input_tokens and context.estimated_input_tokens > self._max_context_for(name, context.model):
             ctx_penalty = -20.0
             score += ctx_penalty
             breakdown["context_penalty"] = ctx_penalty
@@ -136,6 +136,12 @@ class ProviderCapabilityRegistry:
         score = max(0.0, min(100.0, score))
         breakdown["total"] = score
         return score
+
+    @staticmethod
+    def _max_context_for(provider: str, model: str | None) -> int:
+        from runtime.orchestration.model_context import resolve_effective_max_context
+
+        return resolve_effective_max_context(provider, model)
 
     @staticmethod
     def _capability_match(
