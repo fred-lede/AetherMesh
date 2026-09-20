@@ -36,10 +36,11 @@ Ollama 隨附的 `llama-server` 在 NVIDIA 平台是 **CPU-only 建置**，`-mg 
 #### Windows (NVIDIA)
 
 1. 從 https://github.com/ggml-org/llama.cpp 的 nightly release 下載 `*-bin-win-cuda-12.4-x64.zip`
-2. 解壓後設定：
+2. 解壓後設定路徑。**注意**：`set` 只對當前 cmd session 有效，`sc create`/工作排程器啟動 `.bat` 是獨立 session，`set` 不會帶過去，會落回 Ollama CPU-only 版。要持久化 GPU 路徑，改用 `setx` 寫入使用者環境變數（重開 cmd 生效）：
    ```bat
-   set AIIH_LLAMA_SERVER=C:\ai\tools\llama-cpp\b10964\llama-server.exe
+   setx AIIH_LLAMA_SERVER "C:\ai\tools\llama-cpp\b10964\llama-server.exe"
    ```
+   （臨時測試才用 `set`；`.bat` 會依 `AIIH_LLAMA_SERVER` 是否已設定決定是否回退 CPU-only，見 `scripts/start-rerank-server.bat`。）
 3. 用 `llama-server.exe --list-devices` 驗證偵測到 GPU。
 
 #### Linux (NVIDIA)
@@ -187,6 +188,8 @@ launchctl load ~/Library/LaunchAgents/com.aiih.rerank.plist
 用工作排程器或 `sc create` 指向 `start-rerank-server.bat`。簡單作法：
 
 ```bat
+:: 先持久化 GPU binary 路徑（見上方「Windows (NVIDIA)」），否則會用 CPU-only 版
+setx AIIH_LLAMA_SERVER "C:\ai\tools\llama-cpp\b10964\llama-server.exe"
 sc create aiih-rerank binPath= "cmd /c C:\ai\AetherMesh\scripts\start-rerank-server.bat" start= auto
 ```
 
