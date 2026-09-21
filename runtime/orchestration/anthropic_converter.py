@@ -32,7 +32,8 @@ class AnthropicRouter:
 
     def list_models(self) -> dict[str, Any]:
         data = []
-        for model in self.registry.get("models", []):
+        registry = settings.model_registry()
+        for model in registry.get("models", []):
             data.append(
                 {
                     "id": model["name"],
@@ -40,6 +41,7 @@ class AnthropicRouter:
                     "created": 0,
                     "owned_by": model.get("provider", "ollama"),
                     "capabilities": model.get("capabilities", []),
+                    "context_length": model.get("context_length"),
                 }
             )
         alias_prefix = settings.model_alias_prefix()

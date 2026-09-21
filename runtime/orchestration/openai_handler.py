@@ -85,8 +85,9 @@ class RouterService:
         self.registry = settings.model_registry()
 
     def list_models(self) -> dict[str, Any]:
+        registry = settings.model_registry()
         models = []
-        for model in self.registry.get("models", []):
+        for model in registry.get("models", []):
             models.append(
                 {
                     "id": model["name"],
@@ -97,6 +98,8 @@ class RouterService:
                         "worker_ports": model.get("worker_ports", []),
                         "worker_bindings": model.get("worker_bindings", []),
                         "capabilities": model.get("capabilities", []),
+                        "context_length": model.get("context_length"),
+                        "context_window": model.get("context_length"),
                     },
                 }
             )
