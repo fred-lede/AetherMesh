@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -108,3 +108,43 @@ class TestIntentionalFlag:
         sp.start()
         assert sp.intentionally_stopped is False
         sp.stop(0.1)
+
+
+class TestSupervisorSentryStaleness:
+    def test_stale_sentry_ignored(self, tmp_path) -> None:
+        import os
+        import time
+
+        from runtime.launcher.supervisor import LauncherSupervisor
+
+        pid_file = tmp_path / "launcher.pid"
+        sentry_file = tmp_path / "launcher_sentry.json"
+        sentry_file.write_text(json.dumps({"openai_router": 8001}), encoding="utf-8")
+        old = time.time() - 120
+        os.utime(sentry_file, (old, old))
+        sup = LauncherSupervisor(pid_file=str(pid_file))
+        assert sup._read_sentry() == {}
+
+    def test_fresh_sentry_used(self, tmp_path) -> None:
+        from runtime.launcher.supervisor import LauncherSupervisor
+
+        pid_file = tmp_path / "launcher.pid"
+        sentry_file = tmp_path / "launcher_sentry.json"
+        sentry_file.write_text(json.dumps({"openai_router": 8001}), encoding="utf-8")
+        sup = LauncherSupervisor(pid_file=str(pid_file))
+        assert sup._read_sentry() == {"openai_router": "8001"}
+
+    def test_stale_sentry_port_alive_still_dead_launcher(self, tmp_path) -> None:
+        import os
+        import time
+
+        from runtime.launcher.supervisor import LauncherSupervisor
+
+        pid_file = tmp_path / "launcher.pid"
+        sentry_file = tmp_path / "launcher_sentry.json"
+        sentry_file.write_text(json.dumps({"openai_router": 8001}), encoding="utf-8")
+        old = time.time() - 120
+        os.utime(sentry_file, (old, old))
+        sup = LauncherSupervisor(pid_file=str(pid_file))
+        with patch.object(LauncherSupervisor, "_port_alive", staticmethod(lambda port: True)):
+            assert sup._launcher_alive() is False

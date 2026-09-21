@@ -120,6 +120,8 @@ class LauncherSupervisor:
             p = self._pid_file
             sentry_file = p.with_name("launcher_sentry.json")
             if sentry_file.exists():
+                if time.time() - sentry_file.stat().st_mtime >= 60:
+                    return self._sentry
                 data = json.loads(sentry_file.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
                     return {k: str(v) for k, v in data.items() if isinstance(v, (int, str))}

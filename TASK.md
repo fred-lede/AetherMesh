@@ -751,3 +751,11 @@
 - [x] Ollama æ·±åº¦æª¢æŸ¥èª¤å ±ä¿®å¾© (2026-09-13) watchdog é€£çºŒ 18 æ¬¡ 'nomic-embed-text-v2-moe æ¨è«–å¤±æ•— 400' å‘Šè­¦ï¼šæ ¹å› æ˜¯ ollama_deep_check.model ç©ºç™½æ™‚ probe è‡ªå‹•é¸ã€Œç›®å‰ç¬¬ä¸€å€‹è¼‰å…¥çš„æ¨¡å‹ã€ï¼Œå‰›å¥½æ˜¯ embedding æ¨¡å‹ï¼ˆnomic-embed-text-v2-moe ç„¡æ³•è·‘ /api/generateï¼‰ã€‚ä¿®å¾©ï¼šconfig/notifications.json çš„ watchdog.ollama_deep_check.model è¨­ç‚º qwen3.5:0.8bï¼ˆæœ€å° chat æ¨¡å‹ 1.0GBï¼Œä½å¹²æ“¾ï¼‰ï¼›mtime ç†±é‡è¼‰å…é‡å•Ÿã€‚å·²ç”¨ probe_ollama ç›´è·‘é©—è­‰ status=okã€‚
 
 - [x] æ·±åº¦æª¢æŸ¥æ¢æ¸¬æ”¹èµ° 11435 + ç¯„æœ¬åŒæ­¥ (2026-09-13) 11434 æ¢æ¸¬æ›¾ read timeout 30sï¼ˆèˆ‡ä¸»è¼‰å…¥æ¨¡å‹æ¶è³‡æºï¼‰ï¼Œconfig/notifications.json çš„ ollama_deep_check.base_url æ”¹ç‚º http://127.0.0.1:11435ï¼ˆGPU1 å°ˆç”¨ Ollamaï¼Œprobe_ollama ç›´è·‘é©—è­‰ status=okï¼‰ï¼›notifications.json.example ç¯„æœ¬åŒæ­¥æ›´æ–° base_url=11435ï¼Œæ–°æ©Ÿé–‹ç®±å³ç”¨ã€‚watchdog mtime ç†±é‡è¼‰å…é‡å•Ÿã€‚
+
+## Supervisor ±Æµ{±Ò°Ê­×´_ (2026-09-22) ?
+- [x] ²{¶H¡G±Æµ{±Ò°Ê start_supervisor.bat «áµL¥ô¦óªA°È¡Fsupervisor »{¬° stack ¬¡µÛ¡B¥Ã¤£­«±Ò launcher
+- [x] ®Ú¦] 1¡Grerank ¥[¤J SERVICE_DEFS «á¡Alauncher_sentry.json ¥]§t rerank:11436¡F¿W¥ß llama-server¡]¤â°Ê±Ò°Ê¡^¦û¦í 11436 ¡÷ supervisor _launcher_alive() ÀË¬d sentry ports ®É rerank alive ¡÷ return True ¡÷ ¥Ã¤£­«±Ò
+- [x] ®Ú¦] 2¡G_read_sentry() µL mtime staleness ÀË¬d¡]_read_pid ¦³ 60s ÀË¬d¡^¡÷ stale sentry ¥Ã»·³Qµø¬°¦³®Ä
+- [x] ­×¥¿¡Gsupervisor.py _read_sentry() ¥[ 60s mtime ÀË¬d¡]»P _read_pid ¤@­P¡^¡F±ş±¼½Ä¬ğªº¿W¥ß reranker (PID 1176)
+- [x] ´ú¸Õ¡Gtest_launcher.py +3¡]stale sentry ©¿²¤¡Bfresh sentry ¨Ï¥Î¡Bstale sentry + port alive ¤´§P dead¡^33 passed
+- [x] ÅçÃÒ¡G±Æµ{¸ô®|±Ò°Ê«á¥ş³¡ 8 ªA°È UP¡]§t launcher ºŞ²zªº rerank 11436¡^¡F/v1/rerank E2E score=8.65

@@ -211,3 +211,8 @@ um_ctx.
 - New CLI \untime.orchestration.model_context_cli\: \etch <model> [--provider --base-url --api-key]\ and \efresh [--write]\.
 - \provider_scoring.py\ and \execution_selector.py\ now use model ctx instead of provider-only \max_context\ for context penalty.
 - Tests: +13 in \	ests/test_model_context.py\; docs in \docs/providers/model-context.md\.
+
+## 2026-09-22 ??Supervisor scheduled-start fix
+- Root cause: adding \erank\ to SERVICE_DEFS put \erank: 11436\ into launcher_sentry.json; an independently-started llama-server held port 11436, so supervisor \_launcher_alive()\ saw a live sentry port and never restarted the launcher (all 7 core ports logged down every cycle, zero restarts).
+- Fix: \supervisor.py _read_sentry()\ now ignores sentry files older than 60s (mtime check, same as \_read_pid\); killed the conflicting independent reranker.
+- Tests: +3 in \	ests/test_launcher.py\ (stale sentry ignored, fresh used, stale+alive-port still dead). All 8 services UP via scheduled path incl. launcher-managed rerank; /v1/rerank E2E OK.
