@@ -1,404 +1,535 @@
 models:
-  # ── RTX 5090 (32GB, tier S) — flagship inference ─────────────
-  - name: gemma4:e2b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, tools, vision, audio]
-    estimated_vram_mb:
-    
-  - name: muse-glimmer:30b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-    
-  - name: nemotron-3.5-lightning:30b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools]
-    estimated_vram_mb:    
-    
-  - name: gemma4:26b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb:
-
-  - name: qwen3.8:27b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-
-  - name: gemma4:31b-it-qat
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb:
-    
-  - name: qwen3-coder:30b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, tools]
-    estimated_vram_mb:
-
-  - name: gemma4:31b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb:
-
-  - name: qwen3.6:35b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-    
-  - name: north-mini-code-1.0:q4_K_M
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-        ollama_options:
-          num_ctx: 32768
-    capabilities: [chat, thinking, tools]
-    estimated_vram_mb: 
-    
-  - name: ornith-1.5:35b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, vision]
-    estimated_vram_mb: 
-    
-  - name: medgemma:27b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11434
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-
-  # ── RTX 4070 Ti SUPER (16GB, tier A) — vision / specialist ──
-  - name: gemma4:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb:
-    
-  - name: gemma4:e4b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision, audio]
-    estimated_vram_mb:
-
-  - name: qwen3-vl:8b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-
-  - name: glm-ocr:bf16
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-    
-  - name: deepseek-ocr:3b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-
-  - name: translategemma:12b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-    
-  - name: qwen3.5:0.8b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-    
-  - name: qwen3-embedding:8b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [embeddings]
-    estimated_vram_mb:
-
-  - name: nomic-embed-text-v2-moe:latest
-    provider: ollama
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-    capabilities: [embeddings]
-    estimated_vram_mb:
-
-  # ── Standalone llama.cpp reranker (AIIH_RERANK_BASE_URL) ────
-  - name: rerank/bge-reranker-v2-m3
-    provider: rerank
-    worker_bindings:
-      - node_id: node-01
-        port: 11436
-    capabilities: [rerank]
-    estimated_vram_mb:
-
-  # ── Tesla P40 #0 (24GB, tier B) — embeddings + slow fallback ─
-  - name: ornith-1.5:9b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-
-  - name: qwen3.5:9b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, thinking, tools, vision]
-    estimated_vram_mb:
-
-  - name: medgemma1.5:4b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-
-  - name: translategemma:4b
-    provider: ollama
-    worker_bindings:
-      - node_id: node-p40-01
-        port: 11434
-      - node_id: node-p40-01
-        port: 11435
-      - node_id: node-01
-        port: 11435
-    capabilities: [chat, vision]
-    estimated_vram_mb:
-
-  # ── Cloud providers ─────────────────────────────────────────
-  - name: gpt-4.1-mini
-    provider: openai
-    worker_ports: []
-    capabilities: [chat, responses, embeddings, tools]
-
-  - name: gemini-3.5-flash
-    provider: gemini
-    worker_ports: []
-    capabilities: [chat, responses, embeddings, tools]
-    
-  - name: z-ai/glm-5.3-flash
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
-    
-  - name: z-ai/glm-5.3
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
-    
-  - name: minimaxai/minimax-m3
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
-
-  - name: minimaxai/minimax-m2.7
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, tools]
-    
-  - name: moonshotai/kimi-k3
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
-    
-  - name:  google/diffusiongemma-26b-a4b-it
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision, thinking, tools]
-    
-  - name:  bytedance/seed-oss-36b-instruct
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, vision]
-
-  - name: deepseek-ai/deepseek-v4-pro-0813
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-
-  - name: deepseek-ai/deepseek-v4-flash-0731
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-    
-  - name: big-pickle
-    provider: OpenCode
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-    
-  - name: ox-alpha-free
-    provider: OpenCode
-    worker_ports: []
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: agnes-2.0-flash
-    provider: agnes
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-    
-  - name: DeepSeek-V4-Flash-Vision-Exp
-    provider: AMD
-    worker_ports: []
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: Qwen3.8-Flash-Next
-    provider: AMD
-    worker_ports: []
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, thinking, tools, vision]
-    
-  - name: nvidia/nemotron-3.5-lightning-30b-a3b
-    provider: nvidia_nim
-    worker_ports: []
-    capabilities: [chat, thinking, tools]
-    
-  # ── Local TTS ──────────────────────────────────────────────
-  - name: xtts-v2
-    provider: xtts
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-    capabilities: [audio]
-    estimated_vram_mb:
-
-  # ── Local ASR ──────────────────────────────────────────────
-  - name: whisper-large-v3
-    provider: asr
-    worker_bindings:
-      - node_id: node-01
-        port: 11435
-    capabilities: [audio]
-    estimated_vram_mb:
-
-  # ── Image Generation (Ollama, macOS node-mac-01) ─────────
-  - name: x/z-image-turbo:fp8
-    provider: image_gen
-    worker_bindings:
-      - node_id: node-mac-01
-        port: 11434
-    capabilities: [image]
-    estimated_vram_mb:
-
-  - name: x/z-image-turbo:bf16
-    provider: image_gen
-    worker_bindings:
-      - node_id: node-mac-01
-        port: 11434
-    capabilities: [image]
-    estimated_vram_mb:
-
-  - name: x/flux2-klein:9b
-    provider: image_gen
-    worker_bindings:
-      - node_id: node-mac-01
-        port: 11434
-    capabilities: [image]
-    estimated_vram_mb:
-
-  - name: x/flux2-klein:4b
-    provider: image_gen
-    worker_bindings:
-      - node_id: node-mac-01
-        port: 11434
-    capabilities: [image]
-    estimated_vram_mb:
+- name: gemma4:e2b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 131072
+- name: muse-glimmer:30b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
+- name: nemotron-3.5-lightning:30b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  estimated_vram_mb: null
+  context_length: 1048576
+- name: gemma4:26b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 262144
+- name: qwen3.8:27b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: gemma4:31b-it-qat
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 262144
+- name: qwen3-coder:30b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - tools
+  estimated_vram_mb: null
+  context_length: 262144
+- name: gemma4:31b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 262144
+- name: qwen3.6:35b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: north-mini-code-1.0:q4_K_M
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  estimated_vram_mb: null
+  context_length: 500000
+- name: ornith-1.5:35b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: medgemma:27b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
+- name: gemma4:12b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 262144
+- name: gemma4:e4b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  - audio
+  estimated_vram_mb: null
+  context_length: 131072
+- name: qwen3-vl:8b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: glm-ocr:bf16
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
+- name: deepseek-ocr:3b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 8192
+- name: translategemma:12b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
+- name: qwen3.5:0.8b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: qwen3-embedding:8b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - embeddings
+  estimated_vram_mb: null
+  context_length: 40960
+- name: nomic-embed-text-v2-moe:latest
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  capabilities:
+  - embeddings
+  estimated_vram_mb: null
+  context_length: 512
+- name: rerank/bge-reranker-v2-m3
+  provider: rerank
+  worker_bindings:
+  - node_id: node-01
+    port: 11436
+  capabilities:
+  - rerank
+  estimated_vram_mb: null
+- name: ornith-1.5:9b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+- name: qwen3.5:9b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: medgemma1.5:4b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+- name: translategemma:4b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-p40-01
+    port: 11434
+  - node_id: node-p40-01
+    port: 11435
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - chat
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
+- name: gpt-4.1-mini
+  provider: openai
+  worker_ports: []
+  capabilities:
+  - chat
+  - responses
+  - embeddings
+  - tools
+  context_length: 1047576
+- name: gemini-3.5-flash
+  provider: gemini
+  worker_ports: []
+  capabilities:
+  - chat
+  - responses
+  - embeddings
+  - tools
+  context_length: 1047576
+- name: z-ai/glm-5.3-flash
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  - thinking
+  - tools
+  context_length: 1047576
+- name: z-ai/glm-5.3
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  - thinking
+  - tools
+  context_length: 1047576
+- name: minimaxai/minimax-m3
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  - thinking
+  - tools
+  context_length: 200000
+- name: minimaxai/minimax-m2.7
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - tools
+  context_length: 200000
+- name: moonshotai/kimi-k3
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  - thinking
+  - tools
+  context_length: 200000
+- name: google/diffusiongemma-26b-a4b-it
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  - thinking
+  - tools
+  context_length: 200000
+- name: bytedance/seed-oss-36b-instruct
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - vision
+  context_length: 200000
+- name: deepseek-ai/deepseek-v4-pro-0813
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 1047576
+- name: deepseek-ai/deepseek-v4-flash-0731
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 1047576
+- name: big-pickle
+  provider: OpenCode
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 200000
+- name: ox-alpha-free
+  provider: OpenCode
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  context_length: 200000
+- name: agnes-2.0-flash
+  provider: agnes
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 200000
+- name: DeepSeek-V4-Flash-Vision-Exp
+  provider: AMD
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  context_length: 200000
+- name: Qwen3.8-Flash-Next
+  provider: AMD
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  context_length: 262144
+- name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  context_length: 200000
+- name: nvidia/nemotron-3.5-lightning-30b-a3b
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 200000
+- name: xtts-v2
+  provider: xtts
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - audio
+  estimated_vram_mb: null
+- name: whisper-large-v3
+  provider: asr
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - audio
+  estimated_vram_mb: null
+- name: x/z-image-turbo:fp8
+  provider: image_gen
+  worker_bindings:
+  - node_id: node-mac-01
+    port: 11434
+  capabilities:
+  - image
+  estimated_vram_mb: null
+- name: x/z-image-turbo:bf16
+  provider: image_gen
+  worker_bindings:
+  - node_id: node-mac-01
+    port: 11434
+  capabilities:
+  - image
+  estimated_vram_mb: null
+- name: x/flux2-klein:9b
+  provider: image_gen
+  worker_bindings:
+  - node_id: node-mac-01
+    port: 11434
+  capabilities:
+  - image
+  estimated_vram_mb: null
+- name: x/flux2-klein:4b
+  provider: image_gen
+  worker_bindings:
+  - node_id: node-mac-01
+    port: 11434
+  capabilities:
+  - image
+  estimated_vram_mb: null
