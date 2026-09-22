@@ -20,3 +20,9 @@ def test_models_js_functions_present():
                  "reloadModels", "saveModel", "fetchModelContext", "toggleModelCategory",
                  "setModelStatus", "encodeModelName"]:
         assert f"function {name}" in js, name
+
+
+def test_drawer_is_outside_the_model_card():
+    html = (ROOT / "dashboard" / "templates" / "index.html").read_text(encoding="utf-8")
+    assert html.index('id="mm-drawer"') > html.index('id="traces-panel"')
+    assert html.index('id="mm-backdrop"') > html.index('id="traces-panel"')
