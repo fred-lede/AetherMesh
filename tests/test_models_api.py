@@ -101,6 +101,20 @@ def test_update_rename_updates_references_with_flag(client: TestClient, models_f
     assert yaml.safe_load(rules.read_text(encoding="utf-8"))["aliases"]["fast"] == "new"
 
 
+def test_update_rename_only_keeps_references(client: TestClient, models_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    rules = tmp_path / "routing_rules.yaml"
+    rules.write_text(yaml.safe_dump({"aliases": {"fast": "old"}}), encoding="utf-8")
+    monkeypatch.setattr(model_references, "_rules_path", lambda: rules)
+    store.save_models([{"name": "old", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}])
+    resp = client.put(
+        "/api/models/old?rename_only=true",
+        json={"name": "new", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]},
+    )
+    assert resp.status_code == 200
+    assert yaml.safe_load(rules.read_text(encoding="utf-8"))["aliases"]["fast"] == "old"
+    assert any(m["name"] == "new" for m in store.get_models())
+
+
 def test_providers_endpoint(client: TestClient):
     resp = client.get("/api/models/providers")
     assert resp.status_code == 200

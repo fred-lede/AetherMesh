@@ -967,6 +967,30 @@
           <thead><tr><th>Name</th><th>Category</th><th>Provider</th><th>Capabilities</th><th>Context</th><th>Workers</th><th>Actions</th></tr></thead>
           <tbody id="mm-table"></tbody>
         </table></div>
+        <div id="mm-drawer" style="display:none; margin-top:12px; border-top:1px solid var(--border,#333); padding-top:10px;">
+          <h3 id="mm-drawer-title"></h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <label>Name <input id="mm-name"></label>
+            <label>Category
+              <select id="mm-category" onchange="toggleModelCategory()">
+                <option value="local">Local</option>
+                <option value="cloud">Cloud</option>
+              </select>
+            </label>
+            <label>Provider <select id="mm-provider"></select></label>
+          </div>
+          <div id="mm-bindings" style="margin-top:8px;"></div>
+          <div id="mm-capabilities" style="margin-top:8px;"></div>
+          <div style="margin-top:8px;">
+            <label>Context window <input id="mm-context" type="number"></label>
+            <button class="btn" onclick="fetchModelContext()">Auto-fetch</button>
+          </div>
+          <div id="mm-errors" style="color:#e66; margin-top:8px;"></div>
+          <div style="margin-top:8px;">
+            <button class="btn primary" onclick="saveModel()">Save</button>
+            <button class="btn" onclick="closeModelDrawer()">Cancel</button>
+          </div>
+        </div>
       </section>
     </div>
 

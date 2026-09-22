@@ -14,5 +14,5 @@ def test_models_tab_present_in_template():
 
 def test_models_js_functions_present():
     js = (ROOT / "dashboard" / "static" / "dashboard.js").read_text(encoding="utf-8")
-    for name in ["loadModels", "renderModelsTable", "openModelDrawer", "deleteModel", "duplicateModel", "reloadModels"]:
+    for name in ["loadModels", "renderModelsTable", "openModelDrawer", "deleteModel", "duplicateModel", "reloadModels", "saveModel", "fetchModelContext", "toggleModelCategory"]:
         assert f"function {name}" in js, name

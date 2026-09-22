@@ -1872,8 +1872,140 @@
       renderModelsTable();
     }
 
-    function openModelDrawer() {
-      // implemented in Task 8
+    async function loadModelMeta() {
+      try {
+        mmProviders = await (await fetch('/api/models/providers')).json();
+        mmCapabilities = (await (await fetch('/api/models/capabilities')).json()).capabilities || [];
+      } catch (e) {}
+    }
+
+    async function openModelDrawer(name = null, preset = null) {
+      await loadModelMeta();
+      mmEditingName = name;
+      const model = preset || mmModels.find(m => m.name === name) || { capabilities: [], context_length: null };
+      document.getElementById('mm-drawer-title').textContent = name ? `Edit: ${name}` : 'New Model';
+      document.getElementById('mm-name').value = model.name || '';
+      document.getElementById('mm-category').value = model.category || 'local';
+      document.getElementById('mm-context').value = model.context_length ?? '';
+      document.getElementById('mm-errors').textContent = '';
+      renderModelProviderOptions(model.provider);
+      renderModelCapabilities(model.capabilities || []);
+      renderModelBindings(model.worker_bindings || []);
+      toggleModelCategory();
+      document.getElementById('mm-drawer').style.display = 'block';
+    }
+
+    function closeModelDrawer() {
+      document.getElementById('mm-drawer').style.display = 'none';
+      mmEditingName = null;
+    }
+
+    function toggleModelCategory() {
+      const local = document.getElementById('mm-category').value === 'local';
+      document.getElementById('mm-bindings').style.display = local ? 'block' : 'none';
+      renderModelProviderOptions(document.getElementById('mm-provider').value);
+    }
+
+    function renderModelProviderOptions(selected) {
+      const category = document.getElementById('mm-category').value;
+      const list = mmProviders[category] || [];
+      document.getElementById('mm-provider').innerHTML = list
+        .map(p => `<option value="${escapeHtml(p)}" ${p === selected ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('');
+    }
+
+    function renderModelCapabilities(selected) {
+      const groups = ['core', 'reasoning', 'modality', 'other'];
+      document.getElementById('mm-capabilities').innerHTML = groups.map(g => `
+        <div><strong>${g}</strong><br>${mmCapabilities.filter(c => c.group === g).map(c =>
+          `<label style="margin-right:8px;"><input type="checkbox" value="${c.value}" ${selected.includes(c.value) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>`).join('')}</div>`).join('');
+    }
+
+    function renderModelBindings(bindings) {
+      document.getElementById('mm-bindings').innerHTML =
+        `<div><strong>Worker bindings</strong></div>` +
+        bindings.map((b, i) => `<div><input data-mm-node="${i}" value="${escapeHtml(b.node_id || '')}"><input type="number" data-mm-port="${i}" value="${b.port || ''}"></div>`).join('') +
+        `<button class="btn" onclick="addModelBinding()">＋ Binding</button>`;
+    }
+
+    function addModelBinding() {
+      const container = document.getElementById('mm-bindings');
+      const index = container.querySelectorAll('[data-mm-node]').length;
+      container.insertAdjacentHTML('beforeend', `<div><input data-mm-node="${index}"><input type="number" data-mm-port="${index}"></div>`);
+    }
+
+    function collectModelPayload() {
+      const category = document.getElementById('mm-category').value;
+      const payload = {
+        name: document.getElementById('mm-name').value.trim(),
+        provider: document.getElementById('mm-provider').value,
+        capabilities: Array.from(document.querySelectorAll('#mm-capabilities input:checked')).map(i => i.value),
+        context_length: document.getElementById('mm-context').value ? Number(document.getElementById('mm-context').value) : null,
+      };
+      if (category === 'local') {
+        const nodes = document.querySelectorAll('[data-mm-node]');
+        const ports = document.querySelectorAll('[data-mm-port]');
+        payload.worker_bindings = Array.from(nodes).map((n, i) => ({ node_id: n.value.trim(), port: Number(ports[i].value) }));
+      } else {
+        payload.worker_ports = [];
+      }
+      return payload;
+    }
+
+    async function saveModel() {
+      const payload = collectModelPayload();
+      const errorsEl = document.getElementById('mm-errors');
+      errorsEl.textContent = '';
+      try {
+        if (mmEditingName) {
+          const url = `/api/models/${encodeURIComponent(mmEditingName)}`;
+          let resp = await fetch(url, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          if (resp.status === 409) {
+            const detail = (await resp.json()).detail || {};
+            if (Array.isArray(detail.references)) {
+              if (confirm(`"${mmEditingName}" is referenced by ${detail.references.length} setting(s). Update them too?`)) {
+                resp = await fetch(`${url}?update_references=true`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+              } else if (confirm('Rename the model without updating those references?')) {
+                resp = await fetch(`${url}?rename_only=true`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+              } else {
+                return;
+              }
+            }
+          }
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(JSON.stringify(err.detail || err));
+          }
+        } else {
+          const resp = await fetch('/api/models', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(JSON.stringify(err.detail || err));
+          }
+        }
+        closeModelDrawer();
+        await loadModels();
+      } catch (err) {
+        errorsEl.textContent = err.message;
+      }
+    }
+
+    async function fetchModelContext() {
+      const name = document.getElementById('mm-name').value.trim();
+      if (!name) return;
+      try {
+        const resp = await fetch(`/api/models/${encodeURIComponent(name)}/fetch-context`, { method: 'POST' });
+        if (resp.ok) {
+          document.getElementById('mm-context').value = (await resp.json()).context_length;
+        } else {
+          document.getElementById('mm-errors').textContent = 'Auto-fetch failed';
+        }
+      } catch (err) {
+        document.getElementById('mm-errors').textContent = `Auto-fetch failed: ${err.message}`;
+      }
     }
 
     function renderModelsTable() {

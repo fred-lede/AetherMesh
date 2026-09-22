@@ -1219,6 +1219,7 @@ def update_model(
     request: Request,
     body: dict[str, Any] = Body(...),
     update_references: bool = False,
+    rename_only: bool = False,
 ) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
@@ -1231,7 +1232,7 @@ def update_model(
         if new_name in others:
             raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
         references = model_references.scan_model_references(name)
-        if references and not update_references:
+        if references and not update_references and not rename_only:
             raise HTTPException(status_code=409, detail={"message": "references exist", "references": references})
         if update_references:
             model_references.update_model_references(name, new_name)
