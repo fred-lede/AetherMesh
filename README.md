@@ -398,6 +398,14 @@ apiKey: "local-dev-key"
 - `POST /v1/agent/execute` — execute a task (single or multi-step)
 - `POST /v1/agent/register` — register a worker agent
 
+### Dashboard — Models Tab
+Manage `config/models.yaml` from the dashboard (add/edit/delete/rename) with local/cloud
+classification, multi-select capabilities, editable worker bindings, and context-window fetch.
+Edits hot-reload without restarting the router (mtime-based). Backing endpoints:
+`GET/POST /api/models`, `PUT/DELETE /api/models/{name}` (`?update_references=true` / `?rename_only=true`),
+`POST /api/models/{name}/fetch-context`, `POST /api/models/reload`, plus
+`GET /api/models/{capabilities,providers,nodes}`. Mutations are admin-only.
+
 ### Anthropic-Compatible API (`router/anthropic_router.py`, port `8002`)
 
 Full Anthropic Messages API format (`POST /v1/messages`) with streaming via SSE.
