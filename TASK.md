@@ -5,8 +5,8 @@
 ---
 
 ## Dashboard — Model Manager Tab ✅ (2026-09-23)
-- [ ] 需求：Dashboard 新增 Tab，以 UI 管理 models.yaml（新增/編輯/刪除），取代遠端手改檔案
-- [ ] 規劃：區分本地模型 / 雲端模型；能力多選（Chat/Vision/Image/Reasoning/Tool/Audio/Video/Embedding/Reranker…）；可設定 context window
+- [x] 需求：Dashboard 新增 Tab，以 UI 管理 models.yaml（新增/編輯/刪除），取代遠端手改檔案
+- [x] 規劃：區分本地模型 / 雲端模型；能力多選（Chat/Vision/Image/Reasoning/Tool/Audio/Video/Embedding/Reranker…）；可設定 context window
 - [x] 決策 1：持久化 + 熱載入 = **Approach A**（直接原子寫 models.yaml + mtime 自動熱載，跨行程靠檔案 mtime，無 IPC）
 - [x] 決策 2：capability 擴充 = 新增 `image_gen`/`video` + 拆開 `image→vision` alias；本階段**僅標註+UI**，routing 接線留第二階段
 - [x] 決策 3：支援本地模型 `worker_bindings` 編輯（node_id + port 可增刪）
@@ -14,6 +14,7 @@
 - [x] 設計 spec 已核准並 commit（`docs/superpowers/specs/2026-09-23-model-manager-tab-design.md`）
 - [x] 實作計畫 `docs/superpowers/plans/2026-09-23-model-manager-tab.md`（9 tasks）已 commit 並以 Native 執行完成
 - [x] 實作完成：`model_registry_store.py`、`model_references.py`、熱載入（RouterService/AnthropicRouter mtime）、capability 擴充（image_gen/video）、Dashboard Models Tab + CRUD API；新測試 40 個（4+16+3+3+12+2）
+- [x] Final review 修正：惡意 yaml、驗證 500、含斜線模型名、大小寫重複、自訂 provider 分類、rename 順序、context force、admin 403 測試；全量 915 passed / 17 既有環境失敗、零新回歸
 - [ ] 待辦：重啟 dashboard(9001) 以載入新 Tab；第二階段再接 image_gen/video 的路由評分
 
 ---
