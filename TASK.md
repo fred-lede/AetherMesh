@@ -15,7 +15,7 @@
 - [x] 實作計畫 `docs/superpowers/plans/2026-09-23-model-manager-tab.md`（9 tasks）已 commit 並以 Native 執行完成
 - [x] 實作完成：`model_registry_store.py`、`model_references.py`、熱載入（RouterService/AnthropicRouter mtime）、capability 擴充（image_gen/video）、Dashboard Models Tab + CRUD API；新測試 40 個（4+16+3+3+12+2）
 - [x] Final review 修正：惡意 yaml、驗證 500、含斜線模型名、大小寫重複、自訂 provider 分類、rename 順序、context force、admin 403 測試；全量 915 passed / 17 既有環境失敗、零新回歸
-- [x] UI 回饋與 Drawer 優化：reload 顯示成功/失敗/無變化（`#mm-status`）、Drawer 改固定右側滑出（backdrop / Esc / ✕）
+- [x] UI 回饋與 Drawer 優化：reload 顯示成功/失敗/無變化（`#mm-status`）、Drawer 改固定右側滑出（backdrop / Esc / ✕）、並移出 `.card`（避免 `backdrop-filter` 使 `fixed` 失效）→ 視窗定位
 - [ ] 待辦：重啟 dashboard(9001) 以載入新 Tab；第二階段再接 image_gen/video 的路由評分
 
 ---
