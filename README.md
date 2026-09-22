@@ -385,7 +385,7 @@ apiKey: "local-dev-key"
 - `GET /v1/responses/{id}` — fetch stored response
 - `DELETE /v1/responses/{id}` — delete stored response
 - `PATCH /v1/responses/{id}` — update response metadata
-- `GET /v1/models` — list available models
+- `GET /v1/models` — list available models (metadata exposes per-model `context_length`/`context_window`, read fresh from `config/models.yaml` on each request)
 - `POST /v1/embeddings` — text embeddings
 - `POST /v1/audio/chat` — voice chat pipeline (ASR → LLM → TTS, returns speech audio or JSON)
 - `POST /v1/rerank` — document reranking

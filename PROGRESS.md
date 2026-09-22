@@ -91,7 +91,7 @@
 
 ### Trace Memory Bounds (2026-08-11)
 - `runtime/observability/tracing.py`: `Tracer(max_spans=1000)` + `_append_span` trims oldest spans when over cap
-- `runtime/observability/execution_trace.py`: `ExecutionTraceCollector(max_traces=1000)` + `_evict_overflow` drops oldest trace (closing its tracer span) -- addresses Phase 33 audit item `tracer._spans + execution_trace._traces µL²M²z` now that every request seeds a trace
+- `runtime/observability/execution_trace.py`: `ExecutionTraceCollector(max_traces=1000)` + `_evict_overflow` drops oldest trace (closing its tracer span) -- addresses Phase 33 audit item `tracer._spans + execution_trace._traces ï¿½Lï¿½Mï¿½z` now that every request seeds a trace
 - `tests/test_execution_trace.py`: +2 (tracer span cap evicts oldest; collector trace cap evicts + closes evicted span)
 - Verification: 35 passed (execution_trace/traces_router/observability)
 
@@ -123,14 +123,14 @@
 ode --check on both JS files; 	est_token_tracker.py 8 passed.
 - Action: restart dashboard (9001) for the new response shape; Ctrl+F5 for the new JS.
 
-### agnes tool_choice 400 ­×´_¡]2026-08-11¡^
-- Root cause¡G_anthropic_tool_choice_to_openai §â Anthropic {"type":"any"|"none"|"auto"} Âà¦¨ dict {"type":"required"} µ¥¡A¦ý OpenAI ToolChoice untagged enum ¥u±µ¨ü¦r¦ê "auto"/"none"/"required" ©Î {"type":"function","function":{"name"}}¡CÄY®æ Rust serde¡]agnes¡^¡÷ data did not match any variant of untagged enum ToolChoice¡C¥B /v1/messages ªº openai_payload ª½±µ°e adapter¡AµL¥¿³W¤Æ¨¾½u¡C
-- Fix 1¡]nthropic_converter.py:_anthropic_tool_choice_to_openai¡^¡Gany¡÷"required"¡Bnone¡÷"none"¡Bauto¡÷"auto"¡Btool+name¡÷function object¡Btool µL name¡÷"auto"¡]¬Ò¬°¦Xªk variant¡^
-- Fix 2¡]openai_handler.py¡^¡G·s¼W _normalize_tool_choice(tool_choice, tools) ¡X ¦r¦ê¥u¯d auto/none/required¡Fdict «¬ºAÂà¦¨¹ïÀ³¦r¦ê¡F{"type":"function"} ¯Ê function/name ©Î name ¤£¦b tools ¡÷ drop¡Fflat 
-ame Äæ¦ì¥¿³W¤Æ¦¨ function object¡C®M¥Î©ó _normalize_payload_for_provider¡]ÂÐ»\ chat/streaming/responses + custom provider¡^»P handle_responses openai passthrough ¤À¤ä
-- 	ests/test_tool_choice.py ¡X ·s¼W 21 tests¡]anthropic Âà´« 6 + normalize 11 + payload ¾ã¦X 4¡^
-- ÅçÃÒ¡Gtest_tool_choice + test_prompt_caching + test_responses_e2e 39 passed¡Ftest_orchestration + test_server_tool_policy + test_web_server_tools 35 passed
-- ?? »Ý­«±Ò 8002¡]anthropic_router¡^¸ü¤J¡F8001 ¥ç»Ý­«±Ò¡]²{¬° timeout¡^¡C¥t Ollama ¥Dµ{¦¡»Ý¥ý«ì´_¡A§_«h Ollama ¸ô¥Ñ¤´ 503
+### agnes tool_choice 400 ï¿½×´_ï¿½]2026-08-11ï¿½^
+- Root causeï¿½G_anthropic_tool_choice_to_openai ï¿½ï¿½ Anthropic {"type":"any"|"none"|"auto"} ï¿½à¦¨ dict {"type":"required"} ï¿½ï¿½ï¿½Aï¿½ï¿½ OpenAI ToolChoice untagged enum ï¿½uï¿½ï¿½ï¿½ï¿½ï¿½rï¿½ï¿½ "auto"/"none"/"required" ï¿½ï¿½ {"type":"function","function":{"name"}}ï¿½Cï¿½Yï¿½ï¿½ Rust serdeï¿½]agnesï¿½^ï¿½ï¿½ data did not match any variant of untagged enum ToolChoiceï¿½Cï¿½B /v1/messages ï¿½ï¿½ openai_payload ï¿½ï¿½ï¿½ï¿½ï¿½e adapterï¿½Aï¿½Lï¿½ï¿½ï¿½Wï¿½Æ¨ï¿½ï¿½uï¿½C
+- Fix 1ï¿½]nthropic_converter.py:_anthropic_tool_choice_to_openaiï¿½^ï¿½Ganyï¿½ï¿½"required"ï¿½Bnoneï¿½ï¿½"none"ï¿½Bautoï¿½ï¿½"auto"ï¿½Btool+nameï¿½ï¿½function objectï¿½Btool ï¿½L nameï¿½ï¿½"auto"ï¿½]ï¿½Ò¬ï¿½ï¿½Xï¿½k variantï¿½^
+- Fix 2ï¿½]openai_handler.pyï¿½^ï¿½Gï¿½sï¿½W _normalize_tool_choice(tool_choice, tools) ï¿½X ï¿½rï¿½ï¿½uï¿½d auto/none/requiredï¿½Fdict ï¿½ï¿½ï¿½Aï¿½à¦¨ï¿½ï¿½ï¿½ï¿½ï¿½rï¿½ï¿½F{"type":"function"} ï¿½ï¿½ function/name ï¿½ï¿½ name ï¿½ï¿½ï¿½b tools ï¿½ï¿½ dropï¿½Fflat 
+ame ï¿½ï¿½ì¥¿ï¿½Wï¿½Æ¦ï¿½ function objectï¿½Cï¿½Mï¿½Î©ï¿½ _normalize_payload_for_providerï¿½]ï¿½Ð»\ chat/streaming/responses + custom providerï¿½^ï¿½P handle_responses openai passthrough ï¿½ï¿½ï¿½ï¿½
+- 	ests/test_tool_choice.py ï¿½X ï¿½sï¿½W 21 testsï¿½]anthropic ï¿½à´« 6 + normalize 11 + payload ï¿½ï¿½X 4ï¿½^
+- ï¿½ï¿½ï¿½Ò¡Gtest_tool_choice + test_prompt_caching + test_responses_e2e 39 passedï¿½Ftest_orchestration + test_server_tool_policy + test_web_server_tools 35 passed
+- ?? ï¿½Ý­ï¿½ï¿½ï¿½ 8002ï¿½]anthropic_routerï¿½^ï¿½ï¿½ï¿½Jï¿½F8001 ï¿½ï¿½Ý­ï¿½ï¿½Ò¡]ï¿½{ï¿½ï¿½ timeoutï¿½^ï¿½Cï¿½t Ollama ï¿½Dï¿½{ï¿½ï¿½ï¿½Ý¥ï¿½ï¿½ï¿½_ï¿½Aï¿½_ï¿½h Ollama ï¿½ï¿½ï¿½Ñ¤ï¿½ 503
 
 ## 2026-08-12 â€” Phase 38: strip `AIIH/` alias prefix so prefixed models route correctly
 
@@ -216,3 +216,17 @@ um_ctx.
 - Root cause: adding \erank\ to SERVICE_DEFS put \erank: 11436\ into launcher_sentry.json; an independently-started llama-server held port 11436, so supervisor \_launcher_alive()\ saw a live sentry port and never restarted the launcher (all 7 core ports logged down every cycle, zero restarts).
 - Fix: \supervisor.py _read_sentry()\ now ignores sentry files older than 60s (mtime check, same as \_read_pid\); killed the conflicting independent reranker.
 - Tests: +3 in \	ests/test_launcher.py\ (stale sentry ignored, fresh used, stale+alive-port still dead). All 8 services UP via scheduled path incl. launcher-managed rerank; /v1/rerank E2E OK.
+
+## 2026-09-22 â€” Context-length completion + opencode/Telegram integration
+
+### Per-model context_length wired end-to-end
+- `config/models.yaml` now carries `context_length` for 46 models (23 auto-fetched from Ollama `/api/show`, Qwen3.8-Flash-Next 262144, gpt-4.1-mini/gemini-3.5-flash 1047576, 12 cloud models preseeded at 200000).
+- `runtime/orchestration/openai_handler.py` + `anthropic_converter.py`: `list_models` reads `config/models.yaml` fresh on every request (was a startup snapshot) and exposes `context_length`/`context_window` in each model's metadata â€” any OpenAI-compatible client can now read the true window instead of guessing.
+- 3 fixes in the series: `context_length` fill (199546a), `/v1/models` fresh read + metadata (57d564b), supervisor ignores stale launcher sentry so scheduled-start doesn't skip restart (5e15566).
+
+### opencode / opencode-telegram display fix (root cause)
+- User reported Telegram still showing 200k for `z-ai/glm-5.3`. Root cause traced through the bot's `@grinev/opencode-telegram-bot` source:
+  - `model-context-limit-service.js` reads context from the opencode server API `config.providers()`, specifically `model.limit.context`; any model without it falls back to `DEFAULT_CONTEXT_LIMIT = 200000`.
+  - The bot never reads AetherMesh's `/v1/models` â€” it only talks to the opencode server, whose model specs come from opencode.jsonc / models.dev.
+- Fix was client-side config, not AetherMesh code: added `"limit": {"context": 1047576, "output": 131072}` (+ `reasoning`/`tool_call`) to `z-ai/glm-5.3`, `z-ai/glm-5.3-flash` under the `aiih` and `aiih2` providers in `~/.config/opencode/opencode.jsonc`. Verified working â€” Telegram now shows 1M context.
+- AetherMesh `/v1/models` `context_length` remains valuable for direct API clients (GUIs, dashboards); the two paths are independent (opencode layer vs. AetherMesh layer).

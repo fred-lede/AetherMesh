@@ -22,6 +22,9 @@
 - [x] 跨平台 GPU backend 釐清：Windows/Linux 用 CUDA 版；macOS 用 Metal 版（Ollama 附帶即 Metal，llama.cpp 無 MPS backend）；修正 shell 腳本 macOS 預設 `-mg 0`、launchd `AIIH_RERANK_DEVICE=0`
 - [x] 納入 launcher 監督：`runtime/launcher/launcher.py` `SERVICE_DEFS` 加 `rerank`（port 11436），`_cmd_for`/`_rerank_command()` 支援外部 `cmd /c start-rerank-server.bat`（Linux 用 `.sh`）；`runtime/health/watchdog.py` `_PORT_ENV_MAP` 加 `rerank` → 11436 健康檢查。Windows 排程只需 `start_supervisor.bat`，不需獨立 `sc create`；文件同步更新
 - [x] 模型級上下文長度：新增 `runtime/orchestration/model_context.py`（`resolve_context_length`/`resolve_effective_max_context`/`fetch_context_length`/`refresh_auto_context`）+ `model_context_cli.py`（`fetch`/`refresh --write` CLI）；`provider_scoring.py` 與 `execution_selector.py` 改用模型 ctx（models.yaml `context_length` → 自動快取 → provider fallback）；15 個測試；docs/providers/model-context.md。Ollama ctx 取自 `/api/show` 的 `model_info.{arch}.context_length`（如 `gemma4.context_length`）；`refresh` 對多 worker_bindings（含遠端節點，用 `cluster.yaml node_hosts` 解析 IP）逐一嘗試；修正 `params` 空 dict 誤 return 的 bug
+- [x] `context_length` 全部填入：`config/models.yaml` 46 個模型（23 Ollama 自動抓取、Qwen3.8-Flash-Next 262144、gpt-4.1-mini/gemini-3.5-flash 1047576、12 雲端 200000 預填）
+- [x] `/v1/models` 即時讀取與 metadata：`openai_handler.py`/`anthropic_converter.py` 的 `list_models` 改每次讀新 models.yaml（不再用啟動快照），metadata 暴露 `context_length`/`context_window`，方便任何 OpenAI 相容客戶端讀取；40 測試全過
+- [x] opencode 客戶端整合驗證：`~/.config/opencode/opencode.jsonc` 的模型 `limit.{context,output}`（1047576）會透過 opencode API 傳給 opencode-telegram bot（`model-context-limit-service.js` 讀 `limit.context`，缺省 200000）→ Telegram 顯示正確的 1M context。AetherMesh `/v1/models` 的 `context_length` 提供給直接連線的客戶端（GUI/dashboard），與 opencode 顯示互為獨立
 
 ---
 
@@ -752,10 +755,10 @@
 
 - [x] 深度檢查探測改走 11435 + 範本同步 (2026-09-13) 11434 探測曾 read timeout 30s（與主載入模型搶資源），config/notifications.json 的 ollama_deep_check.base_url 改為 http://127.0.0.1:11435（GPU1 專用 Ollama，probe_ollama 直跑驗證 status=ok）；notifications.json.example 範本同步更新 base_url=11435，新機開箱即用。watchdog mtime 熱重載免重啟。
 
-## Supervisor �Ƶ{�Ұʭ״_ (2026-09-22) ?
-- [x] �{�H�G�Ƶ{�Ұ� start_supervisor.bat ��L����A�ȡFsupervisor �{�� stack ���ۡB�ä����� launcher
-- [x] �ڦ] 1�Grerank �[�J SERVICE_DEFS ��Alauncher_sentry.json �]�t rerank:11436�F�W�� llama-server�]��ʱҰʡ^���� 11436 �� supervisor _launcher_alive() �ˬd sentry ports �� rerank alive �� return True �� �ä�����
-- [x] �ڦ] 2�G_read_sentry() �L mtime staleness �ˬd�]_read_pid �� 60s �ˬd�^�� stale sentry �û��Q��������
-- [x] �ץ��Gsupervisor.py _read_sentry() �[ 60s mtime �ˬd�]�P _read_pid �@�P�^�F�����Ĭ𪺿W�� reranker (PID 1176)
-- [x] ���աGtest_launcher.py +3�]stale sentry �����Bfresh sentry �ϥΡBstale sentry + port alive ���P dead�^33 passed
-- [x] ���ҡG�Ƶ{���|�Ұʫ���� 8 �A�� UP�]�t launcher �޲z�� rerank 11436�^�F/v1/rerank E2E score=8.65
+## Supervisor �Ƶ{�Ұʭ״_ (2026-09-22) ?
+- [x] �{�H�G�Ƶ{�Ұ� start_supervisor.bat ��L����A�ȡFsupervisor �{�� stack ���ۡB�ä����� launcher
+- [x] �ڦ] 1�Grerank �[�J SERVICE_DEFS ��Alauncher_sentry.json �]�t rerank:11436�F�W�� llama-server�]��ʱҰʡ^���� 11436 �� supervisor _launcher_alive() �ˬd sentry ports �� rerank alive �� return True �� �ä�����
+- [x] �ڦ] 2�G_read_sentry() �L mtime staleness �ˬd�]_read_pid �� 60s �ˬd�^�� stale sentry �û��Q��������
+- [x] �ץ��Gsupervisor.py _read_sentry() �[ 60s mtime �ˬd�]�P _read_pid �@�P�^�F�����Ĭ𪺿W�� reranker (PID 1176)
+- [x] ���աGtest_launcher.py +3�]stale sentry �����Bfresh sentry �ϥΡBstale sentry + port alive ���P dead�^33 passed
+- [x] ���ҡG�Ƶ{���|�Ұʫ���� 8 �A�� UP�]�t launcher �޲z�� rerank 11436�^�F/v1/rerank E2E score=8.65

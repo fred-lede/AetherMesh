@@ -1,5 +1,23 @@
 # Handoff
 
+## 2026-09-22 — Context-length feature + opencode/Telegram display integration
+
+State: feature complete, all commits pushed.
+
+### Added this session (commits already pushed)
+- **Model-level context length** (`4c72b6a`, `aaa0273`): `runtime/orchestration/model_context.py` + `model_context_cli.py`, per-model ctx resolution (models.yaml → auto-fetch cache → provider fallback), wired into `provider_scoring.py`/`execution_selector.py`.
+- **`/v1/models` fresh read + metadata** (`57d564b`): `openai_handler.py`/`anthropic_converter.py` `list_models` reads `config/models.yaml` per request and exposes `context_length`/`context_window`.
+- **Supervisor stale-sentry fix** (`5e15566`): `_read_sentry()` ignores sentry files older than 60s so a conflicting independent process on a sentry port can't block scheduled restart.
+- **models.yaml ctx fill** (`199546a`): 46 models carry `context_length`.
+
+### Client-side finding (no AetherMesh code needed)
+- Telegram's 200k came from `@grinev/opencode-telegram-bot`'s `model-context-limit-service.js`: it reads `limit.context` from the opencode server API and falls back to `200000` when absent. AetherMesh `/v1/models` is never consulted by the bot.
+- Resolved by adding `limit.context/output` to the models in `~/.config/opencode/opencode.jsonc` (aiih/aiih2 providers). Verified: Telegram now shows 1M.
+
+### Notes
+- NVIDIA NIM `/v1/models` returns no context fields (confirmed with live key) — the "1M via nvidia_nim" impression comes from opencode's models.dev DB, not the API.
+- AetherMesh's direct-API context metadata still serves GUI/dashboard clients; keep it.
+
 ## 2026-08-11 — Phase 34: OpenAI-compatible surface expansion
 
 State: all features implemented and tested; **not yet deployed** (server restart required).

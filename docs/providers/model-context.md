@@ -53,6 +53,12 @@ AetherMesh 用**模型層**的上下文長度來判斷某個模型能否容納�
 .venv\Scripts\python.exe -m runtime.orchestration.model_context_cli refresh --write
 ```
 
+## `/v1/models` 暴露
+
+`GET /v1/models`（OpenAI + Anthropic 路徑）每次請求都從 `config/models.yaml` 讀檔，並在每個模型的 metadata 帶上 `context_length`（與 AI 平台的 `context_window` 對映）。任何 OpenAI 相容客戶端（GUI、dashboard、自訂腳本）可直接讀取真實視窗，不需內建 models DB。
+
+> 注意：opencode（及其 Telegram bot）的 context 顯示**不讀** AetherMesh `/v1/models`，而是用 opencode.jsonc 中該模型的 `limit.context`（缺省 200000）。要在 opencode 側修正顯示，請在 `~/.config/opencode/opencode.jsonc` 的 provider 模型定義補 `"limit": {"context": <ctx>, "output": <out>}`。
+
 ## 影響
 
 `resolve_effective_max_context` 用於兩處評分：
