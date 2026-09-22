@@ -24,6 +24,7 @@ from config.settings import settings
 from providers.http_client import get_session
 from metrics.request_metrics import request_metrics
 from runtime.orchestration.provider_router import credential_pool_status, reload_credential_pools, custom_provider_status, reload_custom_providers
+from runtime.orchestration import model_references, model_registry_store
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.multi_agent import coordinator
 from runtime.gpu_os import gpu_manager, model_scheduler
@@ -1139,6 +1140,142 @@ def custom_providers_probe(name: str) -> dict[str, Any]:
 def custom_providers_reload() -> dict[str, Any]:
     reloaded = reload_custom_providers()
     return {"ok": True, "providers": list(reloaded.keys())}
+
+
+_CAPABILITY_GROUPS: list[dict[str, str]] = [
+    {"value": "chat", "label": "Chat", "group": "core"},
+    {"value": "responses", "label": "Responses", "group": "core"},
+    {"value": "streaming", "label": "Streaming", "group": "core"},
+    {"value": "thinking", "label": "Reasoning", "group": "reasoning"},
+    {"value": "tools", "label": "Tool", "group": "reasoning"},
+    {"value": "mcp", "label": "MCP", "group": "reasoning"},
+    {"value": "web_search", "label": "Web Search", "group": "reasoning"},
+    {"value": "vision", "label": "Vision", "group": "modality"},
+    {"value": "image_gen", "label": "Image", "group": "modality"},
+    {"value": "audio", "label": "Audio", "group": "modality"},
+    {"value": "video", "label": "Video", "group": "modality"},
+    {"value": "documents", "label": "Documents", "group": "modality"},
+    {"value": "embeddings", "label": "Embedding", "group": "other"},
+    {"value": "rerank", "label": "Reranker", "group": "other"},
+]
+
+_MODEL_LOCAL_PROVIDERS = ["ollama", "xtts"]
+_MODEL_CLOUD_PROVIDERS = ["openai", "gemini", "nvidia_nim", "ollama_cloud"]
+
+
+def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
+    local = model_registry_store.is_local_model(entry)
+    workers = entry.get("worker_bindings") or []
+    return {
+        **entry,
+        "category": "local" if local else "cloud",
+        "workers": [f"{b.get('node_id')}:{b.get('port')}" for b in workers],
+    }
+
+
+@api.get("/models")
+def list_models() -> dict[str, Any]:
+    models = model_registry_store.get_models()
+    return {"models": [_model_public(m) for m in models]}
+
+
+@api.get("/models/capabilities")
+def list_model_capabilities() -> dict[str, Any]:
+    return {"capabilities": _CAPABILITY_GROUPS}
+
+
+@api.get("/models/providers")
+def list_model_providers() -> dict[str, Any]:
+    custom = sorted(settings.load_custom_providers().keys())
+    return {"local": _MODEL_LOCAL_PROVIDERS, "cloud": _MODEL_CLOUD_PROVIDERS + custom}
+
+
+@api.get("/models/nodes")
+def list_model_nodes() -> dict[str, Any]:
+    cluster = settings.load_yaml("cluster.yaml") or {}
+    hosts = cluster.get("node_hosts") or {}
+    return {"nodes": sorted(hosts.keys())}
+
+
+@api.post("/models")
+def create_model(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _require_admin(request)
+    models = model_registry_store.get_models()
+    names = {m.get("name") for m in models}
+    new_name = str(body.get("name", "")).strip()
+    if new_name and new_name in names:
+        raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
+    clean, errors = model_registry_store.validate_model(body, existing_names=names)
+    if errors:
+        raise HTTPException(status_code=400, detail=errors)
+    models.append(clean)
+    model_registry_store.save_models(models)
+    return {"model": _model_public(clean)}
+
+
+@api.put("/models/{name}")
+def update_model(
+    name: str,
+    request: Request,
+    body: dict[str, Any] = Body(...),
+    update_references: bool = False,
+) -> dict[str, Any]:
+    _require_admin(request)
+    models = model_registry_store.get_models()
+    index = next((i for i, m in enumerate(models) if m.get("name") == name), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="model not found")
+    new_name = str(body.get("name", name)).strip()
+    others = {m.get("name") for i, m in enumerate(models) if i != index}
+    if new_name != name:
+        if new_name in others:
+            raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
+        references = model_references.scan_model_references(name)
+        if references and not update_references:
+            raise HTTPException(status_code=409, detail={"message": "references exist", "references": references})
+        if update_references:
+            model_references.update_model_references(name, new_name)
+    clean, errors = model_registry_store.validate_model(body, existing_names=others)
+    if errors:
+        raise HTTPException(status_code=400, detail=errors)
+    models[index] = clean
+    model_registry_store.save_models(models)
+    return {"model": _model_public(clean)}
+
+
+@api.delete("/models/{name}")
+def delete_model(name: str, request: Request) -> dict[str, Any]:
+    _require_admin(request)
+    models = model_registry_store.get_models()
+    remaining = [m for m in models if m.get("name") != name]
+    if len(remaining) == len(models):
+        raise HTTPException(status_code=404, detail="model not found")
+    model_registry_store.save_models(remaining)
+    return {"deleted": name}
+
+
+@api.post("/models/{name}/fetch-context")
+def fetch_model_context(name: str, request: Request) -> dict[str, Any]:
+    _require_admin(request)
+    from runtime.orchestration import model_context
+
+    models = model_registry_store.get_models()
+    entry = next((m for m in models if m.get("name") == name), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="model not found")
+    probe = {k: v for k, v in entry.items() if k != "context_length"}
+    result = model_context.refresh_auto_context([probe])
+    value = result.get(name)
+    if value is None:
+        raise HTTPException(status_code=422, detail="could not determine context length")
+    return {"context_length": value}
+
+
+@api.post("/models/reload")
+def reload_model_registry(request: Request) -> dict[str, Any]:
+    _require_admin(request)
+    model_registry_store.reload_models()
+    return {"reloaded": True, "count": len(model_registry_store.get_models())}
 
 
 @api.get("/notifications")
