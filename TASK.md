@@ -4,6 +4,18 @@
 
 ---
 
+## Dashboard — Model Manager Tab (規劃中，待設計核准)
+- [ ] 需求：Dashboard 新增 Tab，以 UI 管理 models.yaml（新增/編輯/刪除），取代遠端手改檔案
+- [ ] 規劃：區分本地模型 / 雲端模型；能力多選（Chat/Vision/Image/Reasoning/Tool/Audio/Video/Embedding/Reranker…）；可設定 context window
+- [x] 決策 1：持久化 + 熱載入 = **Approach A**（直接原子寫 models.yaml + mtime 自動熱載，跨行程靠檔案 mtime，無 IPC）
+- [x] 決策 2：capability 擴充 = 新增 `image_gen`/`video` + 拆開 `image→vision` alias；本階段**僅標註+UI**，routing 接線留第二階段
+- [x] 決策 3：支援本地模型 `worker_bindings` 編輯（node_id + port 可增刪）
+- [x] 決策 4：改名 = **選項 C**（可改名 + 掃描 routing_rules.yaml 參照並可一併更新；集群 runtime assignments 僅警示）
+- [x] 設計 spec 已寫入 `docs/superpowers/specs/2026-09-23-model-manager-tab-design.md`（待使用者審核）
+- [ ] 實作：待 spec 核准 → 進入 writing-plans（尚未寫任何程式）
+
+---
+
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）
 - [x] 啟動 BGE-Reranker-v2-M3 於 127.0.0.1:11436（停用 Qwen3 於 11437）
