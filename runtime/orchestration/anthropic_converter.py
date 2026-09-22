@@ -16,6 +16,7 @@ from runtime.orchestration.provider_router import (
     local_ollama_fallback,
     resolve_provider,
 )
+from runtime.orchestration import model_registry_store
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.security.tool_policy import server_tool_name
 from runtime.tools.content_blocks import anthropic_block_to_openai_parts, anthropic_content_to_openai_parts
@@ -28,9 +29,17 @@ logger = logging.getLogger("anthropic_converter")
 class AnthropicRouter:
     def __init__(self) -> None:
         self.registry = settings.model_registry()
+        self._registry_mtime = model_registry_store.models_mtime()
         self.tool_call_normalizer = ToolCallNormalizer()
 
+    def _ensure_registry(self) -> None:
+        current = model_registry_store.models_mtime()
+        if current != self._registry_mtime:
+            self.registry = settings.model_registry()
+            self._registry_mtime = current
+
     def list_models(self) -> dict[str, Any]:
+        self._ensure_registry()
         data = []
         registry = settings.model_registry()
         for model in registry.get("models", []):
@@ -60,6 +69,7 @@ class AnthropicRouter:
         return {"object": "list", "data": data}
 
     def _to_openai_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_registry()
         messages = []
         system = payload.get("system")
         if system:

@@ -28,6 +28,7 @@ from runtime.orchestration.provider_router import (
     local_ollama_fallback,
     provider_for_model,
 )
+from runtime.orchestration import model_registry_store
 from runtime.orchestration.routing_engine import routing_engine
 from runtime.orchestration.structured_output import apply_structured_output
 from runtime.rag.injector import inject_rag_context
@@ -83,8 +84,16 @@ class StreamResult:
 class RouterService:
     def __init__(self) -> None:
         self.registry = settings.model_registry()
+        self._registry_mtime = model_registry_store.models_mtime()
+
+    def _ensure_registry(self) -> None:
+        current = model_registry_store.models_mtime()
+        if current != self._registry_mtime:
+            self.registry = settings.model_registry()
+            self._registry_mtime = current
 
     def list_models(self) -> dict[str, Any]:
+        self._ensure_registry()
         registry = settings.model_registry()
         models = []
         for model in registry.get("models", []):
@@ -162,6 +171,7 @@ class RouterService:
             logger.warning("Auto web search failed: %s", exc)
 
     def handle_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
+        self._ensure_registry()
         self._inject_web_search(payload)
         inject_rag_context(payload)
         prepared_payload = self._apply_generation_defaults(payload)
@@ -376,6 +386,7 @@ class RouterService:
                 get_file_cleanup_manager().cleanup_request(request_id)
 
     def handle_streaming_chat(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> StreamResult:
+        self._ensure_registry()
         self._inject_web_search(payload)
         prepared_payload = self._apply_generation_defaults(payload)
         prepared_payload, file_ids = _resolve_file_ids_in_payload(prepared_payload)
@@ -577,6 +588,7 @@ class RouterService:
 
 
     def handle_responses(self, payload: dict[str, Any], user_id: int | None = None, api_key_id: int | None = None) -> dict[str, Any]:
+        self._ensure_registry()
         from runtime.responses.response_models import ResponseObject, ResponseStatus
         from runtime.responses.input_converter import responses_input_to_messages
         from runtime.responses.output_converter import chat_completion_to_response, error_response
@@ -898,6 +910,7 @@ class RouterService:
         api_key_id: int | None = None,
         stream_adapter_ref: list[Any] | None = None,
     ) -> Iterable[str]:
+        self._ensure_registry()
         from runtime.responses.input_converter import responses_input_to_messages
         from runtime.responses.response_stream import wrap_streaming_chunks, response_stream_encoder
         from runtime.responses.response_runtime import response_runtime
