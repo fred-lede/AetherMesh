@@ -1854,6 +1854,78 @@
       }
     }
 
+    let mmModels = [];
+    let mmProviders = { local: [], cloud: [] };
+    let mmCapabilities = [];
+    let mmEditingName = null;
+
+    async function loadModels() {
+      const resp = await fetch('/api/models');
+      const data = await resp.json();
+      mmModels = data.models || [];
+      const providerSel = document.getElementById('mm-provider-filter');
+      if (providerSel && providerSel.options.length <= 1) {
+        const names = [...new Set(mmModels.map(m => m.provider))].sort();
+        providerSel.innerHTML = '<option value="">All providers</option>' +
+          names.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+      }
+      renderModelsTable();
+    }
+
+    function openModelDrawer() {
+      // implemented in Task 8
+    }
+
+    function renderModelsTable() {
+      const search = (document.getElementById('mm-search')?.value || '').toLowerCase();
+      const provider = document.getElementById('mm-provider-filter')?.value || '';
+      const category = document.getElementById('mm-category-filter')?.value || '';
+      const rows = mmModels.filter(m =>
+        (!search || (m.name || '').toLowerCase().includes(search)) &&
+        (!provider || m.provider === provider) &&
+        (!category || m.category === category));
+      document.getElementById('mm-table').innerHTML = rows.map(m => `
+        <tr>
+          <td>${escapeHtml(m.name)}</td>
+          <td>${m.category}</td>
+          <td>${escapeHtml(m.provider)}</td>
+          <td>${(m.capabilities || []).map(c => `<span class="badge">${escapeHtml(c)}</span>`).join(' ')}</td>
+          <td>${m.context_length ?? '—'}</td>
+          <td>${escapeHtml((m.workers || []).join(', ')) || '—'}</td>
+          <td>
+            <button class="btn" onclick="openModelDrawer('${escapeHtml(m.name)}')">Edit</button>
+            <button class="btn" onclick="duplicateModel('${escapeHtml(m.name)}')">Copy</button>
+            <button class="btn danger" onclick="deleteModel('${escapeHtml(m.name)}')">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7">No models.</td></tr>';
+      document.getElementById('mm-summary').textContent =
+        `Total ${mmModels.length} · Local ${mmModels.filter(m => m.category === 'local').length} · Cloud ${mmModels.filter(m => m.category === 'cloud').length}`;
+    }
+
+    async function reloadModels() {
+      try {
+        await mutateDashboard('/api/models/reload', { method: 'POST' });
+        await loadModels();
+      } catch (err) {
+        setOperationStatus(`Reload failed: ${err.message}`, 'bad');
+      }
+    }
+
+    async function deleteModel(name) {
+      if (!confirm(`Delete ${name}?`)) return;
+      try {
+        await mutateDashboard(`/api/models/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        await loadModels();
+      } catch (err) {
+        setOperationStatus(`Delete failed: ${err.message}`, 'bad');
+      }
+    }
+
+    function duplicateModel(name) {
+      const src = mmModels.find(m => m.name === name);
+      if (src) openModelDrawer(null, { ...src, name: `${name}-copy` });
+    }
+
     if (document.getElementById('notifications-panel')) {
       loadNotificationSettings().catch(() => {});
       loadServiceControl().catch(() => {});

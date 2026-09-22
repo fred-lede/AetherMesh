@@ -622,6 +622,7 @@
       {% if user_role == 'admin' %}
       <span class="dash-tab" data-tab="cluster" onclick="switchTab('cluster')">Cluster</span>
       <span class="dash-tab" data-tab="providers" onclick="switchTab('providers')">Providers</span>
+      <span class="dash-tab" data-tab="models" onclick="switchTab('models')">Models</span>
       {% endif %}
       <span class="dash-tab" data-tab="charts" onclick="switchTab('charts')">Charts</span>
       <span class="dash-tab" data-tab="traces" onclick="switchTab('traces')">Traces</span>
@@ -944,6 +945,31 @@
     {% endif %}
     </div>
 
+    <div class="tab-content" data-tab="models">
+      <section class="section card">
+        <div class="section-head">
+          <h2>Models</h2>
+          <span class="mono" style="color: var(--muted);">Add, edit, delete and rename models in config/models.yaml</span>
+        </div>
+        <div class="panel-header" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+          <button class="btn primary" onclick="openModelDrawer()">＋ New Model</button>
+          <input id="mm-search" placeholder="Search name" oninput="renderModelsTable()">
+          <select id="mm-provider-filter" onchange="renderModelsTable()"></select>
+          <select id="mm-category-filter" onchange="renderModelsTable()">
+            <option value="">All</option>
+            <option value="local">Local</option>
+            <option value="cloud">Cloud</option>
+          </select>
+          <button class="btn" onclick="reloadModels()">Reload</button>
+        </div>
+        <div id="mm-summary" class="muted" style="margin-bottom:8px;"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Category</th><th>Provider</th><th>Capabilities</th><th>Context</th><th>Workers</th><th>Actions</th></tr></thead>
+          <tbody id="mm-table"></tbody>
+        </table></div>
+      </section>
+    </div>
+
     <div class="tab-content" data-tab="traces">
     <section class="section card">
       <div class="section-head">
@@ -964,6 +990,9 @@
       if (name === 'charts') {
         try { setChartGroup(activeChartGroup || 'health'); } catch(e) {}
         document.querySelectorAll('.chart-card canvas').forEach(c => { try { const ch = Chart.getChart(c); if (ch) ch.resize(); } catch(e) {} });
+      }
+      if (name === 'models') {
+        try { loadModels(); } catch(e) {}
       }
     }
   </script>
