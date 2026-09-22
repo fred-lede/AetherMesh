@@ -66,3 +66,64 @@ def test_save_retries_on_permission_error(models_file: Path, monkeypatch: pytest
     store.save_models([{"name": "x", "provider": "ollama"}])
     assert calls["n"] == 3
     assert "name: x" in models_file.read_text(encoding="utf-8")
+
+
+def test_normalize_canonicalizes_capabilities():
+    out = store.normalize_model({"name": " m ", "provider": "ollama", "capabilities": ["Vision", "image", "image"]})
+    assert out["name"] == "m"
+    assert out["capabilities"] == ["image_gen", "vision"]
+
+
+def test_normalize_local_keeps_worker_bindings():
+    out = store.normalize_model({
+        "name": "m", "provider": "ollama",
+        "worker_bindings": [{"node_id": "node-01", "port": "11434"}],
+    })
+    assert out["worker_bindings"] == [{"node_id": "node-01", "port": 11434}]
+    assert "worker_ports" not in out
+
+
+def test_normalize_cloud_uses_worker_ports():
+    out = store.normalize_model({"name": "m", "provider": "openai", "worker_ports": []})
+    assert out["worker_ports"] == []
+    assert "worker_bindings" not in out
+
+
+def test_is_local_model():
+    assert store.is_local_model({"provider": "ollama"}) is True
+    assert store.is_local_model({"provider": "openai"}) is False
+
+
+def test_validate_rejects_missing_name():
+    _, errors = store.validate_model({"provider": "ollama"})
+    assert any("name" in e for e in errors)
+
+
+def test_validate_rejects_duplicate_name():
+    _, errors = store.validate_model({"name": "a", "provider": "ollama"}, existing_names={"a"})
+    assert any("duplicate" in e for e in errors)
+
+
+def test_validate_rejects_bad_context_length():
+    _, errors = store.validate_model({"name": "a", "provider": "ollama", "context_length": 0})
+    assert any("context_length" in e for e in errors)
+
+
+def test_validate_rejects_local_without_bindings():
+    _, errors = store.validate_model({"name": "a", "provider": "ollama"})
+    assert any("worker_bindings" in e for e in errors)
+
+
+def test_validate_rejects_bad_port():
+    entry = {"name": "a", "provider": "ollama", "worker_bindings": [{"node_id": "n", "port": 70000}]}
+    _, errors = store.validate_model(entry)
+    assert any("port" in e for e in errors)
+
+
+def test_validate_accepts_good_local_model():
+    entry = {"name": "a", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}],
+             "capabilities": ["chat"], "context_length": 32768}
+    clean, errors = store.validate_model(entry)
+    assert errors == []
+    assert clean["context_length"] == 32768
+
