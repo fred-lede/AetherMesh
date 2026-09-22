@@ -13,6 +13,8 @@ class Capability(str, Enum):
     TOOLS = "tools"
     THINKING = "thinking"
     VISION = "vision"
+    IMAGE_GEN = "image_gen"
+    VIDEO = "video"
     AUDIO = "audio"
     EMBEDDINGS = "embeddings"
     RERANK = "rerank"
@@ -21,6 +23,9 @@ class Capability(str, Enum):
     WEB_SEARCH = "web_search"
     STREAMING = "streaming"
     DOCUMENTS = "documents"
+
+
+CANONICAL_CAPABILITIES: tuple[str, ...] = tuple(c.value for c in Capability)
 
 
 CAPABILITY_ALIASES: dict[str, Capability] = {
@@ -32,7 +37,11 @@ CAPABILITY_ALIASES: dict[str, Capability] = {
     "thinking": Capability.THINKING,
     "reasoning": Capability.THINKING,
     "vision": Capability.VISION,
-    "image": Capability.VISION,
+    "image": Capability.IMAGE_GEN,
+    "image_gen": Capability.IMAGE_GEN,
+    "imagegen": Capability.IMAGE_GEN,
+    "text_to_image": Capability.IMAGE_GEN,
+    "video": Capability.VIDEO,
     "audio": Capability.AUDIO,
     "embedding": Capability.EMBEDDINGS,
     "embeddings": Capability.EMBEDDINGS,
