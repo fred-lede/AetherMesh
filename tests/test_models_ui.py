@@ -10,9 +10,13 @@ def test_models_tab_present_in_template():
     assert 'data-tab="models"' in html
     assert 'id="mm-table"' in html
     assert 'id="mm-category-filter"' in html
+    assert 'id="mm-status"' in html
+    assert 'id="mm-backdrop"' in html
 
 
 def test_models_js_functions_present():
     js = (ROOT / "dashboard" / "static" / "dashboard.js").read_text(encoding="utf-8")
-    for name in ["loadModels", "renderModelsTable", "openModelDrawer", "deleteModel", "duplicateModel", "reloadModels", "saveModel", "fetchModelContext", "toggleModelCategory"]:
+    for name in ["loadModels", "renderModelsTable", "openModelDrawer", "deleteModel", "duplicateModel",
+                 "reloadModels", "saveModel", "fetchModelContext", "toggleModelCategory",
+                 "setModelStatus", "encodeModelName"]:
         assert f"function {name}" in js, name

@@ -960,15 +960,20 @@
             <option value="local">Local</option>
             <option value="cloud">Cloud</option>
           </select>
-          <button class="btn" onclick="reloadModels()">Reload</button>
+          <button class="btn" onclick="reloadModels(this)">Reload</button>
         </div>
+        <div id="mm-status" class="muted" style="margin-bottom:8px;"></div>
         <div id="mm-summary" class="muted" style="margin-bottom:8px;"></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Name</th><th>Category</th><th>Provider</th><th>Capabilities</th><th>Context</th><th>Workers</th><th>Actions</th></tr></thead>
           <tbody id="mm-table"></tbody>
         </table></div>
-        <div id="mm-drawer" style="display:none; margin-top:12px; border-top:1px solid var(--border,#333); padding-top:10px;">
-          <h3 id="mm-drawer-title"></h3>
+        <div id="mm-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999;" onclick="closeModelDrawer()"></div>
+        <div id="mm-drawer" style="display:none; position:fixed; top:0; right:0; height:100vh; width:420px; max-width:90vw; overflow-y:auto; background:var(--panel,#1b1e24); border-left:1px solid var(--border,#333); padding:16px; z-index:1000; box-shadow:-8px 0 24px rgba(0,0,0,0.4);">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="mm-drawer-title" style="margin:0;"></h3>
+            <button class="btn" onclick="closeModelDrawer()">✕</button>
+          </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <label>Name <input id="mm-name"></label>
             <label>Category

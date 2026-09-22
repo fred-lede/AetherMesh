@@ -1863,6 +1863,19 @@
       return encodeURIComponent(name).replace(/%2F/gi, '/');
     }
 
+    function setModelStatus(message, level = 'ok') {
+      const el = document.getElementById('mm-status');
+      if (!el) return;
+      el.textContent = message;
+      el.style.color = level === 'bad' ? '#e66' : '';
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const drawer = document.getElementById('mm-drawer');
+      if (drawer && drawer.style.display !== 'none') closeModelDrawer();
+    });
+
     async function loadModels() {
       const resp = await fetch('/api/models');
       const data = await resp.json();
@@ -1897,10 +1910,13 @@
       renderModelBindings(model.worker_bindings || []);
       toggleModelCategory();
       document.getElementById('mm-drawer').style.display = 'block';
+      document.getElementById('mm-backdrop').style.display = 'block';
     }
 
     function closeModelDrawer() {
       document.getElementById('mm-drawer').style.display = 'none';
+      const backdrop = document.getElementById('mm-backdrop');
+      if (backdrop) backdrop.style.display = 'none';
       mmEditingName = null;
     }
 
@@ -2035,15 +2051,25 @@
           </td>
         </tr>`).join('') || '<tr><td colspan="7">No models.</td></tr>';
       document.getElementById('mm-summary').textContent =
-        `Total ${mmModels.length} · Local ${mmModels.filter(m => m.category === 'local').length} · Cloud ${mmModels.filter(m => m.category === 'cloud').length}`;
+        `Total ${mmModels.length} · Local ${mmModels.filter(m => m.category === 'local').length} · Cloud ${mmModels.filter(m => m.category === 'cloud').length} · loaded ${new Date().toLocaleTimeString()}`;
     }
 
-    async function reloadModels() {
+    async function reloadModels(button) {
+      const restore = button ? setButtonBusy(button, 'Reloading…') : () => {};
+      const before = JSON.stringify(mmModels);
       try {
-        await mutateDashboard('/api/models/reload', { method: 'POST' });
+        const result = await mutateDashboard('/api/models/reload', { method: 'POST' });
         await loadModels();
+        const changed = JSON.stringify(mmModels) !== before;
+        const count = (result && result.count) ?? mmModels.length;
+        setModelStatus(
+          changed ? `Reloaded — ${count} models (changes detected)` : `Reloaded — no changes (${count} models)`,
+          'ok'
+        );
       } catch (err) {
-        setOperationStatus(`Reload failed: ${err.message}`, 'bad');
+        setModelStatus(`Reload failed: ${err.message}`, 'bad');
+      } finally {
+        restore();
       }
     }
 
@@ -2053,7 +2079,7 @@
         await mutateDashboard(`/api/models/${encodeModelName(name)}`, { method: 'DELETE' });
         await loadModels();
       } catch (err) {
-        setOperationStatus(`Delete failed: ${err.message}`, 'bad');
+        setModelStatus(`Delete failed: ${err.message}`, 'bad');
       }
     }
 
