@@ -151,11 +151,11 @@ def fetch_context_length(
     return _extract_context_length(data)
 
 
-def refresh_auto_context(models: list[dict[str, Any]]) -> dict[str, int]:
+def refresh_auto_context(models: list[dict[str, Any]], force: bool = False) -> dict[str, int]:
     updated: dict[str, int] = {}
     for entry in models:
         model = str(entry.get("name", "")).strip()
-        if not model or configured_context_length(model) is not None:
+        if not model or (not force and configured_context_length(model) is not None):
             continue
         provider = str(entry.get("provider", "ollama"))
         if provider == "ollama":

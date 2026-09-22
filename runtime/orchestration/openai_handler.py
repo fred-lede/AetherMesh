@@ -88,15 +88,14 @@ class RouterService:
 
     def _ensure_registry(self) -> None:
         current = model_registry_store.models_mtime()
-        if current != self._registry_mtime:
+        if current != getattr(self, "_registry_mtime", None):
             self.registry = settings.model_registry()
             self._registry_mtime = current
 
     def list_models(self) -> dict[str, Any]:
         self._ensure_registry()
-        registry = settings.model_registry()
         models = []
-        for model in registry.get("models", []):
+        for model in model_registry_store.get_models():
             models.append(
                 {
                     "id": model["name"],

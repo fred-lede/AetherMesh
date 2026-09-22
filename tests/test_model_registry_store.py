@@ -127,3 +127,44 @@ def test_validate_accepts_good_local_model():
     assert errors == []
     assert clean["context_length"] == 32768
 
+
+def test_load_filters_entries_without_name(models_file: Path):
+    models_file.write_text("models:\n- {provider: ollama}\n- not-a-dict\n- name: ok\n  provider: ollama\n", encoding="utf-8")
+    assert [m["name"] for m in store.load_models()] == ["ok"]
+
+
+def test_validate_non_numeric_context_does_not_raise():
+    _, errors = store.validate_model(
+        {"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "context_length": "abc"}
+    )
+    assert any("context_length" in e for e in errors)
+
+
+def test_validate_string_binding_does_not_raise():
+    _, errors = store.validate_model({"name": "a", "provider": "ollama", "worker_bindings": ["oops"]})
+    assert errors
+
+
+def test_validate_rejects_case_insensitive_duplicate():
+    _, errors = store.validate_model(
+        {"name": "Foo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}, existing_names={"foo"}
+    )
+    assert any("duplicate" in e for e in errors)
+
+
+def test_validate_rejects_unknown_provider():
+    _, errors = store.validate_model({"name": "a", "provider": "bogus", "worker_ports": [], "capabilities": ["chat"]})
+    assert any("provider" in e for e in errors)
+
+
+def test_validate_rejects_unknown_node():
+    entry = {"name": "a", "provider": "ollama", "worker_bindings": [{"node_id": "ghost", "port": 11434}], "capabilities": ["chat"]}
+    _, errors = store.validate_model(entry, allowed_nodes={"node-01"})
+    assert any("node" in e for e in errors)
+
+
+def test_is_local_model_treats_custom_provider_as_cloud(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(store, "cloud_providers", lambda: {"agnes"})
+    assert store.is_local_model({"provider": "agnes"}) is False
+
+

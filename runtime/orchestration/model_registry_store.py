@@ -42,7 +42,7 @@ def load_models() -> list[dict[str, Any]]:
     models = doc.get(_TOP_LEVEL_KEY) or []
     if not isinstance(models, list):
         return []
-    return [m for m in models if isinstance(m, dict)]
+    return [m for m in models if isinstance(m, dict) and str(m.get("name", "")).strip()]
 
 
 def get_models() -> list[dict[str, Any]]:
@@ -95,8 +95,26 @@ CLOUD_PROVIDERS: set[str] = {"openai", "gemini", "nvidia_nim", "ollama_cloud"}
 _NAME_RE = re.compile(r"^[A-Za-z0-9._:/+-]+$")
 
 
+def cloud_providers() -> set[str]:
+    providers = set(CLOUD_PROVIDERS)
+    try:
+        providers |= set(settings.load_custom_providers().keys())
+    except Exception:
+        pass
+    return providers
+
+
+def cluster_nodes() -> set[str] | None:
+    try:
+        cluster = settings.load_yaml("cluster.yaml") or {}
+        nodes = {str(n) for n in (cluster.get("node_hosts") or {}).keys()}
+        return nodes or None
+    except Exception:
+        return None
+
+
 def is_local_model(entry: dict[str, Any]) -> bool:
-    return str(entry.get("provider", "")).strip() not in CLOUD_PROVIDERS
+    return str(entry.get("provider", "")).strip() not in cloud_providers()
 
 
 def _canonical_capability(value: str) -> str:
@@ -115,6 +133,7 @@ def normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     if entry.get("worker_bindings") is not None:
         out["worker_bindings"] = [
             {"node_id": str(b.get("node_id", "")).strip(), "port": int(b.get("port", 0))}
+            if isinstance(b, dict) else {"node_id": str(b).strip(), "port": 0}
             for b in (entry.get("worker_bindings") or [])
         ]
     else:
@@ -131,6 +150,7 @@ def normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
 def validate_model(
     entry: dict[str, Any],
     existing_names: set[str] | None = None,
+    allowed_nodes: set[str] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     name = str(entry.get("name", "")).strip()
@@ -138,12 +158,14 @@ def validate_model(
         errors.append("name is required")
     elif not _NAME_RE.match(name):
         errors.append(f"invalid name: {name!r}")
-    elif existing_names and name in existing_names:
+    elif existing_names and name.casefold() in {n.casefold() for n in existing_names}:
         errors.append(f"duplicate name: {name!r}")
 
     provider = str(entry.get("provider", "")).strip()
     if not provider:
         errors.append("provider is required")
+    elif provider not in LOCAL_PROVIDERS and provider not in cloud_providers():
+        errors.append(f"unknown provider: {provider!r}")
 
     bindings = entry.get("worker_bindings")
     if is_local_model(entry):
@@ -151,6 +173,14 @@ def validate_model(
             errors.append("worker_bindings is required for local models")
         else:
             for binding in bindings:
+                if not isinstance(binding, dict):
+                    errors.append(f"invalid worker_binding: {binding!r}")
+                    continue
+                node_id = str(binding.get("node_id", "")).strip()
+                if not node_id:
+                    errors.append("worker_binding node_id is required")
+                elif allowed_nodes and node_id not in allowed_nodes:
+                    errors.append(f"unknown node_id: {node_id!r}")
                 port = binding.get("port")
                 try:
                     port_int = int(port)
@@ -174,5 +204,5 @@ def validate_model(
             errors.append(f"invalid context_length: {ctx!r}")
 
     if errors:
-        return normalize_model(entry), errors
+        return entry, errors
     return normalize_model(entry), []

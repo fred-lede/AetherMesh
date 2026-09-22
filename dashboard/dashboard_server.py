@@ -1201,11 +1201,13 @@ def list_model_nodes() -> dict[str, Any]:
 def create_model(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
-    names = {m.get("name") for m in models}
+    names = {str(m.get("name", "")) for m in models}
     new_name = str(body.get("name", "")).strip()
-    if new_name and new_name in names:
+    if new_name and new_name.casefold() in {n.casefold() for n in names}:
         raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
-    clean, errors = model_registry_store.validate_model(body, existing_names=names)
+    clean, errors = model_registry_store.validate_model(
+        body, existing_names=names, allowed_nodes=model_registry_store.cluster_nodes()
+    )
     if errors:
         raise HTTPException(status_code=400, detail=errors)
     models.append(clean)
@@ -1213,7 +1215,7 @@ def create_model(request: Request, body: dict[str, Any] = Body(...)) -> dict[str
     return {"model": _model_public(clean)}
 
 
-@api.put("/models/{name}")
+@api.put("/models/{name:path}")
 def update_model(
     name: str,
     request: Request,
@@ -1227,24 +1229,26 @@ def update_model(
     if index is None:
         raise HTTPException(status_code=404, detail="model not found")
     new_name = str(body.get("name", name)).strip()
-    others = {m.get("name") for i, m in enumerate(models) if i != index}
+    others = {str(m.get("name", "")) for i, m in enumerate(models) if i != index}
     if new_name != name:
-        if new_name in others:
+        if new_name.casefold() in {n.casefold() for n in others}:
             raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
         references = model_references.scan_model_references(name)
         if references and not update_references and not rename_only:
             raise HTTPException(status_code=409, detail={"message": "references exist", "references": references})
-        if update_references:
-            model_references.update_model_references(name, new_name)
-    clean, errors = model_registry_store.validate_model(body, existing_names=others)
+    clean, errors = model_registry_store.validate_model(
+        body, existing_names=others, allowed_nodes=model_registry_store.cluster_nodes()
+    )
     if errors:
         raise HTTPException(status_code=400, detail=errors)
     models[index] = clean
     model_registry_store.save_models(models)
+    if new_name != name and update_references:
+        model_references.update_model_references(name, new_name)
     return {"model": _model_public(clean)}
 
 
-@api.delete("/models/{name}")
+@api.delete("/models/{name:path}")
 def delete_model(name: str, request: Request) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
@@ -1255,7 +1259,7 @@ def delete_model(name: str, request: Request) -> dict[str, Any]:
     return {"deleted": name}
 
 
-@api.post("/models/{name}/fetch-context")
+@api.post("/models/{name:path}/fetch-context")
 def fetch_model_context(name: str, request: Request) -> dict[str, Any]:
     _require_admin(request)
     from runtime.orchestration import model_context
@@ -1265,7 +1269,7 @@ def fetch_model_context(name: str, request: Request) -> dict[str, Any]:
     if entry is None:
         raise HTTPException(status_code=404, detail="model not found")
     probe = {k: v for k, v in entry.items() if k != "context_length"}
-    result = model_context.refresh_auto_context([probe])
+    result = model_context.refresh_auto_context([probe], force=True)
     value = result.get(name)
     if value is None:
         raise HTTPException(status_code=422, detail="could not determine context length")

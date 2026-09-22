@@ -128,3 +128,68 @@ def test_reload_endpoint(client: TestClient, models_file: Path):
     resp = client.post("/api/models/reload")
     assert resp.status_code == 200
     assert resp.json()["count"] == 1
+
+
+def test_create_model_case_insensitive_duplicate_returns_409(client: TestClient, models_file: Path):
+    store.save_models([{"name": "Foo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}])
+    resp = client.post("/api/models", json={"name": "foo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]})
+    assert resp.status_code == 409
+
+
+def test_crud_name_with_slash(client: TestClient, models_file: Path):
+    resp = client.post("/api/models", json={"name": "z-ai/glm-5.3", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]})
+    assert resp.status_code == 200
+    assert client.delete("/api/models/z-ai/glm-5.3").status_code == 200
+    assert client.delete("/api/models/z-ai/glm-5.3").status_code == 404
+
+
+def test_rename_reference_not_updated_when_validation_fails(client: TestClient, models_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    rules = tmp_path / "routing_rules.yaml"
+    rules.write_text(yaml.safe_dump({"aliases": {"fast": "old"}}), encoding="utf-8")
+    monkeypatch.setattr(model_references, "_rules_path", lambda: rules)
+    store.save_models([{"name": "old", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}], "capabilities": ["chat"]}])
+    resp = client.put(
+        "/api/models/old?update_references=true",
+        json={"name": "new", "provider": "ollama", "worker_bindings": [], "capabilities": ["chat"]},
+    )
+    assert resp.status_code == 400
+    assert yaml.safe_load(rules.read_text(encoding="utf-8"))["aliases"]["fast"] == "old"
+
+
+def test_fetch_context_for_configured_model(client: TestClient, models_file: Path, monkeypatch: pytest.MonkeyPatch):
+    from runtime.orchestration import model_context
+
+    store.save_models([{"name": "m", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}], "capabilities": ["chat"], "context_length": 32768}])
+    monkeypatch.setattr(model_context, "configured_context_length", lambda model: 32768 if model == "m" else None)
+    monkeypatch.setattr(model_context, "_ollama_base_urls", lambda entry: ["http://127.0.0.1:11434"])
+    monkeypatch.setattr(model_context, "fetch_context_length", lambda model, **kw: 65536)
+    resp = client.post("/api/models/m/fetch-context")
+    assert resp.status_code == 200
+    assert resp.json()["context_length"] == 65536
+
+
+def test_mutation_requires_admin(monkeypatch: pytest.MonkeyPatch, models_file: Path):
+    monkeypatch.setattr(dash, "_auth_credentials_configured", lambda: True)
+    monkeypatch.setattr(dash, "_session_auth_valid", lambda request: True)
+    client = TestClient(dash.app)
+    resp = client.post("/api/models", json={"name": "x", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]})
+    assert resp.status_code == 403
+
+
+def test_router_list_models_survives_malformed_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from runtime.orchestration import openai_handler
+
+    path = tmp_path / "models.yaml"
+    path.write_text("models:\n- {provider: ollama}\n- not-a-dict\n- name: ok\n  provider: ollama\n", encoding="utf-8")
+    monkeypatch.setattr(store, "models_path", lambda: path)
+    result = openai_handler.RouterService().list_models()
+    assert "ok" in [m["id"] for m in result["data"]]
+
+
+def test_router_list_models_survives_null_models(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from runtime.orchestration import openai_handler
+
+    path = tmp_path / "models.yaml"
+    path.write_text("models:\n", encoding="utf-8")
+    monkeypatch.setattr(store, "models_path", lambda: path)
+    assert openai_handler.RouterService().list_models()["data"] is not None

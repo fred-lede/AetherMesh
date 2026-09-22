@@ -1859,6 +1859,10 @@
     let mmCapabilities = [];
     let mmEditingName = null;
 
+    function encodeModelName(name) {
+      return encodeURIComponent(name).replace(/%2F/gi, '/');
+    }
+
     async function loadModels() {
       const resp = await fetch('/api/models');
       const data = await resp.json();
@@ -1957,7 +1961,7 @@
       errorsEl.textContent = '';
       try {
         if (mmEditingName) {
-          const url = `/api/models/${encodeURIComponent(mmEditingName)}`;
+          const url = `/api/models/${encodeModelName(mmEditingName)}`;
           let resp = await fetch(url, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (resp.status === 409) {
@@ -1997,7 +2001,7 @@
       const name = document.getElementById('mm-name').value.trim();
       if (!name) return;
       try {
-        const resp = await fetch(`/api/models/${encodeURIComponent(name)}/fetch-context`, { method: 'POST' });
+        const resp = await fetch(`/api/models/${encodeModelName(name)}/fetch-context`, { method: 'POST' });
         if (resp.ok) {
           document.getElementById('mm-context').value = (await resp.json()).context_length;
         } else {
@@ -2046,7 +2050,7 @@
     async function deleteModel(name) {
       if (!confirm(`Delete ${name}?`)) return;
       try {
-        await mutateDashboard(`/api/models/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        await mutateDashboard(`/api/models/${encodeModelName(name)}`, { method: 'DELETE' });
         await loadModels();
       } catch (err) {
         setOperationStatus(`Delete failed: ${err.message}`, 'bad');
