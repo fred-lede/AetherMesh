@@ -1,0 +1,3 @@
+{
+  "provider_order": ["exa", "tavily", "serper", "duckduckgo"]
+}

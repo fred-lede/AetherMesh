@@ -435,6 +435,22 @@ class Settings:
         tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
         tmp.replace(path)
 
+    def load_web_search_config(self) -> dict[str, Any]:
+        path = self.config_path("web_search.json")
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_web_search_config(self, data: dict[str, Any]) -> None:
+        path = self.config_path("web_search.json")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+
     def sandbox_manager(self) -> Any:
         from runtime.security.sandbox.manager import SandboxManager
         from runtime.security.sandbox.profile import SandboxProfile, builtin_profiles

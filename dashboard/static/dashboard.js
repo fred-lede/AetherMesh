@@ -517,17 +517,9 @@
       }
       renderCustomProviders(data);
 
-      if (_isAdmin) {
-        const webSearchEl = document.getElementById('web-search-providers');
-        if (data.web_search_providers) {
-          const wsList = data.web_search_providers || [];
-          webSearchEl.innerHTML = '<span class="subsection-title" style="font-size:0.85rem;">Web Search</span>' +
-            wsList.map(ws => {
-              const cls = ws.configured ? 'ok' : 'warn';
-              const label = ws.configured ? 'configured' : 'not set';
-              return `<span class="pill"><strong>${ws.name}</strong><span class="${cls}">${label}</span></span>`;
-            }).join('');
-        }
+      if (_isAdmin && !wsPanelInitialized) {
+        wsPanelInitialized = true;
+        renderWebSearchPanel().catch(() => {});
       }
 
       alerts.innerHTML = (data.alerts || []).map(alert => (
@@ -2098,6 +2090,64 @@
     function duplicateModel(name) {
       const src = mmModels.find(m => m.name === name);
       if (src) openModelDrawer(null, { ...src, name: `${name}-copy` });
+    }
+
+    let wsPanelInitialized = false;
+    let wsConfig = { order: [], providers: [] };
+
+    async function renderWebSearchPanel() {
+      const el = document.getElementById('web-search-providers');
+      if (!el) return;
+      try {
+        const data = await (await fetch('/api/web-search/config')).json();
+        wsConfig = { order: data.order || [], providers: data.providers || [] };
+      } catch (e) {
+        el.textContent = 'Failed to load web search config';
+        return;
+      }
+      el.innerHTML = '<span class="subsection-title" style="font-size:0.85rem;">Web Search — priority order</span>' +
+        '<div id="ws-rows"></div>' +
+        '<div style="margin-top:6px;"><button class="btn primary" onclick="saveWebSearchOrder()">Save</button> ' +
+        '<span id="ws-status" class="muted"></span></div>';
+      renderWebSearchRows();
+    }
+
+    function renderWebSearchRows() {
+      const rowsEl = document.getElementById('ws-rows');
+      if (!rowsEl) return;
+      const configured = Object.fromEntries((wsConfig.providers || []).map(p => [p.name, p.configured]));
+      rowsEl.innerHTML = (wsConfig.order || []).map((name, i) => `
+        <div style="display:flex; gap:6px; align-items:center; margin-top:4px;">
+          <span class="pill"><strong>${escapeHtml(name)}</strong><span class="${configured[name] ? 'ok' : 'warn'}">${configured[name] ? 'configured' : 'not set'}</span></span>
+          <button class="btn" onclick="moveWebSearch(${i}, -1)">↑</button>
+          <button class="btn" onclick="moveWebSearch(${i}, 1)">↓</button>
+        </div>`).join('') || '<span class="muted">no providers</span>';
+    }
+
+    function moveWebSearch(index, delta) {
+      const target = index + delta;
+      if (target < 0 || target >= wsConfig.order.length) return;
+      const arr = wsConfig.order;
+      const tmp = arr[index];
+      arr[index] = arr[target];
+      arr[target] = tmp;
+      renderWebSearchRows();
+    }
+
+    async function saveWebSearchOrder() {
+      try {
+        await mutateDashboard('/api/web-search/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: wsConfig.order }),
+        });
+        await renderWebSearchPanel();
+        const statusEl = document.getElementById('ws-status');
+        if (statusEl) statusEl.textContent = 'Saved';
+      } catch (err) {
+        const statusEl = document.getElementById('ws-status');
+        if (statusEl) statusEl.textContent = `Failed: ${err.message}`;
+      }
     }
 
     if (document.getElementById('notifications-panel')) {

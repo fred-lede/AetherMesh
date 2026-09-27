@@ -1465,6 +1465,38 @@ def web_search_status() -> dict[str, Any]:
     return {"providers": providers_info}
 
 
+_KNOWN_SEARCH_PROVIDERS = {"exa", "tavily", "serper", "duckduckgo"}
+
+
+@api.get("/web-search/config")
+def get_web_search_config() -> dict[str, Any]:
+    from runtime.tools.web_search import web_search_manager
+
+    providers = [
+        {"name": p.name, "configured": bool(getattr(p, "configured", False))}
+        for p in web_search_manager.providers
+    ]
+    return {"order": [p["name"] for p in providers], "providers": providers}
+
+
+@api.put("/web-search/config")
+def put_web_search_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _require_admin(request)
+    order = body.get("order")
+    if not isinstance(order, list) or not order:
+        raise HTTPException(status_code=400, detail="'order' must be a non-empty list")
+    unknown = [str(name) for name in order if str(name) not in _KNOWN_SEARCH_PROVIDERS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown provider(s): {unknown}")
+    clean: list[str] = []
+    for name in order:
+        name = str(name)
+        if name not in clean:
+            clean.append(name)
+    settings.save_web_search_config({"provider_order": clean})
+    return {"ok": True, "order": clean}
+
+
 @api.post("/providers/{provider}/probe")
 def provider_probe(provider: str) -> dict[str, Any]:
     """Probe one provider and feed the result back into routing health."""

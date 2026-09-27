@@ -503,6 +503,8 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 Search providers (first configured wins): **Exa → Tavily → Serper → DuckDuckGo**. Exa
 (`EXA_API_KEY`) is a semantic/neural search API (`type=auto`); Tavily (`TAVILY_API_KEY`) and
 Serper (`SERPER_API_KEY`) are keyword / Google-backed; DuckDuckGo needs no key and is the final fallback.
+The priority order is configurable from the Dashboard **Providers** tab (`GET/PUT /api/web-search/config`,
+admin; persisted to `config/web_search.json` and hot-reloaded without a restart).
 
 ## Provider Adapters
 

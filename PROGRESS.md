@@ -268,3 +268,9 @@ um_ctx.
 - `.env.example`: added `# EXA_API_KEY=...` and a priority comment.
 - Tests: `tests/test_web_search_exa.py` (not-configured raises, result parsing + request shape, HTTP 429 mapping, manager priority) — 4 passed.
 - Dashboard Web Search providers list picks Exa up automatically (reads `web_search_manager.providers`).
+
+## 2026-09-23 — Web search: Dashboard-configurable provider priority order
+- New runtime config `config/web_search.json` (`{"provider_order": [...]}`; gitignored + `.example`); settings helpers `load_web_search_config()` / `save_web_search_config()`.
+- `runtime/tools/web_search/__init__.py`: `WebSearchManager` now builds its order from the config with mtime-based hot reload (`_order_mtime` / `_load_order`); unknown names are ignored and missing providers appended. Default `exa → tavily → serper → duckduckgo`.
+- Dashboard: `GET /api/web-search/config` (order + configured status) and `PUT /api/web-search/config` (admin; validates known providers, dedupes, saves). Providers tab panel replaced with an ordered list (↑/↓ buttons + Save + status) that reads/writes the config; edits hot-reload into the router without restart.
+- Tests: `tests/test_web_search_manager.py` (default/config order, mtime reload, unknown/missing handling) + `tests/test_web_search_config_api.py` (GET, PUT save, unknown 400, admin 403).
