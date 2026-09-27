@@ -381,6 +381,9 @@ apiKey: "local-dev-key"
 - `WS /v1/realtime` — realtime session WebSocket (`session.update` / `conversation.item.create` / `response.create`)
 - `GET /v1/audit/logs` — query security + routing audit events (action/actor/time filters)
 - `GET /v1/audit/sources` — audit log sources
+- `GET /v1/traces` — spans + execution trace summaries
+- `GET /v1/traces/export` / `POST /v1/traces/export` — export traces (JSON / OTLP)
+- `DELETE /v1/traces` — clear traces
 - `POST /v1/responses` — full OpenAI Responses API format
 - `GET /v1/responses/{id}` — fetch stored response
 - `DELETE /v1/responses/{id}` — delete stored response
@@ -388,7 +391,14 @@ apiKey: "local-dev-key"
 - `GET /v1/models` — list available models (metadata exposes per-model `context_length`/`context_window`, read fresh from `config/models.yaml` on each request)
 - `POST /v1/embeddings` — text embeddings
 - `POST /v1/audio/chat` — voice chat pipeline (ASR → LLM → TTS, returns speech audio or JSON)
-- `POST /v1/rerank` — document reranking
+- `POST /v1/audio/speech` — text-to-speech (OpenAI-compatible)
+- `POST /v1/audio/transcriptions` — speech-to-text (faster-whisper)
+- `POST /v1/audio/translations` — transcribe + translate to English
+- `WS /v1/audio/transcriptions/stream` — streaming ASR over WebSocket
+- `GET/POST /v1/voices`, `DELETE /v1/voices/{id}`, `GET /v1/voices/{id}/preview` — voice management
+- `POST /v1/images/generations` — image generation (local model or cloud provider by model)
+- `POST /v1/images/edits` — image edits (local models)
+- `POST /v1/rerank` — document reranking (dedicated llama.cpp reranker; see Rerank API)
 - `GET /v1/gpu/status` — GPU devices, VRAM, utilization, temperature
 - `POST /v1/gpu/models/load` — load a model to a device
 - `POST /v1/gpu/models/unload` — unload a model
@@ -451,6 +461,27 @@ chat fallback logic. Ollama and Ollama Cloud embedding adapters normalize the
 common upstream shapes (`embeddings`, legacy `embedding`, and OpenAI-style
 `data[].embedding`) into OpenAI-compatible `data[].embedding` rows.
 
+### Rerank API (`POST /v1/rerank`)
+
+Document reranking is served by a **dedicated llama.cpp `llama-server --rerank`** process, because the
+bundled Ollama does not expose `/api/rerank`. `providers/rerank_adapter.py` translates llama.cpp's
+native `/rerank` response into the OpenAI-compatible `/v1/rerank` shape.
+
+- Default model: `rerank/bge-reranker-v2-m3`, worker `127.0.0.1:11436` (`AIIH_RERANK_BASE_URL`).
+- GPU selection via `AIIH_RERANK_DEVICE` (llama.cpp `-mg N`).
+
+```bash
+curl http://localhost:8001/v1/rerank \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "rerank/bge-reranker-v2-m3", "query": "what is AetherMesh", "documents": ["a", "b"], "top_n": 1}'
+```
+
+Response (OpenAI-compatible): `{"results": [{"index": 0, "relevance_score": 0.98, "document": {"text": "a"}}]}`.
+
+Deployment (build + service files for Windows/Linux/macOS):
+[`docs/providers/rerank-deployment.md`](docs/providers/rerank-deployment.md).
+
 ### MCP Gateway (`runtime/mcp/`)
 
 Proxies MCP connections with auth, sandboxing, and bridging.
@@ -474,10 +505,13 @@ a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) rou
 | Provider | Adapter | Capabilities |
 |----------|---------|-------------|
 | Ollama (local) | `providers/ollama_adapter.py` | chat, stream, responses, embeddings, rerank |
-| OpenAI | `providers/openai_adapter.py` | chat, stream, responses |
-| Gemini | `providers/gemini_adapter.py` | chat, stream, responses, rerank |
+| OpenAI | `providers/openai_adapter.py` | chat, stream, responses, embeddings, image_gen |
+| Gemini | `providers/gemini_adapter.py` | chat, stream, responses, rerank, image_gen |
 | NVIDIA NIM | `providers/nvidia_nim_adapter.py` | chat, stream, responses, embeddings, rerank |
 | Ollama Cloud | `providers/ollama_cloud_adapter.py` | chat, stream, responses, embeddings, rerank |
+| Custom (OpenAI-compatible) | `providers/openai_adapter.py` | chat, stream, responses, embeddings, image_gen |
+| Image generation (local) | `providers/image_gen_adapter.py` | image_gen |
+| Rerank (local) | `providers/rerank_adapter.py` | rerank |
 | XTTS-v2 (local) | `providers/xtts_adapter.py` | audio (TTS) |
 | faster-whisper (local) | `providers/faster_whisper_adapter.py` | audio (ASR) |
 

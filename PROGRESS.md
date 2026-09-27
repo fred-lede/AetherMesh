@@ -248,3 +248,9 @@ um_ctx.
 - `router/image_router.py`: resolves the model's provider via `provider_router.resolve_provider(model, {"models": model_registry_store.get_models()})`; cloud/custom providers dispatch to `provider_router.adapter(provider).images(payload)` (no `image_gen_enabled` gate), local models keep the existing `ImageGenAdapter`. Providers without `images()` (nvidia_nim/ollama_cloud, this phase) return 501; cloud `/v1/images/edits` returns 501 (local only).
 - Tests: `tests/test_image_gen.py` +6 (OpenAI `images` endpoint, Gemini inline-data normalization, custom-provider dispatch, unsupported-provider 501, cloud-edits 501). Full suite 923 passed / 17 failed / 6 skipped — the same pre-existing env failures, zero regressions.
 - Not done (per decision): nvidia_nim and ollama_cloud image generation (different API contracts; deferred).
+
+## 2026-09-23 — README coverage pass (rerank / audio / images / traces + provider table)
+- Added `### Rerank API` section: `/v1/rerank` served by a dedicated llama.cpp `llama-server --rerank` (Ollama has no `/api/rerank`), default model `rerank/bge-reranker-v2-m3`, curl example, and a link to `docs/providers/rerank-deployment.md`.
+- OpenAI-compatible endpoint list now includes `/v1/images/generations`, `/v1/images/edits`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations`, the streaming ASR WebSocket, voice management (`/v1/voices`), and `/v1/traces`.
+- Corrected the Provider Adapters table: added `image_gen` to OpenAI/custom and Gemini, added OpenAI `embeddings`, and added rows for `image_gen_adapter` and `rerank_adapter`.
+- Note: Local TTS (XTTS-v2), Local ASR (faster-whisper), and Voice Chat Pipeline already had full sections — only the gaps above were missing.
