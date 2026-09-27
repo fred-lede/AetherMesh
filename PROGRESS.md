@@ -261,3 +261,10 @@ um_ctx.
 - Added `### Audit Log API` (`/v1/audit/logs`, `/v1/audit/sources`; security + routing sources, filters).
 - Added `### Traces` (`/v1/traces` list/export/delete; OTLP push; auth-exempt).
 - Added `### GPU API` and `### Agent API` (documented that their parameters are query-string, not JSON bodies, matching `runtime/gpu_os/routes.py` and `runtime/multi_agent/routes.py`).
+
+## 2026-09-23 — Web search: add Exa provider (priority)
+- New `runtime/tools/web_search/exa.py` (`ExaSearchProvider`): `POST https://api.exa.ai/search` with header `x-api-key`, body `{query, numResults, type:"auto", contents:{text:true}}`; parses `results[]` into `SearchResult` (text→content/snippet, publishedDate/author→metadata); `RequestException`→`SearchProviderError` with status code. Key env `EXA_API_KEY`.
+- `runtime/tools/web_search/__init__.py`: provider priority changed to **Exa → Tavily → Serper → DuckDuckGo** (first configured wins).
+- `.env.example`: added `# EXA_API_KEY=...` and a priority comment.
+- Tests: `tests/test_web_search_exa.py` (not-configured raises, result parsing + request shape, HTTP 429 mapping, manager priority) — 4 passed.
+- Dashboard Web Search providers list picks Exa up automatically (reads `web_search_manager.providers`).

@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from runtime.tools.web_search.duckduckgo import DuckDuckGoSearchProvider
+from runtime.tools.web_search.exa import ExaSearchProvider
 from runtime.tools.web_search.serper import SerperSearchProvider
 from runtime.tools.web_search.tavily import TavilySearchProvider
 from runtime.tools.web_search.search_provider import SearchProvider, SearchProviderError, SearchResult
@@ -14,6 +15,7 @@ logger = logging.getLogger("web_search.manager")
 class WebSearchManager:
     def __init__(self) -> None:
         self._providers: list[SearchProvider] = [
+            ExaSearchProvider(),
             TavilySearchProvider(),
             SerperSearchProvider(),
             DuckDuckGoSearchProvider(),

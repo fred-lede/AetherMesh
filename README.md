@@ -500,6 +500,10 @@ automatically, even if the client does not send tool definitions. The latest use
 message is used as the search query, and results + today's date are prepended as
 a system message. Works on both OpenAI (port 8001) and Anthropic (port 8002) routers.
 
+Search providers (first configured wins): **Exa → Tavily → Serper → DuckDuckGo**. Exa
+(`EXA_API_KEY`) is a semantic/neural search API (`type=auto`); Tavily (`TAVILY_API_KEY`) and
+Serper (`SERPER_API_KEY`) are keyword / Google-backed; DuckDuckGo needs no key and is the final fallback.
+
 ## Provider Adapters
 
 | Provider | Adapter | Capabilities |
