@@ -31,6 +31,7 @@
 - [x] README 新增專屬章節：Batch / Realtime / Audit / Traces / GPU / Agent（GPU、Agent 參數為 query-string）
 - [x] 新增 web search provider「Exa」（`EXA_API_KEY`，語意搜尋 `type=auto`）；優先序改為 **Exa → Tavily → Serper → DuckDuckGo**；測試 4 項
 - [x] Web search 優先序可於 Dashboard（Providers 分頁）調整：`config/web_search.json` + mtime 熱載入、`GET/PUT /api/web-search/config`（admin）、↑↓+Save UI；測試 8 項
+- [x] 修正 Dashboard Providers 的 Probe：rerank 卡片改探測 llama.cpp rerank server（`/health` → `/v1/models`）；image_gen/xtts/asr 回明確訊息不再 404；測試 4 項
 
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）

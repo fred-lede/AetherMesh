@@ -388,6 +388,33 @@ def _probe_local_ollama() -> dict[str, Any]:
     }
 
 
+_LOCAL_AUX_PROVIDERS = {"image_gen", "xtts", "asr"}
+
+
+def _probe_rerank() -> dict[str, Any]:
+    base_url = settings.rerank_default_base_url.rstrip("/")
+    for endpoint in ("/health", "/v1/models"):
+        try:
+            response = get_session().get(f"{base_url}{endpoint}", timeout=2)
+            if response.ok:
+                return {
+                    "name": "rerank",
+                    "ok": True,
+                    "status": "healthy",
+                    "base_url": base_url,
+                    "latency_ms": int(response.elapsed.total_seconds() * 1000),
+                }
+        except requests.RequestException:
+            continue
+    return {
+        "name": "rerank",
+        "ok": False,
+        "status": "unreachable",
+        "base_url": base_url,
+        "message": f"Rerank server not reachable at {base_url}",
+    }
+
+
 def _probe_provider(provider: str) -> dict[str, Any]:
     provider = provider.lower()
     if provider == "ollama":
@@ -395,6 +422,18 @@ def _probe_provider(provider: str) -> dict[str, Any]:
     from runtime.orchestration.provider_router import is_custom_provider
     if is_custom_provider(provider):
         return _probe_custom_provider(provider)
+    if provider == "rerank":
+        return _probe_rerank()
+    if provider in _LOCAL_AUX_PROVIDERS:
+        return {
+            "name": provider,
+            "ok": False,
+            "status": "no_http_probe",
+            "message": (
+                f"'{provider}' is a local service without an HTTP health endpoint; "
+                "start it from the launcher and check logs / service status."
+            ),
+        }
     cloud_configs = {
         "nvidia_nim": (
             "NVIDIA_NIM_API_BASE",
@@ -1502,10 +1541,11 @@ def provider_probe(provider: str) -> dict[str, Any]:
     """Probe one provider and feed the result back into routing health."""
     result = _probe_provider(provider)
     ok = bool(result.get("ok"))
-    routing_engine.set_provider_health(provider, ok)
-    latency_ms = result.get("latency_ms")
-    if ok and latency_ms is not None:
-        routing_engine.set_provider_latency(provider, float(latency_ms))
+    if result.get("status") != "no_http_probe":
+        routing_engine.set_provider_health(provider, ok)
+        latency_ms = result.get("latency_ms")
+        if ok and latency_ms is not None:
+            routing_engine.set_provider_latency(provider, float(latency_ms))
     return {"ok": ok, "provider": provider, "result": result}
 
 @app.get("/task/{task_id}", response_class=HTMLResponse)

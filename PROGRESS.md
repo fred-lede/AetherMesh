@@ -274,3 +274,9 @@ um_ctx.
 - `runtime/tools/web_search/__init__.py`: `WebSearchManager` now builds its order from the config with mtime-based hot reload (`_order_mtime` / `_load_order`); unknown names are ignored and missing providers appended. Default `exa → tavily → serper → duckduckgo`.
 - Dashboard: `GET /api/web-search/config` (order + configured status) and `PUT /api/web-search/config` (admin; validates known providers, dedupes, saves). Providers tab panel replaced with an ordered list (↑/↓ buttons + Save + status) that reads/writes the config; edits hot-reload into the router without restart.
 - Tests: `tests/test_web_search_manager.py` (default/config order, mtime reload, unknown/missing handling) + `tests/test_web_search_config_api.py` (GET, PUT save, unknown 400, admin 403).
+
+## 2026-09-23 — Fix: Dashboard Probe button on local providers (rerank)
+- Root cause: `_probe_provider()` only handled `ollama`, custom providers, and the four cloud providers; `rerank` (and `image_gen`/`xtts`/`asr`) raised `HTTPException 404 "Unknown provider"`, so the Providers & Routing card's Probe button looked unresponsive.
+- Fix: `_probe_provider("rerank")` now probes the dedicated llama.cpp rerank server (`settings.rerank_default_base_url`, tries `/health` then `/v1/models`), returning `healthy` + latency or `unreachable`; `image_gen`/`xtts`/`asr` return `status:"no_http_probe"` with a clear message instead of 404.
+- `provider_probe` no longer writes routing health for `no_http_probe` results (avoids flagging local aux providers unhealthy).
+- Tests: `tests/test_probe_provider.py` (rerank healthy, rerank unreachable, local-aux message, unknown still 404).
