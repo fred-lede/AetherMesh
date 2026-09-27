@@ -123,6 +123,12 @@ def test_providers_endpoint(client: TestClient):
     assert "openai" in body["cloud"]
 
 
+def test_providers_endpoint_includes_new_local_providers(client: TestClient):
+    body = client.get("/api/models/providers").json()
+    for provider in ["llama-server", "oMLX", "LM-Studio"]:
+        assert provider in body["local"]
+
+
 def test_reload_endpoint(client: TestClient, models_file: Path):
     store.save_models([{"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}])
     resp = client.post("/api/models/reload")

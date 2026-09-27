@@ -1886,6 +1886,16 @@
         providerSel.innerHTML = '<option value="">All providers</option>' +
           names.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
       }
+      if (!mmCapabilities.length) {
+        try {
+          mmCapabilities = (await (await fetch('/api/models/capabilities')).json()).capabilities || [];
+        } catch (e) {}
+      }
+      const capSel = document.getElementById('mm-capability-filter');
+      if (capSel && capSel.options.length <= 1) {
+        capSel.innerHTML = '<option value="">All capabilities</option>' +
+          mmCapabilities.map(c => `<option value="${c.value}">${escapeHtml(c.label)}</option>`).join('');
+      }
       renderModelsTable();
     }
 
@@ -2032,10 +2042,12 @@
       const search = (document.getElementById('mm-search')?.value || '').toLowerCase();
       const provider = document.getElementById('mm-provider-filter')?.value || '';
       const category = document.getElementById('mm-category-filter')?.value || '';
+      const capability = document.getElementById('mm-capability-filter')?.value || '';
       const rows = mmModels.filter(m =>
         (!search || (m.name || '').toLowerCase().includes(search)) &&
         (!provider || m.provider === provider) &&
-        (!category || m.category === category));
+        (!category || m.category === category) &&
+        (!capability || (m.capabilities || []).includes(capability)));
       document.getElementById('mm-table').innerHTML = rows.map(m => `
         <tr>
           <td>${escapeHtml(m.name)}</td>

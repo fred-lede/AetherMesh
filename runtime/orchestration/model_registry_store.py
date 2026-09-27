@@ -90,7 +90,7 @@ def reload_models() -> None:
     get_models()
 
 
-LOCAL_PROVIDERS: set[str] = {"ollama", "xtts"}
+LOCAL_PROVIDERS: set[str] = {"ollama", "xtts", "llama-server", "oMLX", "LM-Studio"}
 CLOUD_PROVIDERS: set[str] = {"openai", "gemini", "nvidia_nim", "ollama_cloud"}
 _NAME_RE = re.compile(r"^[A-Za-z0-9._:/+-]+$")
 

@@ -1159,7 +1159,7 @@ _CAPABILITY_GROUPS: list[dict[str, str]] = [
     {"value": "rerank", "label": "Reranker", "group": "other"},
 ]
 
-_MODEL_LOCAL_PROVIDERS = ["ollama", "xtts"]
+_MODEL_LOCAL_PROVIDERS = ["ollama", "xtts", "llama-server", "oMLX", "LM-Studio"]
 _MODEL_CLOUD_PROVIDERS = ["openai", "gemini", "nvidia_nim", "ollama_cloud"]
 
 

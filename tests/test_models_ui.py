@@ -12,6 +12,7 @@ def test_models_tab_present_in_template():
     assert 'id="mm-category-filter"' in html
     assert 'id="mm-status"' in html
     assert 'id="mm-backdrop"' in html
+    assert 'id="mm-capability-filter"' in html
 
 
 def test_models_js_functions_present():

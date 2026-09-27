@@ -168,3 +168,9 @@ def test_is_local_model_treats_custom_provider_as_cloud(monkeypatch: pytest.Monk
     assert store.is_local_model({"provider": "agnes"}) is False
 
 
+def test_validate_accepts_llama_server_provider():
+    entry = {"name": "a", "provider": "llama-server", "worker_bindings": [{"node_id": "node-01", "port": 8080}], "capabilities": ["chat"]}
+    _, errors = store.validate_model(entry)
+    assert errors == []
+
+
