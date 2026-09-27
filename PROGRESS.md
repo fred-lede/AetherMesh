@@ -254,3 +254,10 @@ um_ctx.
 - OpenAI-compatible endpoint list now includes `/v1/images/generations`, `/v1/images/edits`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations`, the streaming ASR WebSocket, voice management (`/v1/voices`), and `/v1/traces`.
 - Corrected the Provider Adapters table: added `image_gen` to OpenAI/custom and Gemini, added OpenAI `embeddings`, and added rows for `image_gen_adapter` and `rerank_adapter`.
 - Note: Local TTS (XTTS-v2), Local ASR (faster-whisper), and Voice Chat Pipeline already had full sections — only the gaps above were missing.
+
+## 2026-09-23 — README: dedicated sections for Batch / Realtime / Audit / Traces / GPU / Agent
+- Added `### Batch API` (uploads via `/v1/files`, `input_file_id`, allowed endpoints, background thread + persisted JSONL output).
+- Added `### Realtime API` (`WS /v1/realtime`; client/server events; text-only, audio rejected).
+- Added `### Audit Log API` (`/v1/audit/logs`, `/v1/audit/sources`; security + routing sources, filters).
+- Added `### Traces` (`/v1/traces` list/export/delete; OTLP push; auth-exempt).
+- Added `### GPU API` and `### Agent API` (documented that their parameters are query-string, not JSON bodies, matching `runtime/gpu_os/routes.py` and `runtime/multi_agent/routes.py`).

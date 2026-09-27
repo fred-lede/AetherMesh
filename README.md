@@ -801,6 +801,69 @@ Response (OpenAI-compatible):
 - Local models require `AIIH_IMAGE_GEN_ENABLED=true`; cloud providers do not.
 - `/v1/images/edits` accepts multipart `image` + `prompt` and currently runs local models only.
 
+### Batch API (`/v1/batches`)
+
+Asynchronous batch processing over chat / responses / embeddings.
+
+1. Upload a JSONL file (one request per line with `custom_id`, `method`, `url`, `body`) via `/v1/files`.
+2. Create the batch with the returned `input_file_id`.
+
+```bash
+curl http://localhost:8001/v1/batches \
+  -H "Authorization: Bearer <API_KEY>" -H "Content-Type: application/json" \
+  -d '{"input_file_id": "file-...", "endpoint": "/v1/chat/completions", "completion_window": "24h"}'
+```
+
+- `GET /v1/batches` (list), `GET /v1/batches/{id}` (status/results), `POST /v1/batches/{id}/cancel`.
+- Allowed endpoints: `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`.
+- Runs in a background thread; output is written as a JSONL file and batch state is persisted.
+
+### Realtime API (`WS /v1/realtime`)
+
+Text-oriented realtime session over WebSocket.
+
+- Auth: `Authorization: Bearer <API_KEY>` or `?api_key=<key>`.
+- Client events: `session.update`, `conversation.item.create`, `response.create`, `ping`.
+- Server events: `session.created`, `response.created`, `output_item.added`, `content_part.added`,
+  `response.output_text.delta`, `output_item.done`, `response.done`.
+- Text only — audio input events are rejected with an `error` event.
+
+### Audit Log API (`/v1/audit/...`)
+
+Query the security and routing audit trails (JSONL sources).
+
+- `GET /v1/audit/logs` — unified query across the `security` and `routing` sources with
+  action / actor / time-range / details filters and `offset` / `limit`; returns `has_more`.
+- `GET /v1/audit/sources` — list available audit sources.
+
+### Traces (`/v1/traces`)
+
+OTLP-ready spans captured from the router process.
+
+- `GET /v1/traces` — spans + trace ids + execution-trace summaries.
+- `GET /v1/traces/export?format=json|otlp` — export current traces.
+- `POST /v1/traces/export` — push OTLP to a collector (configured via the `otel_endpoint` setting).
+- `DELETE /v1/traces` — clear collected traces.
+- `/v1/traces` is exempt from API-key auth (localhost observability, same as `/api/metrics/`).
+
+### GPU API (`/v1/gpu/...`)
+
+GPU device tracking and model scheduling. Parameters are **query-string**, not JSON bodies.
+
+- `GET /v1/gpu/status` — devices (VRAM/utilization/temperature), scheduler state, total/available VRAM.
+- `POST /v1/gpu/models/load?model_name=&vram_gb=&device_id=` — allocate and load a model.
+- `POST /v1/gpu/models/unload?model_name=` — unload a model.
+- `POST /v1/gpu/devices/register?device_id=&name=&total_vram_gb=` — register a device.
+
+### Agent API (`/v1/agent/...`)
+
+Multi-agent coordination (planner + worker agents, shared memory). Parameters are **query-string**.
+
+- `GET /v1/agent/status` — registered agents + shared-memory keys.
+- `POST /v1/agent/plan?task=` — decompose a task into subtasks.
+- `POST /v1/agent/execute?task=&agent_id=` — run via a named agent, or plan + orchestrate when `agent_id` is omitted.
+- `POST /v1/agent/register?agent_id=` — register a worker agent.
+
 ### Multi-Key Failover (Credential Pool)
 
 All cloud adapters support **multiple API keys** via `providers/credential_pool.py`.
