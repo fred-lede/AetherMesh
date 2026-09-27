@@ -726,6 +726,47 @@ The full LLM response is always returned in the `text` field.
 
 Voice names are resolved to UUIDs automatically; you can also pass the UUID directly.
 
+### Image Generation API (`POST /v1/images/generations`, `POST /v1/images/edits`)
+
+AetherMesh routes image generation to the provider that owns the requested model
+(`router/image_router.py`).
+
+- **Local models** (provider `ollama`, capability `image_gen`, e.g. `x/z-image-turbo:fp8`) run on
+  the configured image-gen worker via Ollama `POST /api/generate`.
+- **Cloud / custom providers** are called through their own image API:
+  - `openai` and custom OpenAI-compatible providers (e.g. `agnes`) → `POST {base_url}/images/generations`.
+  - `gemini` → `models/{model}:generateContent` with `generationConfig.responseModalities: ["TEXT","IMAGE"]`.
+  - Providers without image support yet (`nvidia_nim`, `ollama_cloud`) return **501**; cloud
+    `/v1/images/edits` is not supported yet (local only).
+
+Register a cloud image model in `config/models.yaml` (or via the Dashboard **Models** tab) with
+capability `image_gen` and the provider:
+
+```yaml
+- name: agnes-image-2.1-flash
+  provider: agnes
+  worker_ports: []
+  capabilities: [image_gen]
+```
+
+Request:
+
+```bash
+curl http://localhost:8001/v1/images/generations \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "agnes-image-2.1-flash", "prompt": "a red fox in snow", "n": 1}'
+```
+
+Response (OpenAI-compatible):
+
+```json
+{"created": 1700000000, "data": [{"b64_json": "..."}]}
+```
+
+- Local models require `AIIH_IMAGE_GEN_ENABLED=true`; cloud providers do not.
+- `/v1/images/edits` accepts multipart `image` + `prompt` and currently runs local models only.
+
 ### Multi-Key Failover (Credential Pool)
 
 All cloud adapters support **multiple API keys** via `providers/credential_pool.py`.
