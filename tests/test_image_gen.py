@@ -123,3 +123,61 @@ class TestImageEdits:
             files={"image": ("test.png", b"fake", "image/png")},
         )
         assert resp.status_code == 400
+
+
+def test_openai_adapter_images_posts_to_images_endpoint():
+    from providers.openai_adapter import OpenAIAdapter
+
+    adapter = OpenAIAdapter(api_key="k", base_url="http://x/v1")
+    with patch.object(adapter, "_post_json", return_value={"data": [{"b64_json": "Z"}]}) as post:
+        out = adapter.images({"model": "m", "prompt": "p"})
+    post.assert_called_once_with("/images/generations", {"model": "m", "prompt": "p"})
+    assert out["data"] == [{"b64_json": "Z"}]
+
+
+def test_gemini_adapter_images_normalizes_inline_data():
+    from providers.gemini_adapter import GeminiAdapter
+
+    adapter = GeminiAdapter(api_key="k", base_url="http://g")
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"candidates": [{"content": {"parts": [{"inlineData": {"data": "B64"}}]}}]}
+    with patch("providers.gemini_adapter.post_with_retry", return_value=mock_resp):
+        out = adapter.images({"model": "gemini-2.5-flash-image", "prompt": "a cat", "n": 1})
+    assert out["data"] == [{"b64_json": "B64"}]
+
+
+class TestCloudImageDispatch:
+    def _client(self) -> TestClient:
+        from router.image_router import router
+
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    def test_custom_provider_routes_to_cloud_adapter(self):
+        cloud = MagicMock()
+        cloud.images.return_value = {"created": 123, "data": [{"b64_json": "AAAA"}]}
+        with patch(f"{IMAGE_ROUTER}._resolve_image_provider", return_value="agnes"), \
+             patch(f"{IMAGE_ROUTER}.provider_router.adapter", return_value=cloud):
+            client = self._client()
+            resp = client.post("/v1/images/generations", json={"model": "agnes-image-2.1-flash", "prompt": "a cat"})
+        assert resp.status_code == 200
+        assert resp.json()["data"] == [{"b64_json": "AAAA"}]
+        cloud.images.assert_called_once()
+        assert cloud.images.call_args.args[0]["model"] == "agnes-image-2.1-flash"
+
+    def test_cloud_provider_without_images_returns_501(self):
+        plain = MagicMock(spec=[])
+        with patch(f"{IMAGE_ROUTER}._resolve_image_provider", return_value="nvidia_nim"), \
+             patch(f"{IMAGE_ROUTER}.provider_router.adapter", return_value=plain):
+            client = self._client()
+            resp = client.post("/v1/images/generations", json={"model": "some-image", "prompt": "a cat"})
+        assert resp.status_code == 501
+
+    def test_cloud_edits_return_501(self):
+        with patch(f"{IMAGE_ROUTER}._resolve_image_provider", return_value="agnes"):
+            client = self._client()
+            resp = client.post("/v1/images/edits",
+                data={"model": "agnes-image-2.1-flash", "prompt": "a cat", "n": 1},
+                files={"image": ("t.png", b"x", "image/png")})
+        assert resp.status_code == 501

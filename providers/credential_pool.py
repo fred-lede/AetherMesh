@@ -85,6 +85,9 @@ class CredentialPool(ProviderAdapter):
     def rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._retry("rerank", payload)
 
+    def images(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._retry("images", payload)
+
     def health_check(self) -> dict[str, Any]:
         result = {"ok": False, "provider": self._adapter_cls.provider_name}
         for cred in self._credentials:

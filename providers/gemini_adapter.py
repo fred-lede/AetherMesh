@@ -44,6 +44,32 @@ class GeminiAdapter(ProviderAdapter):
         data = response.json()
         return self._to_chat_completion(data, model)
 
+    def images(self, payload: dict[str, Any]) -> dict[str, Any]:
+        model = payload["model"]
+        prompt = str(payload.get("prompt", ""))
+        n = int(payload.get("n", 1) or 1)
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+        }
+        images: list[str] = []
+        for _ in range(n):
+            response = post_with_retry(
+                get_session(),
+                f"{self.base_url}/models/{model}:generateContent",
+                params={"key": self.api_key},
+                json=body,
+                timeout=settings.request_timeout_s,
+            )
+            data = response.json()
+            for candidate in data.get("candidates", []):
+                parts = (candidate.get("content") or {}).get("parts", [])
+                for part in parts:
+                    inline = part.get("inlineData") or part.get("inline_data")
+                    if isinstance(inline, dict) and inline.get("data"):
+                        images.append(inline["data"])
+        return {"created": int(time.time()), "data": [{"b64_json": img} for img in images]}
+
     def _to_chat_completion(self, data: dict[str, Any], model: str) -> dict[str, Any]:
         text, tool_calls = self._extract_content(data)
         um = data.get("usageMetadata") or {}

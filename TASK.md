@@ -21,6 +21,13 @@
 
 ---
 
+## Image Gen — provider-aware routing ✅ (2026-09-23)
+- [x] `OpenAIAdapter.images()` + `CredentialPool.images()`（openai / 自訂 provider，如 agnes）→ `POST {base}/images/generations`
+- [x] `GeminiAdapter.images()`：`generateContent` + `generationConfig.responseModalities:["TEXT","IMAGE"]`，正規化 `candidates[].content.parts[].inlineData.data`
+- [x] `router/image_router.py`：依 `provider_router.resolve_provider(model)` 分派；雲端/自訂 provider 走對應 adapter，本地模型維持 `ImageGenAdapter`
+- [x] 尚無 `images()` 的雲端 provider（nvidia_nim / ollama_cloud）回 501（本階段不做）；雲端 `/v1/images/edits` 回 501
+- [x] 測試：`tests/test_image_gen.py` 新增 adapter（openai/gemini）＋雲端分派 3 項；全量 923 passed / 17 既有環境失敗、零新回歸
+
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）
 - [x] 啟動 BGE-Reranker-v2-M3 於 127.0.0.1:11436（停用 Qwen3 於 11437）

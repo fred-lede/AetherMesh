@@ -56,6 +56,10 @@ class OpenAIAdapter(ProviderAdapter):
 
     def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post_json("/embeddings", payload)
+
+    def images(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post_json("/images/generations", payload)
+
     def rerank(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise ProviderError("Rerank is not implemented for OpenAI adapter in AIIH yet.")
 
