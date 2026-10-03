@@ -33,6 +33,13 @@
 - [x] Web search 優先序可於 Dashboard（Providers 分頁）調整：`config/web_search.json` + mtime 熱載入、`GET/PUT /api/web-search/config`（admin）、↑↓+Save UI；測試 8 項
 - [x] 修正 Dashboard Providers 的 Probe：rerank 卡片改探測 llama.cpp rerank server（`/health` → `/v1/models`）；image_gen/xtts/asr 回明確訊息不再 404；測試 4 項
 
+## Decision models — Ollama /v1/systemone ✅ 設計中 (2026-09-23)
+- [x] 實測 contract：`POST /v1/systemone`，body `{model, state, questions:{key:{type:choice|noul|score, instructions, criteria}}}`；response `{answers:{...}, usage}`
+- [x] 本機已裝 `tev1:0.8b` / `tev1:4b` / `nimble:9b`（Ollama capabilities 含 `decision`）
+- [x] 決策：端點沿用 `/v1/systemone`；v1 只做路由+端點（不深入評分）；模型**手動**登錄
+- [x] 設計 spec 已寫入 `docs/superpowers/specs/2026-09-23-decision-systemone-design.md`（待使用者審核）
+- [ ] 實作：待 spec 核准 → writing-plans（尚未寫任何程式）
+
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）
 - [x] 啟動 BGE-Reranker-v2-M3 於 127.0.0.1:11436（停用 Qwen3 於 11437）
