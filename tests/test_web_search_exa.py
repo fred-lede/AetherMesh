@@ -9,7 +9,8 @@ from runtime.tools.web_search.exa import ExaSearchProvider
 from runtime.tools.web_search.search_provider import SearchProviderError
 
 
-def test_exa_not_configured_raises():
+def test_exa_not_configured_raises(monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
     provider = ExaSearchProvider(api_key="")
     assert provider.configured is False
     with pytest.raises(SearchProviderError):
