@@ -38,6 +38,7 @@ from router.sessions_router import create_sessions_router
 from router.usage_router import router as usage_router
 from router.traces_router import router as traces_router
 from router.document_router import router as document_router
+from router.decision_router import router as decision_router
 from runtime.context.execution_context import ExecutionContext
 from runtime.observability.execution_trace import execution_trace_collector
 from runtime.skills.skill_registry import skill_registry
@@ -116,6 +117,7 @@ app.include_router(create_rag_router(service))
 app.include_router(create_sessions_router(service))
 app.include_router(usage_router)
 app.include_router(traces_router)
+app.include_router(decision_router)
 app.include_router(document_router)
 
 if settings.tts_enabled or settings.asr_enabled:
