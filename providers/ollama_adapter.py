@@ -64,7 +64,7 @@ class OllamaAdapter(ProviderAdapter):
         )
         response.encoding = "utf-8"
         if not response.ok:
-            raise ProviderError(response.text)
+            raise ProviderError(response.text, status_code=response.status_code)
         return response.json()
 
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
