@@ -288,3 +288,9 @@ um_ctx.
 - Registered `tev1:0.8b`, `tev1:4b`, `nimble:9b` in `config/models.yaml` (provider ollama, node-01:11434, ctx 262144, capabilities `[decision, tools, thinking, chat]`).
 - Verified upstream contract live: `nimble:9b` → `intent=book` (confidence 0.95); `tev1:4b` → `score=0.636`.
 - Tests: `tests/test_ollama_systemone.py` (2) + `tests/test_decision_router.py` (4) + capability tests. Full suite 935+ passed / same pre-existing env failures.
+
+## 2026-09-23 — Clef multimodal decision model (Ollama 0.35.1)
+- Ollama updated to 0.35.1 on both nodes (127.0.0.1 and 192.168.1.200); `clef:27b` is installed on both (Ollama capability `["decision"]`). `clef-flash` was NOT installed on either node.
+- Registered `clef:27b` in `config/models.yaml` (provider ollama, node-01:11434, ctx 262144, capabilities `[decision]`).
+- No AetherMesh code change needed: `POST /v1/systemone` forwards `images` and does not restrict question `type`, so the new multimodal `images` + `noul` shape passes through. Documented in README (images array + `noul` response).
+- Verified upstream schema acceptance via a direct probe (image decode failed only on the test image encoding, not the schema).

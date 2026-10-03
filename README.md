@@ -510,6 +510,25 @@ and (for `choice`) a `criteria` object mapping options to descriptions (or `null
 a `criteria` array of descriptions. Register decision models in `config/models.yaml` (or the Dashboard
 **Models** tab) with the `decision` capability. Non-Ollama providers return `501`.
 
+**Multimodal decisions (Ollama ≥ 0.35.1):** models such as `clef:27b` accept an `images` array
+(base64) alongside the text `state`; the image is shared by all questions and scored jointly. The
+`noul` type ("no user labels") needs only `instructions` and returns a single score:
+
+```bash
+curl http://localhost:8001/v1/systemone \
+  -H "Content-Type: application/json" \
+  -d '{"model": "clef:27b", "state": "The user took this screenshot.",
+       "images": ["<base64>"],
+       "questions": {"has_ollama": {"type": "noul", "instructions": "Does this image contain Ollama?"}}}'
+```
+
+```json
+{"model": "clef:27b", "answers": {"has_ollama": {"type": "noul", "noul": 0.958}}, "usage": {"input_tokens": 548, "output_tokens": 0}}
+```
+
+AetherMesh forwards `images` and unknown `type` values unchanged, so new decision model types work
+without code changes.
+
 ### MCP Gateway (`runtime/mcp/`)
 
 Proxies MCP connections with auth, sandboxing, and bridging.
