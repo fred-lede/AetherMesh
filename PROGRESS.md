@@ -280,3 +280,11 @@ um_ctx.
 - Fix: `_probe_provider("rerank")` now probes the dedicated llama.cpp rerank server (`settings.rerank_default_base_url`, tries `/health` then `/v1/models`), returning `healthy` + latency or `unreachable`; `image_gen`/`xtts`/`asr` return `status:"no_http_probe"` with a clear message instead of 404.
 - `provider_probe` no longer writes routing health for `no_http_probe` results (avoids flagging local aux providers unhealthy).
 - Tests: `tests/test_probe_provider.py` (rerank healthy, rerank unreachable, local-aux message, unknown still 404).
+
+## 2026-09-23 — Decision models (`/v1/systemone`)
+- New `POST /v1/systemone` (`router/decision_router.py`, mounted on the OpenAI router): resolves the model's provider/worker via `provider_router.resolve_provider`, calls `OllamaAdapter.systemone()`, returns Ollama's JSON unchanged. Missing `model` → 400; non-Ollama provider → 501; upstream failure → 502 with the upstream message.
+- `providers/ollama_adapter.py`: new `systemone(payload)` → `POST {base_url}/v1/systemone` (raises `ProviderError` on non-2xx).
+- Capability `decision` added to `providers/registry.py` and to the Dashboard Models capability list (`_CAPABILITY_GROUPS`).
+- Registered `tev1:0.8b`, `tev1:4b`, `nimble:9b` in `config/models.yaml` (provider ollama, node-01:11434, ctx 262144, capabilities `[decision, tools, thinking, chat]`).
+- Verified upstream contract live: `nimble:9b` → `intent=book` (confidence 0.95); `tev1:4b` → `score=0.636`.
+- Tests: `tests/test_ollama_systemone.py` (2) + `tests/test_decision_router.py` (4) + capability tests. Full suite 935+ passed / same pre-existing env failures.

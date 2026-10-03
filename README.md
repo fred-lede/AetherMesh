@@ -399,6 +399,7 @@ apiKey: "local-dev-key"
 - `POST /v1/images/generations` — image generation (local model or cloud provider by model)
 - `POST /v1/images/edits` — image edits (local models)
 - `POST /v1/rerank` — document reranking (dedicated llama.cpp reranker; see Rerank API)
+- `POST /v1/systemone` — Ollama decision models (choice/score questions over a state)
 - `GET /v1/gpu/status` — GPU devices, VRAM, utilization, temperature
 - `POST /v1/gpu/models/load` — load a model to a device
 - `POST /v1/gpu/models/unload` — unload a model
@@ -481,6 +482,33 @@ Response (OpenAI-compatible): `{"results": [{"index": 0, "relevance_score": 0.98
 
 Deployment (build + service files for Windows/Linux/macOS):
 [`docs/providers/rerank-deployment.md`](docs/providers/rerank-deployment.md).
+
+### Decision Models (`POST /v1/systemone`)
+
+Ollama decision models (e.g. `nimble:9b`, `tev1:0.8b`, `tev1:4b`) answer structured questions
+about a `state`. AetherMesh forwards the request to the Ollama worker that owns the model.
+
+```bash
+curl http://localhost:8001/v1/systemone \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "nimble:9b", "state": "Book a flight to Tokyo",
+       "questions": {"intent": {"type": "choice", "instructions": "What does the user want?",
+       "criteria": {"book": "book travel", "cancel": "cancel", "other": null}}}}'
+```
+
+Response:
+
+```json
+{"model": "nimble:9b",
+ "answers": {"intent": {"type": "choice", "choice": "book", "probabilities": {"book": 0.99}, "confidence": 0.95}},
+ "usage": {"input_tokens": 171, "output_tokens": 1}}
+```
+
+`questions` accepts 1–64 fields; each has `type` = `choice` | `noul` | `score`, `instructions`,
+and (for `choice`) a `criteria` object mapping options to descriptions (or `null`), or (for `score`)
+a `criteria` array of descriptions. Register decision models in `config/models.yaml` (or the Dashboard
+**Models** tab) with the `decision` capability. Non-Ollama providers return `501`.
 
 ### MCP Gateway (`runtime/mcp/`)
 

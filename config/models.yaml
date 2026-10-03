@@ -5,10 +5,11 @@ models:
   - node_id: node-01
     port: 11434
   capabilities:
+  - audio
   - chat
+  - thinking
   - tools
   - vision
-  - audio
   estimated_vram_mb: null
   context_length: 131072
 - name: muse-glimmer:30b
@@ -269,13 +270,15 @@ models:
   estimated_vram_mb: null
   context_length: 512
 - name: rerank/bge-reranker-v2-m3
-  provider: rerank
+  provider: llama-server
   worker_bindings:
   - node_id: node-01
     port: 11436
   capabilities:
+  - chat
   - rerank
   estimated_vram_mb: null
+  context_length: 8192
 - name: ornith-1.5:9b
   provider: ollama
   worker_bindings:
@@ -289,6 +292,7 @@ models:
   - chat
   - vision
   estimated_vram_mb: null
+  context_length: 262144
 - name: qwen3.5:9b
   provider: ollama
   worker_bindings:
@@ -318,6 +322,7 @@ models:
   - chat
   - vision
   estimated_vram_mb: null
+  context_length: 131072
 - name: translategemma:4b
   provider: ollama
   worker_bindings:
@@ -373,35 +378,31 @@ models:
   worker_ports: []
   capabilities:
   - chat
-  - vision
   - thinking
   - tools
-  context_length: 200000
-- name: minimaxai/minimax-m2.7
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - tools
-  context_length: 200000
+  - vision
+  estimated_vram_mb: null
+  context_length: 524288
 - name: moonshotai/kimi-k3
   provider: nvidia_nim
   worker_ports: []
   capabilities:
   - chat
-  - vision
   - thinking
   - tools
-  context_length: 200000
+  - vision
+  estimated_vram_mb: null
+  context_length: 1047576
 - name: google/diffusiongemma-26b-a4b-it
   provider: nvidia_nim
   worker_ports: []
   capabilities:
   - chat
-  - vision
   - thinking
   - tools
-  context_length: 200000
+  - vision
+  estimated_vram_mb: null
+  context_length: 131072
 - name: bytedance/seed-oss-36b-instruct
   provider: nvidia_nim
   worker_ports: []
@@ -417,7 +418,7 @@ models:
   - thinking
   - tools
   context_length: 1047576
-- name: deepseek-ai/deepseek-v4-flash-0731
+- name: deepseek-ai/deepseek-v4.1-flash
   provider: nvidia_nim
   worker_ports: []
   capabilities:
@@ -433,15 +434,6 @@ models:
   - thinking
   - tools
   context_length: 200000
-- name: ox-alpha-free
-  provider: OpenCode
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  - vision
-  context_length: 200000
 - name: agnes-2.0-flash
   provider: agnes
   worker_ports: []
@@ -449,7 +441,24 @@ models:
   - chat
   - thinking
   - tools
-  context_length: 200000
+  context_length: 262144
+- name: agnes-2.5-flash
+  provider: agnes
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  context_length: 524288
+- name: agnes-3.0-flash
+  provider: agnes
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  estimated_vram_mb: null
+  context_length: 524288
 - name: DeepSeek-V4-Flash-Vision-Exp
   provider: AMD
   worker_ports: []
@@ -468,7 +477,7 @@ models:
   - tools
   - vision
   context_length: 262144
-- name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+- name: nvidia/nemotron-3-ultra-550b-a55b
   provider: nvidia_nim
   worker_ports: []
   capabilities:
@@ -476,7 +485,7 @@ models:
   - thinking
   - tools
   - vision
-  context_length: 200000
+  context_length: 1000000
 - name: nvidia/nemotron-3.5-lightning-30b-a3b
   provider: nvidia_nim
   worker_ports: []
@@ -484,7 +493,8 @@ models:
   - chat
   - thinking
   - tools
-  context_length: 200000
+  estimated_vram_mb: null
+  context_length: 1047576
 - name: xtts-v2
   provider: xtts
   worker_bindings:
@@ -502,34 +512,98 @@ models:
   - audio
   estimated_vram_mb: null
 - name: x/z-image-turbo:fp8
-  provider: image_gen
+  provider: ollama
   worker_bindings:
   - node_id: node-mac-01
     port: 11434
   capabilities:
-  - image
+  - chat
+  - image_gen
+  - vision
   estimated_vram_mb: null
+  context_length: null
 - name: x/z-image-turbo:bf16
-  provider: image_gen
+  provider: ollama
   worker_bindings:
   - node_id: node-mac-01
     port: 11434
   capabilities:
-  - image
+  - chat
+  - image_gen
+  - vision
   estimated_vram_mb: null
+  context_length: null
 - name: x/flux2-klein:9b
-  provider: image_gen
+  provider: ollama
   worker_bindings:
   - node_id: node-mac-01
     port: 11434
   capabilities:
-  - image
+  - chat
+  - image_gen
+  - vision
   estimated_vram_mb: null
+  context_length: null
 - name: x/flux2-klein:4b
-  provider: image_gen
+  provider: ollama
   worker_bindings:
   - node_id: node-mac-01
     port: 11434
   capabilities:
-  - image
+  - chat
+  - image_gen
+  - vision
   estimated_vram_mb: null
+  context_length: null
+- name: agnes-image-2.1-flash
+  provider: agnes
+  worker_ports: []
+  capabilities:
+  - image_gen
+  - vision
+  estimated_vram_mb: null
+  context_length: null
+- name: agnes-image-2.5-flash
+  provider: agnes
+  worker_ports: []
+  capabilities:
+  - image_gen
+  - vision
+  estimated_vram_mb: null
+  context_length: null
+- name: tev1:0.8b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - decision
+  - tools
+  - thinking
+  - chat
+  estimated_vram_mb: null
+  context_length: 262144
+- name: tev1:4b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - decision
+  - tools
+  - thinking
+  - chat
+  estimated_vram_mb: null
+  context_length: 262144
+- name: nimble:9b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11434
+  capabilities:
+  - decision
+  - tools
+  - thinking
+  - chat
+  estimated_vram_mb: null
+  context_length: 262144

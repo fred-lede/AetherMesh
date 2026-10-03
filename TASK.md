@@ -38,8 +38,9 @@
 - [x] 本機已裝 `tev1:0.8b` / `tev1:4b` / `nimble:9b`（Ollama capabilities 含 `decision`）
 - [x] 決策：端點沿用 `/v1/systemone`；v1 只做路由+端點（不深入評分）；模型**手動**登錄
 - [x] 設計 spec 已寫入 `docs/superpowers/specs/2026-09-23-decision-systemone-design.md`（已核准）
-- [x] 實作計畫已寫入 `docs/superpowers/plans/2026-09-23-decision-systemone.md`（4 tasks，待選執行方式）
-- [ ] 實作：待計畫核准 + 選定執行方式（尚未寫任何程式）
+- [x] 實作計畫已寫入 `docs/superpowers/plans/2026-09-23-decision-systemone.md`（4 tasks）
+- [x] 實作完成：capability `decision`、`OllamaAdapter.systemone()`、`POST /v1/systemone`（router/decision_router）、models.yaml 登錄 tev1:0.8b/tev1:4b/nimble:9b、README 章節；測試 6 項
+- [ ] 待辦：重啟 router(8001) 載入新端點
 
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）
