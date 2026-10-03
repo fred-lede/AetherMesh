@@ -199,3 +199,8 @@ def test_router_list_models_survives_null_models(monkeypatch: pytest.MonkeyPatch
     path.write_text("models:\n", encoding="utf-8")
     monkeypatch.setattr(store, "models_path", lambda: path)
     assert openai_handler.RouterService().list_models()["data"] is not None
+
+
+def test_capabilities_endpoint_includes_decision(client: TestClient):
+    values = {c["value"] for c in client.get("/api/models/capabilities").json()["capabilities"]}
+    assert "decision" in values

@@ -25,3 +25,11 @@ def test_parse_capabilities_handles_new_values():
 
 def test_parse_capabilities_keeps_vision_separate():
     assert parse_capabilities(["vision", "image"]) == {Capability.VISION, Capability.IMAGE_GEN}
+
+
+def test_decision_capability_is_canonical():
+    from providers.registry import CAPABILITY_ALIASES, Capability, parse_capabilities
+
+    assert Capability.DECISION.value == "decision"
+    assert CAPABILITY_ALIASES["decision"] is Capability.DECISION
+    assert parse_capabilities(["decision"]) == {Capability.DECISION}

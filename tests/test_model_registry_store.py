@@ -174,3 +174,10 @@ def test_validate_accepts_llama_server_provider():
     assert errors == []
 
 
+def test_validate_accepts_decision_capability():
+    entry = {"name": "nimble:9b", "provider": "ollama",
+             "worker_bindings": [{"node_id": "node-01", "port": 11434}], "capabilities": ["decision"]}
+    _, errors = store.validate_model(entry)
+    assert errors == []
+
+
