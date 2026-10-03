@@ -56,6 +56,17 @@ class OllamaAdapter(ProviderAdapter):
         data = response.json()
         return self._to_chat_completion(payload.get("model", "unknown"), data)
 
+    def systemone(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = get_session().post(
+            f"{self.base_url}/v1/systemone",
+            json=payload,
+            timeout=settings.request_timeout_s,
+        )
+        response.encoding = "utf-8"
+        if not response.ok:
+            raise ProviderError(response.text)
+        return response.json()
+
     def responses(self, payload: dict[str, Any]) -> dict[str, Any]:
         completion = self.chat(payload)
         message = completion["choices"][0]["message"]
