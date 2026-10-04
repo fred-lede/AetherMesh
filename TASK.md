@@ -42,7 +42,7 @@
 - [x] 實作完成：capability `decision`、`OllamaAdapter.systemone()`、`POST /v1/systemone`（router/decision_router）、models.yaml 登錄 tev1:0.8b/tev1:4b/nimble:9b、README 章節；測試 6 項
 - [ ] 待辦：重啟 router(8001) 載入新端點
 - [ ] Clef / Clef Flash（多模態 decision：`images` + `noul`）：等使用者更新 Ollama 至 0.35.1 並 `ollama pull` 後登錄 models.yaml；AetherMesh 透傳已支援，無需改程式（實測兩台目前皆 0.35.0、無 clef）
-- [x] Ollama 已更新至 0.35.1；`clef:27b` 已登錄 models.yaml（capabilities `[decision]`、node-01:11434、ctx 262144）；README 補多模態 `images` + `noul` 說明。**`clef-flash` 兩台皆未安裝**，待 `ollama pull` 後再登錄
+- [x] Ollama 已更新至 0.35.1；`clef:27b` 已登錄 models.yaml（capabilities `[decision, vision]`、node-01:11434、ctx 262144）；README 補多模態 `images` + `noul` 說明。使用者確認**只有 `clef:27b`**，無 `clef-flash`
 
 ## Rerank — /v1/rerank 透過 llama.cpp 獨立 reranker 支援 (2026-09-19) ✅
 - [x] 實測確認：標準 Ollama 0.34.1 無 `/api/rerank`（404），改用 `llama-server --rerank` 獨立進程（`/rerank`）

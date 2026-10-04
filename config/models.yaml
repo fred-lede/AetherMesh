@@ -614,5 +614,6 @@ models:
     port: 11434
   capabilities:
   - decision
+  - vision
   estimated_vram_mb: null
   context_length: 262144
