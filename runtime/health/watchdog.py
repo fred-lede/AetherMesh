@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "health_timeout_s": 10,
     "hang_failures_to_alert": 3,
     "startup_grace_s": 180,
+    "hang_dump_cooldown_s": 600,
     "exclude_services": [],
     "rules": {
         "service_rss_mb": {"warn": 4096, "critical": 8192},
@@ -99,6 +101,7 @@ class _ServiceState:
     restart_count_today: int = 0
     restart_day: str = ""
     last_restart_ts: float = 0.0
+    last_dump_ts: float = 0.0
 
 
 class Watchdog:
@@ -261,6 +264,9 @@ class Watchdog:
                     except requests.RequestException:
                         result.healthy = False
                         result.detail = f"/health 無回應（timeout {timeout}s）"
+                        dump_path = self._maybe_dump_hang(cfg, name, pid, state, now)
+                        if dump_path:
+                            result.detail += f"；stack dump: {dump_path}"
 
             self._evaluate_service(cfg, state, result, now)
             results.append(result)
@@ -442,6 +448,43 @@ class Watchdog:
                     rule_key=f"rss_warn:{result.name}",
                     cooldown_s=1800,
                 )
+
+    def _maybe_dump_hang(
+        self,
+        cfg: dict[str, Any],
+        name: str,
+        pid: int | None,
+        state: _ServiceState,
+        now: float,
+    ) -> str | None:
+        if not pid:
+            return None
+        if now - state.last_dump_ts < float(cfg.get("hang_dump_cooldown_s", 600)):
+            return None
+        py_spy = shutil.which("py-spy") or shutil.which("py-spy.exe")
+        if not py_spy:
+            logger.warning("service %s hung but py-spy is not installed; cannot capture stack", name)
+            return None
+        state.last_dump_ts = now
+        try:
+            dumps_dir = Path("logs") / "hang_dumps"
+            dumps_dir.mkdir(parents=True, exist_ok=True)
+            out_path = dumps_dir / f"{name}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+            proc = subprocess.run(
+                [py_spy, "dump", "--pid", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            body = proc.stdout or ""
+            if proc.stderr:
+                body += f"\n[stderr]\n{proc.stderr}"
+            out_path.write_text(body, encoding="utf-8")
+            logger.warning("captured hang stack for %s (pid=%s) → %s", name, pid, out_path)
+            return str(out_path)
+        except Exception as exc:
+            logger.warning("hang dump failed for %s: %s", name, exc)
+            return None
 
     def _maybe_autorestart(
         self,

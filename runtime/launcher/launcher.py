@@ -142,6 +142,9 @@ def _cmd_for(svc: dict[str, Any]) -> list[str]:
         "--timeout-keep-alive",
         "300",
     ]
+    log_config = Path(__file__).resolve().parent.parent.parent / "config" / "uvicorn_log_config.json"
+    if log_config.exists():
+        cmd += ["--log-config", str(log_config)]
     cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
     key = os.getenv("AIIH_SSL_KEYFILE", "").strip()
     if cert and key:

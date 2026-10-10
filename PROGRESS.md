@@ -294,3 +294,10 @@ um_ctx.
 - Registered `clef:27b` in `config/models.yaml` (provider ollama, node-01:11434, ctx 262144, capabilities `[decision]`).
 - No AetherMesh code change needed: `POST /v1/systemone` forwards `images` and does not restrict question `type`, so the new multimodal `images` + `noul` shape passes through. Documented in README (images array + `noul` response).
 - Verified upstream schema acceptance via a direct probe (image decode failed only on the test image encoding, not the schema).
+
+## 2026-10-10 — Ops diagnostics: hang stack dumps + uvicorn access-log timestamps
+- Context: a watchdog alert "服務無回應：openai_router（連續 3 次 /health 失敗，持續 90s）" at 22:19:27 preceded an auto-restart at 22:19:28 (event-loop hang, no traceback). Logs had no timestamps, so the blocker couldn't be located.
+- `runtime/health/watchdog.py`: when a service's `/health` times out, the watchdog now captures a **py-spy stack dump** (`py-spy dump --pid <pid>`) to `logs/hang_dumps/<service>_<YYYYmmdd_HHMMSS>.txt` (skipped if py-spy missing; per-service `hang_dump_cooldown_s`, default 600s). The dump path is appended to the alert's `detail`.
+- `config/uvicorn_log_config.json`: new logging config with `%(asctime)s` on both `uvicorn` (error) and `uvicorn.access` formatters. `runtime/launcher/launcher.py` adds `--log-config` to every uvicorn service when the file exists → access logs are now timestamped.
+- Tests: `tests/test_ops_diagnostics.py` (dump writes file, skips without py-spy, respects cooldown, skips without pid, launcher includes `--log-config`).
+- Note: stack capture requires `pip install py-spy` on the host.
