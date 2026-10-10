@@ -57,3 +57,23 @@ def test_launcher_uses_uvicorn_log_config():
     cmd = launcher._cmd_for(svc)
     assert "--log-config" in cmd
     assert "uvicorn_log_config.json" in " ".join(cmd)
+
+
+def test_uvicorn_log_config_access_formatter_renders():
+    import json
+    import logging
+
+    import uvicorn.logging
+
+    cfg = json.loads((Path(__file__).resolve().parent.parent / "config" / "uvicorn_log_config.json").read_text(encoding="utf-8"))
+    access = cfg["formatters"]["access"]
+    assert access["()"] == "uvicorn.logging.AccessFormatter"
+    fmt = uvicorn.logging.AccessFormatter(use_colors=False, fmt=access["fmt"])
+    record = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "", 0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1234", "GET", "/health", "1.1", 200),
+        None,
+    )
+    out = fmt.format(record)
+    assert "/health" in out and "200" in out and "20" in out
