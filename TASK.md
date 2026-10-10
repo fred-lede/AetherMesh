@@ -36,7 +36,7 @@
 ## Ops diagnostics — hang stack dumps + uvicorn timestamps ✅ (2026-10-10)
 - [x] watchdog 在 `/health` hang 時自動 `py-spy dump --pid`（每服務 600s cooldown，寫入 `logs/hang_dumps/<service>_<ts>.txt`，路徑附於告警）；`hang_dump_cooldown_s` 可調；py-spy 未安裝則跳過
 - [x] uvicorn 服務啟動加 `--log-config config/uvicorn_log_config.json` → access/error 日誌含 `%(asctime)s`
-- [x] 測試 `tests/test_ops_diagnostics.py`（5）；**`py-spy 0.4.2` 已安裝至 `.venv`**，`_find_py_spy()` 會找 `sys.executable` 同目錄；已用執行中的 router 實測 dump 成功
+- [x] 測試 `tests/test_ops_diagnostics.py`（5）；**`py-spy 0.4.2` 已安裝至 `.venv` 並列入 `requirements.txt`**，`_find_py_spy()` 會找 `sys.executable` 同目錄；已用執行中的 router 實測 dump 成功
 
 ## Decision models — Ollama /v1/systemone ✅ 設計中 (2026-09-23)
 - [x] 實測 contract：`POST /v1/systemone`，body `{model, state, questions:{key:{type:choice|noul|score, instructions, criteria}}}`；response `{answers:{...}, usage}`

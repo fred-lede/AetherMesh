@@ -1219,6 +1219,10 @@ memory, and host disk space. When a rule trips it dispatches alerts through
   `restart_after_s`, the watchdog restarts it through the launcher, guarded by
   `cooldown_s` and `max_per_day` caps (crossing the cap raises a CRITICAL alert).
   Use `exclude` to opt services out.
+- **Hang stack dumps**: when `/health` times out, the watchdog captures the live Python stack via
+  `py-spy dump --pid <pid>` into `logs/hang_dumps/<service>_<timestamp>.txt` (the path is included in
+  the alert). `py-spy` ships in `requirements.txt`; a per-service `hang_dump_cooldown_s` (default
+  600s) throttles captures, and the step is skipped if `py-spy` is unavailable.
 
 See `config/notifications.json.example` for the full schema.
 
