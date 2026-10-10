@@ -82,6 +82,21 @@ def merged_watchdog_config(section: dict[str, Any] | None) -> dict[str, Any]:
     return merged
 
 
+def _find_py_spy() -> str | None:
+    import sys
+
+    for candidate in ("py-spy", "py-spy.exe"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    exe_dir = Path(sys.executable).parent
+    for name in ("py-spy.exe", "py-spy"):
+        candidate = exe_dir / name
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
 @dataclass(slots=True)
 class ServiceCheckResult:
     name: str
@@ -461,7 +476,7 @@ class Watchdog:
             return None
         if now - state.last_dump_ts < float(cfg.get("hang_dump_cooldown_s", 600)):
             return None
-        py_spy = shutil.which("py-spy") or shutil.which("py-spy.exe")
+        py_spy = _find_py_spy()
         if not py_spy:
             logger.warning("service %s hung but py-spy is not installed; cannot capture stack", name)
             return None

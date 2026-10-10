@@ -301,3 +301,4 @@ um_ctx.
 - `config/uvicorn_log_config.json`: new logging config with `%(asctime)s` on both `uvicorn` (error) and `uvicorn.access` formatters. `runtime/launcher/launcher.py` adds `--log-config` to every uvicorn service when the file exists → access logs are now timestamped.
 - Tests: `tests/test_ops_diagnostics.py` (dump writes file, skips without py-spy, respects cooldown, skips without pid, launcher includes `--log-config`).
 - Note: stack capture requires `pip install py-spy` on the host.
+- `py-spy 0.4.2` installed into `.venv`; `_find_py_spy()` also checks the directory of `sys.executable` so a venv install is found even when `.venv\Scripts` is not on `PATH`. Verified a live `py-spy dump` against the running router (PID 4956) prints its stack.

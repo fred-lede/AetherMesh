@@ -34,7 +34,7 @@ def test_hang_dump_writes_stack_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 def test_hang_dump_skipped_without_pyspy(monkeypatch: pytest.MonkeyPatch):
     obj = _watchdog(hang_dump_cooldown_s=0)
-    monkeypatch.setattr(wd.shutil, "which", lambda name: None)
+    monkeypatch.setattr(wd, "_find_py_spy", lambda: None)
     assert obj._maybe_dump_hang(obj.load_config(), "x", 1, wd._ServiceState(), 1.0) is None
 
 
