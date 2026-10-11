@@ -117,6 +117,8 @@ class _ServiceState:
     restart_day: str = ""
     last_restart_ts: float = 0.0
     last_dump_ts: float = 0.0
+    last_crash_dump_ts: float = 0.0
+    last_crash_key: str | None = None
 
 
 class Watchdog:
@@ -268,6 +270,24 @@ class Watchdog:
                         result.startup_age_s = round(age, 1)
                         result.in_grace = age < grace_s
 
+            if not result.alive and proc is not None and pid:
+                rc = proc.poll()
+                if rc not in (None, 0):
+                    crash_key = f"{pid}:{rc}"
+                    if crash_key != state.last_crash_key and now - state.last_crash_dump_ts >= 60:
+                        state.last_crash_key = crash_key
+                        state.last_crash_dump_ts = now
+                        result.detail = (
+                            f"process exited rc={rc}；log context: "
+                            + self._log_context(getattr(sp, "log_path", None), 40)
+                        )
+                        logger.warning(
+                            "captured crash context for %s (pid=%s rc=%s)",
+                            name,
+                            pid,
+                            rc,
+                        )
+
             if result.alive:
                 port = self._port_for(name)
                 if port is not None:
@@ -393,9 +413,12 @@ class Watchdog:
             if state.dead_since is None:
                 state.dead_since = now
             dead_s = int(now - state.dead_since)
+            detail = result.detail or self._log_context(
+                getattr(self._get_services().get(result.name), "log_path", None), 40
+            )
             self._alerts.dispatch(
                 title=f"服務停止運作：{result.name}",
-                message=f"{result.name} process 已停止 {dead_s}s",
+                message=f"{result.name} process 已停止 {dead_s}s。log tail:\n{detail}",
                 severity=Severity.CRITICAL,
                 rule_key=f"dead:{result.name}",
                 cooldown_s=600,
@@ -463,6 +486,17 @@ class Watchdog:
                     rule_key=f"rss_warn:{result.name}",
                     cooldown_s=1800,
                 )
+
+    @staticmethod
+    def _log_context(log_path: Path | None, tail_lines: int) -> str:
+        if log_path is None or not log_path.exists():
+            return "(no log)"
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return "(log unreadable)"
+        tail = lines[-tail_lines:]
+        return "\n".join(tail)
 
     def _maybe_dump_hang(
         self,

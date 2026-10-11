@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 
 _ENV_LOADED = False
 
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+
 
 def _ensure_env() -> None:
     global _ENV_LOADED
@@ -24,6 +26,20 @@ def _ensure_env() -> None:
     if env_path.exists():
         load_dotenv(env_path, override=True)
     _ENV_LOADED = True
+
+
+def _child_creation_flags() -> int:
+    """Flags for child service processes.
+
+    CREATE_NEW_PROCESS_GROUP detaches children from the console so they are
+    not killed when the terminal window closes.
+    """
+    if os.name != "nt":
+        return 0
+    return CREATE_NEW_PROCESS_GROUP
+
+
+_CHILD_CREATION_FLAGS = _child_creation_flags()
 
 
 SERVICE_DEFS: list[dict[str, Any]] = [
@@ -182,6 +198,7 @@ class ServiceProcess:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=os.environ.copy(),
+            creationflags=_CHILD_CREATION_FLAGS,
         )
         self.start_time = time.time()
 
@@ -221,6 +238,9 @@ class ServiceProcess:
         if self.log_file is not None:
             self.log_file.close()
             self.log_file = None
+        print(
+            f"  [{self.name}] stopped (rc={self.process.returncode}) {time.strftime('%H:%M:%S')}"
+        )
 
     @property
     def status(self) -> str:
@@ -232,6 +252,15 @@ class ServiceProcess:
         if rc == 0:
             return "exited"
         return f"crashed({rc})"
+
+    @property
+    def status_detailed(self) -> str:
+        """Status + a short crash hint (returncode + start time) for crash forensics."""
+        base = self.status
+        if base.startswith("crashed") and self.process is not None and self.start_time is not None:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.start_time))
+            return f"{base}  started={ts} rc={self.process.returncode}"
+        return base
 
     @property
     def uptime(self) -> str:
