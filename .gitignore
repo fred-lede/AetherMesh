@@ -137,6 +137,11 @@ dashboard_export/
 metrics_export/
 
 ############################
+# CodeGraph index
+############################
+.codegraph/
+
+############################
 # Audio model files / datasets
 ############################
 data/
