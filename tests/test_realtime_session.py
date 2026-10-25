@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from runtime.realtime.realtime_session import RealtimeSession, _extract_item_text
 from router.realtime_router import _chunk_text
 
@@ -42,6 +44,55 @@ def test_audio_buffer_not_supported():
     session = RealtimeSession()
     events = session.handle_event({"type": "input_audio_buffer.append"})
     assert events[0]["type"] == "error"
+
+
+def test_realingo_session_update_sets_target_language():
+    session = RealtimeSession()
+    events = session.handle_event({
+        "type": "session.update",
+        "session": {
+            "audio": {
+                "input": {"transcription": {"model": "gpt-realtime-whisper"}},
+                "output": {"language": "zh"},
+            }
+        },
+    })
+    assert events[0]["type"] == "session.updated"
+    assert session.session["target_language"] == "zh"
+    assert session.session["transcription_model"] == "gpt-realtime-whisper"
+
+
+def test_realingo_audio_append_decodes_pcm16():
+    session = RealtimeSession()
+    pcm = b"\x01\x00\xff\x7f"
+    events = session.handle_event({
+        "type": "session.input_audio_buffer.append",
+        "audio": base64.b64encode(pcm).decode(),
+    })
+    assert events == []
+    assert session.take_audio() == pcm
+
+
+def test_realingo_audio_append_rejects_invalid_base64():
+    session = RealtimeSession()
+    events = session.handle_event({"type": "session.input_audio_buffer.append", "audio": "%%%"})
+    assert events[0]["type"] == "error"
+    assert session.take_audio() == b""
+
+
+def test_realingo_audio_append_rejects_oversized_frame():
+    session = RealtimeSession()
+    audio = base64.b64encode(b"\x00\x00" * (524_288 + 1)).decode()
+    events = session.handle_event({"type": "session.input_audio_buffer.append", "audio": audio})
+    assert events[0]["type"] == "error"
+    assert "1 MiB" in events[0]["error"]["message"]
+    assert session.take_audio() == b""
+
+
+def test_realingo_session_close_marks_audio_closed():
+    session = RealtimeSession()
+    assert session.handle_event({"type": "session.close"}) == []
+    assert session.audio_closed is True
 
 
 def test_ping_pong():

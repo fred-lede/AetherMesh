@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import numpy as np
@@ -64,6 +65,8 @@ class TestStreamingASR:
         assert results[0]["is_final"] is True
         assert results[0]["seg"] == 1
         assert results[0]["language"] == "en"
+        assert stream._buffer == bytearray()
+        assert stream._processed_up_to == 0
 
     async def test_transcribe_if_ready_skips_below_vad(
         self, mock_model: MagicMock,
@@ -89,6 +92,34 @@ class TestStreamingASR:
         assert len(results) == 1
         assert results[0]["text"] == "hello world"
         assert stream._closed is True
+
+    async def test_flush_does_not_retranscribe_audio_already_processed(
+        self, stream: StreamingASR, mock_model: MagicMock,
+    ) -> None:
+        await stream.add_audio(_pcm(0.3))
+        await stream.transcribe_if_ready()
+        await stream.add_audio(_pcm(0.1))
+        results = await stream.flush()
+        assert len(results) == 1
+        assert len(mock_model.transcribe.call_args.args[0]) == 1600
+
+    async def test_lazy_segments_are_materialized_off_event_loop(self) -> None:
+        event_loop_thread = threading.get_ident()
+        iteration_threads = []
+
+        class LazyModel:
+            def transcribe(self, samples, **kwargs):
+                def segments():
+                    iteration_threads.append(threading.get_ident())
+                    yield type("Segment", (), {"text": "hello", "language": "en"})()
+
+                return segments(), type("Info", (), {"language": "en"})()
+
+        stream = StreamingASR(model=LazyModel(), window_seconds=0.25, vad_threshold=0.0)
+        await stream.add_audio(_pcm(0.3))
+        result = await stream.transcribe_if_ready()
+        assert result[0]["text"] == "hello"
+        assert iteration_threads[0] != event_loop_thread
 
     async def test_flush_returns_empty_for_no_audio(self, stream: StreamingASR) -> None:
         results = await stream.flush()

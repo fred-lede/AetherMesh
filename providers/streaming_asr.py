@@ -78,14 +78,16 @@ class StreamingASR:
                 self._processed_up_to = len(self._buffer)
                 is_final = False
             else:
-                chunk = bytes(self._buffer[self._processed_up_to :])
-                self._processed_up_to = len(self._buffer)
+                chunk = bytes(self._buffer)
+                self._buffer.clear()
+                self._processed_up_to = 0
                 is_final = True
         return await self._transcribe(chunk, is_final=is_final)
 
     async def flush(self, *, is_final: bool = True) -> list[dict[str, Any]]:
         async with self._lock:
-            remaining = bytes(self._buffer)
+            start = 0 if self._interim else self._processed_up_to
+            remaining = bytes(self._buffer[start:])
             logger.debug("flush: remaining=%d bytes, buffer_len=%d",
                          len(remaining), len(self._buffer))
             self._buffer.clear()
@@ -111,10 +113,11 @@ class StreamingASR:
         if self._language:
             kwargs["language"] = self._language
         loop = asyncio.get_running_loop()
-        segments, info = await loop.run_in_executor(
-            None, lambda: self._model.transcribe(samples, **kwargs)
-        )
-        seg_list = list(segments) if segments is not None else []
+        def transcribe() -> tuple[list[Any], Any]:
+            segments, info = self._model.transcribe(samples, **kwargs)
+            return (list(segments) if segments is not None else []), info
+
+        seg_list, info = await loop.run_in_executor(None, transcribe)
         results: list[dict[str, Any]] = []
         for seg in seg_list:
             self._seg_counter += 1
