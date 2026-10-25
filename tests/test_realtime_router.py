@@ -15,7 +15,11 @@ import router.realtime_router as realtime_router
 
 
 class FakeASRModel:
+    def __init__(self):
+        self.samples_seen = 0
+
     def transcribe(self, samples, **kwargs):
+        self.samples_seen += len(samples)
         return [SimpleNamespace(text="hello there")], SimpleNamespace(language="en")
 
 
@@ -61,10 +65,12 @@ def realtime_dependencies(monkeypatch):
 
     monkeypatch.setattr(realtime_router, "_verify_ws_api_key", verify)
     monkeypatch.setattr(realtime_router.settings, "asr_enabled", True)
-    monkeypatch.setattr(realtime_router, "get_adapter", lambda _name: SimpleNamespace(_model=FakeASRModel()), raising=False)
+    asr_model = FakeASRModel()
+    monkeypatch.setattr(realtime_router, "get_adapter", lambda _name: SimpleNamespace(_model=asr_model), raising=False)
     from runtime.orchestration import openai_handler
 
     monkeypatch.setattr(openai_handler, "RouterService", lambda: service)
+    service.asr_model = asr_model
     return service
 
 
@@ -171,18 +177,22 @@ async def test_disconnect_cleans_up_queued_audio(realtime_dependencies):
 
 
 @pytest.mark.asyncio
-async def test_full_audio_queue_returns_error_and_keeps_reading_cancel(realtime_dependencies):
-    pcm = np.full(480, 1000, dtype=np.int16).tobytes()
+async def test_audio_queue_applies_backpressure_without_dropping_frames(realtime_dependencies):
+    service = realtime_dependencies
+    pcm = np.full(2_400, 1000, dtype=np.int16).tobytes()
     events = [{"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}}]
     events.extend(
         {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()}
-        for _ in range(9)
+        for _ in range(130)
     )
-    events.extend([{"type": "response.cancel"}, {"type": "session.close"}])
+    events.append({"type": "session.close"})
     ws = FakeWebSocket(events)
     await realtime_router.realtime_websocket(ws)
-    assert any("audio processing queue is full" in event.get("error", {}).get("message", "") for event in ws.sent)
-    assert any(event["type"] == "response.cancelled" for event in ws.sent)
+    assert not any("audio processing queue is full" in event.get("error", {}).get("message", "") for event in ws.sent)
+    assert service.asr_model.samples_seen == 130 * 1600
+    assert any(event["type"] == "session.input_transcript.delta" for event in ws.sent)
+    assert any(event["type"] == "session.output_transcript.delta" for event in ws.sent)
+    assert ws.sent[-1]["type"] == "session.closed"
 
 
 @pytest.mark.asyncio

@@ -278,11 +278,8 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                 if audio_queue is None:
                     audio_queue = asyncio.Queue(maxsize=8)
                     audio_task = asyncio.create_task(process_audio(audio_queue))
-                try:
-                    audio_queue.put_nowait((audio_generation, pcm))
-                    audio_started = True
-                except asyncio.QueueFull:
-                    await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "server_error", "message": "audio processing queue is full; retry after earlier audio is processed"}})
+                await audio_queue.put((audio_generation, pcm))
+                audio_started = True
                 continue
             if event_type not in {"session.update", "conversation.item.create", "ping", "input_audio_buffer.append", "input_audio_buffer.commit"}:
                 await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": f"unsupported event type '{event_type}'"}})
