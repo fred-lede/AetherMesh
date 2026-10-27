@@ -142,6 +142,26 @@ def test_create_model_case_insensitive_duplicate_returns_409(client: TestClient,
     assert resp.status_code == 409
 
 
+def test_create_model_same_name_different_provider_ok(client: TestClient, models_file: Path):
+    store.save_models([
+        {"name": "llama3", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}], "capabilities": ["chat"]},
+    ])
+    resp = client.post("/api/models", json={"name": "llama3", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]})
+    assert resp.status_code == 200
+    names = [(m["name"], m["provider"]) for m in store.get_models()]
+    assert ("llama3", "ollama") in names and ("llama3", "openai") in names
+
+
+def test_list_models_includes_uid(client: TestClient, models_file: Path):
+    store.save_models([
+        {"name": "x", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}], "capabilities": ["chat"]},
+        {"name": "x", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]},
+    ])
+    resp = client.get("/api/models")
+    uids = [m["uid"] for m in resp.json()["models"]]
+    assert len(uids) == 2 and len(set(uids)) == 2
+
+
 def test_crud_name_with_slash(client: TestClient, models_file: Path):
     resp = client.post("/api/models", json={"name": "z-ai/glm-5.3", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]})
     assert resp.status_code == 200

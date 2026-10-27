@@ -1203,11 +1203,19 @@ _MODEL_LOCAL_PROVIDERS = ["ollama", "xtts", "llama-server", "oMLX", "LM-Studio"]
 _MODEL_CLOUD_PROVIDERS = ["openai", "gemini", "nvidia_nim", "ollama_cloud"]
 
 
+def _model_uid(entry: dict[str, Any]) -> str:
+    """Stable per-entry identifier: same name on different providers get distinct uids."""
+    import hashlib
+    raw = f"{entry.get('name','').casefold()}::{entry.get('provider','').casefold()}"
+    return hashlib.md5(raw.encode()).hexdigest()[:8]
+
+
 def _model_public(entry: dict[str, Any]) -> dict[str, Any]:
     local = model_registry_store.is_local_model(entry)
     workers = entry.get("worker_bindings") or []
     return {
         **entry,
+        "uid": _model_uid(entry),
         "category": "local" if local else "cloud",
         "workers": [f"{b.get('node_id')}:{b.get('port')}" for b in workers],
     }
@@ -1241,12 +1249,14 @@ def list_model_nodes() -> dict[str, Any]:
 def create_model(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
-    names = {str(m.get("name", "")) for m in models}
+    existing = {model_registry_store.duplicate_key(m) for m in models}
     new_name = str(body.get("name", "")).strip()
-    if new_name and new_name.casefold() in {n.casefold() for n in names}:
-        raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
+    new_provider = str(body.get("provider", "")).strip()
+    dup_key = f"{new_name.casefold()}::{new_provider.casefold()}"
+    if dup_key in existing:
+        raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists on provider '{new_provider}'")
     clean, errors = model_registry_store.validate_model(
-        body, existing_names=names, allowed_nodes=model_registry_store.cluster_nodes()
+        body, existing=existing, allowed_nodes=model_registry_store.cluster_nodes()
     )
     if errors:
         raise HTTPException(status_code=400, detail=errors)
@@ -1262,22 +1272,39 @@ def update_model(
     body: dict[str, Any] = Body(...),
     update_references: bool = False,
     rename_only: bool = False,
+    provider: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
-    index = next((i for i, m in enumerate(models) if m.get("name") == name), None)
+    index = _find_model_index(models, name, provider)
     if index is None:
         raise HTTPException(status_code=404, detail="model not found")
+    return _update_model_by_index(models, index, body, update_references, rename_only)
+
+
+def _update_model_by_index(
+    models: list[dict[str, Any]],
+    index: int,
+    body: dict[str, Any],
+    update_references: bool,
+    rename_only: bool,
+) -> dict[str, Any]:
+    name = str(models[index].get("name", ""))
+    old_provider = str(models[index].get("provider", ""))
     new_name = str(body.get("name", name)).strip()
-    others = {str(m.get("name", "")) for i, m in enumerate(models) if i != index}
-    if new_name != name:
-        if new_name.casefold() in {n.casefold() for n in others}:
-            raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists")
+    new_provider = str(body.get("provider", old_provider)).strip()
+    others = [m for i, m in enumerate(models) if i != index]
+    if new_name != name or new_provider != old_provider:
+        dup_key = f"{new_name.casefold()}::{new_provider.casefold()}"
+        if dup_key in [model_registry_store.duplicate_key(m) for m in others]:
+            raise HTTPException(status_code=409, detail=f"Model '{new_name}' already exists on provider '{new_provider}'")
         references = model_references.scan_model_references(name)
         if references and not update_references and not rename_only:
             raise HTTPException(status_code=409, detail={"message": "references exist", "references": references})
     clean, errors = model_registry_store.validate_model(
-        body, existing_names=others, allowed_nodes=model_registry_store.cluster_nodes()
+        body,
+        existing={model_registry_store.duplicate_key(m) for m in others},
+        allowed_nodes=model_registry_store.cluster_nodes(),
     )
     if errors:
         raise HTTPException(status_code=400, detail=errors)
@@ -1288,11 +1315,22 @@ def update_model(
     return {"model": _model_public(clean)}
 
 
+def _find_model_index(models: list[dict[str, Any]], name: str, provider: str | None = None) -> int | None:
+    if provider:
+        idx = next((i for i, m in enumerate(models) if m.get("name") == name and m.get("provider") == provider), None)
+        if idx is not None:
+            return idx
+    return next((i for i, m in enumerate(models) if m.get("name") == name), None)
+
+
 @api.delete("/models/{name:path}")
-def delete_model(name: str, request: Request) -> dict[str, Any]:
+def delete_model(name: str, request: Request, provider: str | None = Query(None)) -> dict[str, Any]:
     _require_admin(request)
     models = model_registry_store.get_models()
-    remaining = [m for m in models if m.get("name") != name]
+    if provider:
+        remaining = [m for m in models if not (m.get("name") == name and m.get("provider") == provider)]
+    else:
+        remaining = [m for m in models if m.get("name") != name]
     if len(remaining) == len(models):
         raise HTTPException(status_code=404, detail="model not found")
     model_registry_store.save_models(remaining)
@@ -1300,17 +1338,25 @@ def delete_model(name: str, request: Request) -> dict[str, Any]:
 
 
 @api.post("/models/{name:path}/fetch-context")
-def fetch_model_context(name: str, request: Request) -> dict[str, Any]:
+def fetch_model_context(
+    name: str, request: Request, provider: str | None = Query(None)
+) -> dict[str, Any]:
     _require_admin(request)
     from runtime.orchestration import model_context
 
     models = model_registry_store.get_models()
-    entry = next((m for m in models if m.get("name") == name), None)
+    entry = next(
+        (m for m in models if m.get("name") == name and (provider is None or m.get("provider") == provider)),
+        None,
+    )
     if entry is None:
         raise HTTPException(status_code=404, detail="model not found")
     probe = {k: v for k, v in entry.items() if k != "context_length"}
     result = model_context.refresh_auto_context([probe], force=True)
-    value = result.get(name)
+    key = f"{name}::{entry.get('provider')}" if provider else name
+    value = result.get(key) if provider else result.get(name)
+    if value is None:
+        value = result.get(name)
     if value is None:
         raise HTTPException(status_code=422, detail="could not determine context length")
     return {"context_length": value}

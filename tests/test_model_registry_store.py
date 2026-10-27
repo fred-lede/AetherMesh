@@ -100,7 +100,26 @@ def test_validate_rejects_missing_name():
 
 
 def test_validate_rejects_duplicate_name():
-    _, errors = store.validate_model({"name": "a", "provider": "ollama"}, existing_names={"a"})
+    _, errors = store.validate_model(
+        {"name": "a", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}]},
+        existing={store.duplicate_key({"name": "a", "provider": "ollama"})},
+    )
+    assert any("duplicate" in e for e in errors)
+
+
+def test_validate_allows_duplicate_name_different_provider():
+    _, errors = store.validate_model(
+        {"name": "llama3", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]},
+        existing={store.duplicate_key({"name": "llama3", "provider": "ollama"})},
+    )
+    assert errors == []
+
+
+def test_validate_rejects_duplicate_on_same_provider():
+    _, errors = store.validate_model(
+        {"name": "llama3", "provider": "ollama", "worker_bindings": [{"node_id": "node-01", "port": 11434}]},
+        existing={store.duplicate_key({"name": "llama3", "provider": "ollama"})},
+    )
     assert any("duplicate" in e for e in errors)
 
 
@@ -147,7 +166,8 @@ def test_validate_string_binding_does_not_raise():
 
 def test_validate_rejects_case_insensitive_duplicate():
     _, errors = store.validate_model(
-        {"name": "Foo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}, existing_names={"foo"}
+        {"name": "Foo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]},
+        existing={store.duplicate_key({"name": "foo", "provider": "openai"})},
     )
     assert any("duplicate" in e for e in errors)
 

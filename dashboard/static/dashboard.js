@@ -1898,10 +1898,14 @@
       } catch (e) {}
     }
 
-    async function openModelDrawer(name = null, preset = null) {
+    let mmEditingName = null;
+    let mmEditingProvider = null;
+
+    async function openModelDrawer(name = null, provider = null, preset = null) {
       await loadModelMeta();
       mmEditingName = name;
-      const model = preset || mmModels.find(m => m.name === name) || { capabilities: [], context_length: null };
+      mmEditingProvider = provider;
+      const model = preset || mmModels.find(m => m.name === name && (!provider || m.provider === provider)) || { capabilities: [], context_length: null };
       document.getElementById('mm-drawer-title').textContent = name ? `Edit: ${name}` : 'New Model';
       document.getElementById('mm-name').value = model.name || '';
       document.getElementById('mm-category').value = model.category || 'local';
@@ -1979,7 +1983,8 @@
       errorsEl.textContent = '';
       try {
         if (mmEditingName) {
-          const url = `/api/models/${encodeModelName(mmEditingName)}`;
+          const providerQ = mmEditingProvider ? `?provider=${encodeURIComponent(mmEditingProvider)}` : '';
+          const url = `/api/models/${encodeModelName(mmEditingName)}${providerQ}`;
           let resp = await fetch(url, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (resp.status === 409) {
@@ -2049,9 +2054,9 @@
           <td>${m.context_length ?? '—'}</td>
           <td>${escapeHtml((m.workers || []).join(', ')) || '—'}</td>
           <td>
-            <button class="btn" onclick="openModelDrawer('${escapeHtml(m.name)}')">Edit</button>
-            <button class="btn" onclick="duplicateModel('${escapeHtml(m.name)}')">Copy</button>
-            <button class="btn danger" onclick="deleteModel('${escapeHtml(m.name)}')">Delete</button>
+            <button class="btn" onclick="openModelDrawer('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Edit</button>
+            <button class="btn" onclick="duplicateModel('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Copy</button>
+            <button class="btn danger" onclick="deleteModel('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Delete</button>
           </td>
         </tr>`).join('') || '<tr><td colspan="7">No models.</td></tr>';
       document.getElementById('mm-summary').textContent =
@@ -2077,19 +2082,23 @@
       }
     }
 
-    async function deleteModel(name) {
-      if (!confirm(`Delete ${name}?`)) return;
+    async function deleteModel(name, provider = null) {
+      const label = provider ? `${name} (${provider})` : name;
+      if (!confirm(`Delete ${label}?`)) return;
       try {
-        await mutateDashboard(`/api/models/${encodeModelName(name)}`, { method: 'DELETE' });
+        const url = provider
+          ? `/api/models/${encodeModelName(name)}?provider=${encodeURIComponent(provider)}`
+          : `/api/models/${encodeModelName(name)}`;
+        await mutateDashboard(url, { method: 'DELETE' });
         await loadModels();
       } catch (err) {
         setModelStatus(`Delete failed: ${err.message}`, 'bad');
       }
     }
 
-    function duplicateModel(name) {
-      const src = mmModels.find(m => m.name === name);
-      if (src) openModelDrawer(null, { ...src, name: `${name}-copy` });
+    function duplicateModel(name, provider = null) {
+      const src = mmModels.find(m => m.name === name && (!provider || m.provider === provider));
+      if (src) openModelDrawer(null, null, { ...src, name: `${name}-copy` });
     }
 
     let wsPanelInitialized = false;

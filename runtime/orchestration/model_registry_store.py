@@ -30,6 +30,16 @@ def models_mtime() -> float:
         return -1.0
 
 
+def duplicate_key(entry: dict[str, Any]) -> str:
+    """Case-insensitive uniqueness key for registry entries.
+
+    Two entries are distinct only when (name, provider) differ.  The same
+    model name on different providers/computers is allowed; the same name
+    on the same provider is a duplicate.
+    """
+    return f"{str(entry.get('name', '')).strip().casefold()}::{str(entry.get('provider', '')).strip().casefold()}"
+
+
 def load_models() -> list[dict[str, Any]]:
     path = models_path()
     if not path.exists():
@@ -149,8 +159,10 @@ def normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
 
 def validate_model(
     entry: dict[str, Any],
-    existing_names: set[str] | None = None,
+    existing: set[str] | None = None,
     allowed_nodes: set[str] | None = None,
+    *,
+    existing_names: set[str] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     name = str(entry.get("name", "")).strip()
@@ -158,14 +170,20 @@ def validate_model(
         errors.append("name is required")
     elif not _NAME_RE.match(name):
         errors.append(f"invalid name: {name!r}")
-    elif existing_names and name.casefold() in {n.casefold() for n in existing_names}:
-        errors.append(f"duplicate name: {name!r}")
 
     provider = str(entry.get("provider", "")).strip()
     if not provider:
         errors.append("provider is required")
     elif provider not in LOCAL_PROVIDERS and provider not in cloud_providers():
         errors.append(f"unknown provider: {provider!r}")
+
+    if existing is not None:
+        dup_key = duplicate_key(entry)
+        if dup_key in existing:
+            errors.append(f"duplicate model: {name!r} on provider {provider!r}")
+    elif existing_names is not None:
+        if name.casefold() in {n.casefold() for n in existing_names}:
+            errors.append(f"duplicate name: {name!r}")
 
     bindings = entry.get("worker_bindings")
     if is_local_model(entry):
