@@ -307,6 +307,24 @@ def canonical_provider_name(name: str) -> str:
 
 
 def resolve_provider(model: str, registry: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    # Disambiguate cross-provider duplicates: "openai/llama3" or "ollama/llama3"
+    if "/" in model and not model.startswith(("http://", "https://")):
+        parts = model.split("/", 1)
+        hint_provider = canonical_provider_name(parts[0])
+        stripped = parts[1]
+        # Check if first part is an actual provider in registry
+        for item in registry.get("models", []):
+            if item.get("name") == stripped and canonical_provider_name(str(item.get("provider", ""))) == hint_provider:
+                p = hint_provider
+                if p in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank"):
+                    return p, None
+                if p == "ollama":
+                    bindings = item.get("worker_bindings", [])
+                    for b in bindings:
+                        base_url = settings.worker_base_url(b)
+                        if base_url:
+                            return p, {"base_url": base_url}
+                return p, None
     for prefix, hinted_provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
             stripped = model[len(prefix):]
@@ -362,20 +380,28 @@ ROUTE_PREFIXES = {
 
 
 def provider_for_model(model: str, registry: dict[str, Any]) -> str:
+    # Disambiguate cross-provider duplicates: "M4-Strata/iq3_xxs"
+    if "/" in model and not model.startswith(("http://", "https://")):
+        parts = model.split("/", 1)
+        hint_provider = canonical_provider_name(parts[0])
+        stripped = parts[1]
+        for item in registry.get("models", []):
+            if item.get("name") == stripped and canonical_provider_name(str(item.get("provider", ""))) == hint_provider:
+                return hint_provider
     for prefix, provider in ROUTE_PREFIXES.items():
         if model.startswith(prefix):
             return provider
-    model = settings.resolve_model_alias(model)
+    model_clean = settings.resolve_model_alias(model)
     for item in registry.get("models", []):
-        if item.get("name") == model:
+        if item.get("name") in (model, model_clean):
             return str(item.get("provider", "ollama"))
-    if model.endswith("-cloud") or model.endswith("-cloud-latest"):
+    if model_clean.endswith("-cloud") or model_clean.endswith("-cloud-latest"):
         return "ollama_cloud"
-    if model.startswith("gemini"):
+    if model_clean.startswith("gemini"):
         return "gemini"
-    if model.startswith("gpt") or model.startswith(("o1", "o3", "o4")):
+    if model_clean.startswith("gpt") or model_clean.startswith(("o1", "o3", "o4")):
         return "openai"
-    if any(model.startswith(p) for p in NVIDIA_PREFIXES) or model.startswith("nemotron"):
+    if any(model_clean.startswith(p) for p in NVIDIA_PREFIXES) or model_clean.startswith("nemotron"):
         return "nvidia_nim"
     for cp_name in _CUSTOM_PROVIDERS:
         if model == cp_name or model.startswith(cp_name + "-") or model.startswith(cp_name + "/"):
@@ -384,6 +410,17 @@ def provider_for_model(model: str, registry: dict[str, Any]) -> str:
 
 
 def capabilities_for_model(model: str, registry: dict[str, Any]) -> list[str]:
+    # Support provider/name disambiguation
+    if "/" in model and not model.startswith(("http://", "https://")):
+        parts = model.split("/", 1)
+        hint_provider = canonical_provider_name(parts[0])
+        stripped = parts[1]
+        for item in registry.get("models", []):
+            if item.get("name") == stripped and canonical_provider_name(str(item.get("provider", ""))) == hint_provider:
+                caps = item.get("capabilities", [])
+                if isinstance(caps, list):
+                    return caps
+                return ["chat"]
     for item in registry.get("models", []):
         if item.get("name") == model:
             caps = item.get("capabilities", [])
@@ -393,6 +430,14 @@ def capabilities_for_model(model: str, registry: dict[str, Any]) -> list[str]:
 
 
 def find_registry_model(model: str, registry: dict[str, Any]) -> dict[str, Any] | None:
+    # Support provider/name disambiguation
+    if "/" in model and not model.startswith(("http://", "https://")):
+        parts = model.split("/", 1)
+        hint_provider = canonical_provider_name(parts[0])
+        stripped = parts[1]
+        for item in registry.get("models", []):
+            if item.get("name") == stripped and canonical_provider_name(str(item.get("provider", ""))) == hint_provider:
+                return item
     for item in registry.get("models", []):
         if item.get("name") == model:
             return item

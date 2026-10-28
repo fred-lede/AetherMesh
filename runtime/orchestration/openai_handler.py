@@ -94,15 +94,28 @@ class RouterService:
 
     def list_models(self) -> dict[str, Any]:
         self._ensure_registry()
+        registry_models = model_registry_store.get_models()
+        # If the same name appears with different providers, disambiguate by prefixing provider/
+        name_to_providers: dict[str, set[str]] = {}
+        for model in registry_models:
+            name_to_providers.setdefault(str(model.get("name", "")), set()).add(str(model.get("provider", "")))
         models = []
-        for model in model_registry_store.get_models():
+        for model in registry_models:
+            name = model["name"]
+            provider = model.get("provider", "ollama")
+            if len(name_to_providers.get(name, {provider})) > 1:
+                model_id = f"{provider}/{name}"
+            else:
+                model_id = name
             models.append(
                 {
-                    "id": model["name"],
+                    "id": model_id,
                     "object": "model",
                     "created": 0,
-                    "owned_by": model.get("provider", "ollama"),
+                    "owned_by": provider,
                     "metadata": {
+                        "name": name,
+                        "provider": provider,
                         "worker_ports": model.get("worker_ports", []),
                         "worker_bindings": model.get("worker_bindings", []),
                         "capabilities": model.get("capabilities", []),
@@ -1358,9 +1371,24 @@ class RouterService:
         requested_model = payload.get("model")
         if not requested_model:
             raise self._as_http_error(status_code=400, code="bad_request", message="The request must include a model.")
-        original_model = settings.resolve_model_alias(str(requested_model))
-        if original_model != requested_model:
+        original_model_raw = str(requested_model)
+        hint_provider: str | None = None
+        real_model = original_model_raw
+        # Support provider/name disambiguation (e.g. M4-Strata/iq3_xxs)
+        if "/" in original_model_raw and not original_model_raw.startswith(("http://", "https://")):
+            parts = original_model_raw.split("/", 1)
+            hp = canonical_provider_name(parts[0])
+            rn = parts[1]
+            if is_custom_provider(hp) or hp in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank", "xtts", "asr", "image_gen"):
+                hint_provider = hp
+                real_model = rn
+        original_model = settings.resolve_model_alias(real_model)
+        if original_model != real_model:
             payload["model"] = original_model
+            real_model = original_model
+        else:
+            if payload.get("model") != original_model:
+                payload["model"] = original_model
         required = self._required_capabilities(payload)
         registry_model = self._find_registry_model(original_model)
         if registry_model is not None and not self._model_supports_required(registry_model, required):
@@ -1388,9 +1416,14 @@ class RouterService:
             last_error_resp = None
 
             for current_model in try_models:
-                provider = canonical_provider_name(payload.get("provider") or provider_for_model(current_model, self.registry))
+                provider = canonical_provider_name(
+                    payload.get("provider")
+                    or (hint_provider if hint_provider and (current_model == original_model) else None)
+                    or provider_for_model(f"{hint_provider}/{current_model}" if hint_provider and current_model == original_model else current_model, self.registry)
+                )
                 if provider in ("openai", "gemini", "nvidia_nim", "ollama_cloud", "rerank") or is_custom_provider(provider):
                     if current_model == original_model:
+                        payload["model"] = current_model
                         return provider, None
                     continue
 
