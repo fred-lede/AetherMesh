@@ -13,6 +13,9 @@ REM   start-rerank-server.bat bge-reranker-v2-m3 11436
 REM   start-rerank-server.bat qwen3-reranker-0.6b 11437
 setlocal
 
+REM Force rerank to use RTX 4070 (GPU 1). Hide GPU 0 to avoid stale CUDA context.
+set "CUDA_VISIBLE_DEVICES=1"
+
 REM Priority: explicit AIIH_LLAMA_SERVER, else Ollama's bundled binary.
 if defined AIIH_LLAMA_SERVER (
   set "LLAMA_SERVER=%AIIH_LLAMA_SERVER%"
