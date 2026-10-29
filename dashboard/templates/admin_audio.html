@@ -335,7 +335,7 @@
       <button type="button" class="audio-tab" data-audio-tab="speech" onclick="if(window.audioTabClick){window.audioTabClick(event,this);}">Speech</button>
     </div>
 
-    <div class="tab-panel active" data-audio-panel="voices">
+    <div class="tab-panel" data-audio-panel="voices">
       <div class="card">
         <h2>TTS Settings</h2>
         <div id="tts-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
@@ -481,8 +481,8 @@
     </div>
   </div>
 
-  <script src="/static/shared.js"></script>
-  <script src="/static/admin_audio.js"></script>
+  <script src="/static/shared.js?v={{ range(1, 99999) | random }}"></script>
+  <script src="/static/admin_audio.js?v={{ range(1, 99999) | random }}"></script>
   <script>
     (function() {
       if (window.__aethermeshAudioTabsInlineBound) return;
