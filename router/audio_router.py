@@ -41,14 +41,18 @@ def _resolve_adapter():
     return adapter
 
 
-def _truncate_for_tts(text: str, max_chars: int = 150) -> str:
-    if len(text) <= max_chars:
+TTS_MAX_CHARS: int = 150
+
+
+def _truncate_for_tts(text: str, max_chars: int | None = None) -> str:
+    limit = max_chars if max_chars is not None else TTS_MAX_CHARS
+    if len(text) <= limit:
         return text
-    truncated = text[:max_chars]
+    truncated = text[:limit]
     last_boundary = max(truncated.rfind("。"), truncated.rfind("！"),
                         truncated.rfind("？"), truncated.rfind("."),
                         truncated.rfind("!"), truncated.rfind("?"))
-    if last_boundary > max_chars // 2:
+    if last_boundary > limit // 2:
         return text[:last_boundary + 1]
     return truncated
 
@@ -104,6 +108,14 @@ async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
         model = "phonon"
 
     text = payload.get("input", "") or ""
+    max_chars = payload.get("max_chars")
+    if max_chars is not None:
+        try:
+            text = _truncate_for_tts(text, int(max_chars))
+        except (TypeError, ValueError):
+            pass
+    else:
+        text = _truncate_for_tts(text)
     if not text:
         raise HTTPException(status_code=422, detail="input is required")
 
@@ -161,6 +173,12 @@ async def create_speech(payload: dict[str, Any]) -> Response:
     response_format = payload.get("response_format", "wav")
     language = payload.get("language", "")
     speed = payload.get("speed", 1.0)
+    max_chars = payload.get("max_chars")
+    if max_chars is not None:
+        try:
+            text = _truncate_for_tts(payload.get("input", ""), int(max_chars))
+        except (TypeError, ValueError):
+            text = _truncate_for_tts(payload.get("input", ""))
 
     if not text:
         raise HTTPException(status_code=422, detail="input is required")

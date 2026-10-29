@@ -253,26 +253,39 @@
     xtts: 150
   };
 
+  function _effectiveLimit(model, maxCharsInput) {
+    var base = isPhononModel(model) ? MODEL_TEXT_LIMITS.phonon : MODEL_TEXT_LIMITS.xtts;
+    if (maxCharsInput) {
+      var v = parseInt(maxCharsInput, 10);
+      if (!isNaN(v) && v > 0) return v;
+    }
+    return base;
+  }
+
   function onSpeechInputChanged() {
     var inputEl = document.getElementById('speech-input');
     var countEl = document.getElementById('speech-char-count');
     var modelEl = document.getElementById('speech-model');
+    var maxCharsEl = document.getElementById('speech-max-chars');
     if (!inputEl || !countEl) return;
     var model = modelEl ? modelEl.value : '';
-    var limit = isPhononModel(model) ? MODEL_TEXT_LIMITS.phonon : MODEL_TEXT_LIMITS.xtts;
+    var limit = _effectiveLimit(model, maxCharsEl ? maxCharsEl.value : '');
     var len = (inputEl.value || '').length;
-    countEl.textContent = len + ' / ' + limit + (limit ? ' chars' : '');
+    countEl.textContent = len + ' / ' + limit + ' chars';
     countEl.style.color = len > limit ? 'var(--danger, #f87171)' : 'var(--muted)';
   }
 
   function updateCharLimit() {
-    var modelEl = document.getElementById('speech-model');
-    var inputEl = document.getElementById('speech-input');
-    if (!modelEl || !inputEl) return;
     onSpeechInputChanged();
   }
 
   window.onSpeechInputChanged = onSpeechInputChanged;
+
+  function onSpeechMaxCharsChanged() {
+    onSpeechInputChanged();
+  }
+
+  window.onSpeechMaxCharsChanged = onSpeechMaxCharsChanged;
 
   function onSpeechModelChanged() {
     var modelEl = document.getElementById('speech-model');
@@ -350,6 +363,8 @@
     var responseFormat = formatEl ? formatEl.value : 'mp3';
     var speed = speedEl ? Number(speedEl.value) : 1.0;
     var instructions = instrEl ? (instrEl.value || '').trim() : '';
+    var maxCharsEl = document.getElementById('speech-max-chars');
+    var maxChars = maxCharsEl ? (maxCharsEl.value || '').trim() : '';
     var restoreBtn = setButtonBusy(btn, 'Generating…');
     if (msgEl) { msgEl.textContent = 'Calling /v1/audio/speech...'; msgEl.className = 'speech-status'; }
     if (statusEl) { statusEl.textContent = 'Requesting audio...'; statusEl.className = 'speech-status'; }
@@ -357,6 +372,7 @@
       var body = { input: input, model: model, response_format: responseFormat, speed: isNaN(speed) ? 1.0 : speed };
       if (voice) body.voice = voice;
       if (instructions) body.instructions = instructions;
+      if (maxChars) body.max_chars = parseInt(maxChars, 10);
       try {
         localStorage.setItem('aethermesh.audio.speech.model', model);
         localStorage.setItem('aethermesh.audio.speech.voice', voice);

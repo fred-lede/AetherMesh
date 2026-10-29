@@ -434,6 +434,14 @@
                 <div class="speech-row-label">Instructions</div>
                 <input id="speech-instructions" type="text" placeholder="Optional style/instructions (model dependent)" style="width:100%;">
               </div>
+              <div class="speech-row">
+                <div class="speech-row-label">Max Chars</div>
+                <div class="speech-inline">
+                  <input id="speech-max-chars" type="number" min="1" max="5000" placeholder="default" style="width:100px;" onchange="window.onSpeechMaxCharsChanged()">
+                  <span style="color:var(--muted);font-size:0.82rem;">Leave blank to use model default</span>
+                </div>
+                </div>
+              </div>
               <div>
                 <button class="btn" id="btn-generate-speech">Generate Speech</button>
                 <span id="speech-generate-msg" style="margin-left:12px;font-size:0.85rem;color:var(--muted)"></span>
