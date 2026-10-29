@@ -10,14 +10,14 @@ model_aliases:
   alias_prefix: AIIH
   entries:
     # Claude tier → local model mapping
-    claude-sonnet-4-agnes: agnes-2.0-flash      # Opus tier — strongest reasoning(5090)
-    claude-sonnet-4-6-big: big-pickle               # Sonnet tier — balanced all-round(5090)
-    claude-3-5-haiku-muse: muse-glimmer:30b       # Haiku tier — fast & light (4070)
+    claude-sonnet-4-agnes: agnes-3.0-flash      # Opus tier — strongest reasoning(5090)
+    claude-sonnet-4-6: iq3_xxs               # Sonnet tier — balanced all-round(5090)
+    claude-3-5-haiku: qwen3.8-flash-next-iq3_xxs       # Haiku tier — fast & light (4070)
 
 fallback:
   # Explicit local Ollama model used when cloud providers are rate-limited,
   # overloaded, or time out before a response starts.
-  ollama_default_model: gemma4:31b-it-qat
+  ollama_default_model: iq3_xxs 
   # Optional explicit Ollama base URL for cloud fallback. When omitted,
   # fallback uses the model's first worker binding from config/models.yaml.
   ollama_base_url: http://127.0.0.1:11434

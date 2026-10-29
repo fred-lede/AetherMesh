@@ -29,7 +29,7 @@
         linear-gradient(180deg, #04070b 0%, #07111a 35%, #03060a 100%);
       min-height: 100vh;
     }
-    .shell { max-width: 1060px; margin: 0 auto; padding: 24px; }
+    .shell { max-width: 1100px; margin: 0 auto; padding: 24px; }
     .nav {
       display: flex;
       gap: 4px;
@@ -51,6 +51,36 @@
     .nav a.active { background: rgba(94, 234, 212, 0.1); color: var(--accent); }
     .nav .spacer { flex: 1; }
     .nav .logout { color: var(--bad); }
+    .audio-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .audio-tab {
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .audio-tab:hover {
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+    }
+    .audio-tab.active {
+      background: rgba(94, 234, 212, 0.12);
+      color: var(--accent);
+      border-color: rgba(94, 234, 212, 0.4);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
     .card {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -59,6 +89,18 @@
       margin-bottom: 20px;
     }
     .card h2 { margin: 0 0 16px; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card-header h2 { margin: 0; }
+    .card-subtitle {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
     .pill {
       display: inline-block;
       padding: 2px 10px;
@@ -159,7 +201,10 @@
       flex-wrap: wrap;
     }
     .upload-row input[type="text"],
-    .upload-row select {
+    .upload-row select,
+    .speech-form input[type="text"],
+    .speech-form select,
+    .speech-form textarea {
       background: rgba(255,255,255,0.06);
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -195,6 +240,80 @@
     .actions { white-space: nowrap; }
     .actions .btn + .btn { margin-left: 6px; }
     .audio-player { height: 28px; }
+    .speech-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+    @media (max-width: 920px) {
+      .speech-grid { grid-template-columns: 1fr; }
+    }
+    .speech-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .speech-row {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .speech-row-label {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+    .speech-textarea {
+      width: 100%;
+      min-height: 160px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+    .speech-inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .speech-inline-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .speech-inline-group label {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .speech-output {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .speech-output-player {
+      width: 100%;
+    }
+    .speech-status {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .speech-status.ok { color: var(--good); }
+    .speech-status.warn { color: var(--warn); }
+    .speech-status.bad { color: var(--bad); }
+    .speech-hint-list {
+      display: grid;
+      gap: 6px;
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .speech-hint-list li::before {
+      content: "•";
+      margin-right: 8px;
+      color: var(--accent-2);
+    }
   </style>
 </head>
 <body>
@@ -211,46 +330,169 @@
 
     <div id="operation-status"></div>
 
-    <div class="card">
-      <h2>TTS Settings</h2>
-      <div id="tts-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+    <div class="audio-tabs">
+      <button type="button" class="audio-tab active" data-audio-tab="voices" onclick="if(window.audioTabClick){window.audioTabClick(event,this);}">Voices & Settings</button>
+      <button type="button" class="audio-tab" data-audio-tab="speech" onclick="if(window.audioTabClick){window.audioTabClick(event,this);}">Speech</button>
     </div>
 
-    <div class="card">
-      <h2>ASR Settings</h2>
-      <div id="asr-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+    <div class="tab-panel active" data-audio-panel="voices">
+      <div class="card">
+        <h2>TTS Settings</h2>
+        <div id="tts-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card">
+        <h2>ASR Settings</h2>
+        <div id="asr-settings-panel"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Voice Management</h2>
+        <div id="voice-upload-panel" style="display:none">
+          <div class="upload-row">
+            <input type="text" id="voice-name" placeholder="Voice name" size="16">
+            <select id="voice-language">
+              <option value="">Auto-detect</option>
+              <option value="en">en</option>
+              <option value="zh-cn">zh-cn</option>
+              <option value="ja">ja</option>
+              <option value="ko">ko</option>
+              <option value="es">es</option>
+              <option value="fr">fr</option>
+              <option value="de">de</option>
+              <option value="it">it</option>
+              <option value="pt">pt</option>
+              <option value="ru">ru</option>
+              <option value="ar">ar</option>
+              <option value="hi">hi</option>
+            </select>
+            <input type="file" id="voice-file" accept="audio/*">
+            <button class="btn btn-sm" id="btn-register-voice" onclick="window.registerVoice()">Register</button>
+            <span id="voice-upload-msg" style="margin-left:8px;font-size:0.82rem;color:var(--muted)"></span>
+          </div>
+        </div>
+        <div id="voices-panel"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Voice Management</h2>
-      <div id="voice-upload-panel" style="display:none">
-        <div class="upload-row">
-          <input type="text" id="voice-name" placeholder="Voice name" size="16">
-          <select id="voice-language">
-            <option value="">Auto-detect</option>
-            <option value="en">en</option>
-            <option value="zh-cn">zh-cn</option>
-            <option value="ja">ja</option>
-            <option value="ko">ko</option>
-            <option value="es">es</option>
-            <option value="fr">fr</option>
-            <option value="de">de</option>
-            <option value="it">it</option>
-            <option value="pt">pt</option>
-            <option value="ru">ru</option>
-            <option value="ar">ar</option>
-            <option value="hi">hi</option>
-          </select>
-          <input type="file" id="voice-file" accept="audio/*">
-          <button class="btn btn-sm" id="btn-register-voice" onclick="window.registerVoice()">Register</button>
-          <span id="voice-upload-msg" style="margin-left:8px;font-size:0.82rem;color:var(--muted)"></span>
+    <div class="tab-panel" data-audio-panel="speech">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Speech Synthesis</h2>
+            <div class="card-subtitle">Text-to-speech playground for testing voices and models</div>
+          </div>
+          <span class="pill">/v1/audio/speech</span>
+        </div>
+        <div class="speech-grid">
+          <div>
+            <form class="speech-form" id="speech-form" onsubmit="event.preventDefault(); window.generateSpeech();">
+              <div>
+                <div class="speech-row-label" style="margin-bottom:8px;">Input Text</div>
+                <textarea id="speech-input" class="speech-textarea" placeholder="Enter text to synthesize... (up to model limits)" spellcheck="false"></textarea>
+              </div>
+              <div class="speech-row">
+                <div class="speech-row-label">Model</div>
+                <div class="speech-inline">
+                  <select id="speech-model" style="min-width:220px;">
+                    <option value="phonon">phonon (Ollama)</option>
+                    <option value="ollama/phonon">ollama/phonon</option>
+                    <option value="xtts">xtts (local)</option>
+                  </select>
+                  <button class="btn btn-sm btn-secondary" type="button" onclick="window.loadSpeechOptions()">Refresh</button>
+                </div>
+              </div>
+              <div class="speech-row">
+                <div class="speech-row-label">Voice</div>
+                <div class="speech-inline">
+                  <select id="speech-voice" style="min-width:220px;">
+                    <option value="">Default</option>
+                  </select>
+                  <span style="color:var(--muted);font-size:0.82rem;">Uses registered voices when available</span>
+                </div>
+              </div>
+              <div class="speech-row">
+                <div class="speech-row-label">Format</div>
+                <div class="speech-inline">
+                  <select id="speech-format" style="min-width:140px;">
+                    <option value="mp3">mp3</option>
+                    <option value="wav">wav</option>
+                    <option value="opus">opus</option>
+                    <option value="aac">aac</option>
+                    <option value="flac">flac</option>
+                    <option value="pcm">pcm</option>
+                  </select>
+                  <div class="speech-inline-group">
+                    <label for="speech-speed">Speed</label>
+                    <input id="speech-speed" type="range" min="0.25" max="4" step="0.05" value="1.0" oninput="document.getElementById('speech-speed-value').textContent = this.value">
+                    <span id="speech-speed-value">1.00</span>
+                  </div>
+                </div>
+              </div>
+              <div class="speech-row">
+                <div class="speech-row-label">Instructions</div>
+                <input id="speech-instructions" type="text" placeholder="Optional style/instructions (model dependent)" style="width:100%;">
+              </div>
+              <div>
+                <button class="btn" id="btn-generate-speech">Generate Speech</button>
+                <span id="speech-generate-msg" style="margin-left:12px;font-size:0.85rem;color:var(--muted)"></span>
+              </div>
+            </form>
+          </div>
+          <div class="speech-output">
+            <div>
+              <div style="margin-bottom:8px;color:var(--muted);font-size:0.84rem;">Output</div>
+              <audio id="speech-audio" class="speech-output-player" controls></audio>
+            </div>
+            <div id="speech-status" class="speech-status">Ready.</div>
+            <div class="hint">
+              <strong>Planned functionality</strong>
+              <ul class="speech-hint-list">
+                <li>Route <code>phonon</code> / <code>ollama/phonon</code> through Ollama's OpenAI-compatible speech endpoint</li>
+                <li>Use local XTTS/custom voices when <code>xtts</code> is selected</li>
+                <li>Support common response formats and adjustable speed</li>
+                <li>Persist last used model/voice/format/speed in localStorage</li>
+                <li>Queue/history of recent generations (future)</li>
+              </ul>
+            </div>
+            <div class="hint" style="background:rgba(94,234,212,0.08);color:var(--text);">
+              <strong>Settings</strong>
+              <ul class="speech-hint-list">
+                <li><strong>Model:</strong> <code>phonon</code> for Ollama speech, <code>xtts</code> for built-in TTS/registered voices</li>
+                <li><strong>Voice:</strong> leave blank for default; select a registered voice for XTTS-style synthesis</li>
+                <li><strong>Response format:</strong> prefer <code>mp3</code> for compatibility</li>
+                <li><strong>Speed:</strong> 0.25–4.0 (default 1.0)</li>
+                <li><strong>Instructions:</strong> passed through when supported by the upstream model</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
-      <div id="voices-panel"><span style="color:var(--muted)">Loading...</span></div>
     </div>
   </div>
 
   <script src="/static/shared.js"></script>
   <script src="/static/admin_audio.js"></script>
+  <script>
+    (function() {
+      if (window.__aethermeshAudioTabsInlineBound) return;
+      window.__aethermeshAudioTabsInlineBound = true;
+      document.addEventListener('click', function(e) {
+        var tab = e.target.closest('.audio-tab');
+        if (!tab) return;
+        var container = tab.closest('.audio-tabs');
+        if (!container) return;
+        try { e.preventDefault(); e.stopPropagation(); } catch(ex) {}
+        var target = tab.getAttribute('data-audio-tab');
+        var allTabs = document.querySelectorAll('.audio-tab');
+        var allPanels = document.querySelectorAll('.tab-panel');
+        allTabs.forEach(function(t) { t.classList.toggle('active', t === tab); });
+        allPanels.forEach(function(p) {
+          p.classList.toggle('active', p.getAttribute('data-audio-panel') === target);
+        });
+        try { if (target) localStorage.setItem('aethermesh.audio.tab', target); } catch(ex) {}
+      }, true);
+    })();
+  </script>
 </body>
 </html>

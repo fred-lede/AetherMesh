@@ -364,60 +364,6 @@ models:
   - thinking
   - tools
   context_length: 1047576
-- name: z-ai/glm-5.3
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - vision
-  - thinking
-  - tools
-  context_length: 1047576
-- name: minimaxai/minimax-m3
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  - vision
-  estimated_vram_mb: null
-  context_length: 524288
-- name: moonshotai/kimi-k3
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  - vision
-  estimated_vram_mb: null
-  context_length: 1047576
-- name: google/diffusiongemma-26b-a4b-it
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  - vision
-  estimated_vram_mb: null
-  context_length: 131072
-- name: bytedance/seed-oss-36b-instruct
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - vision
-  context_length: 200000
-- name: deepseek-ai/deepseek-v4-pro-0813
-  provider: nvidia_nim
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  context_length: 1047576
 - name: deepseek-ai/deepseek-v4.1-flash
   provider: nvidia_nim
   worker_ports: []
@@ -459,15 +405,6 @@ models:
   - tools
   estimated_vram_mb: null
   context_length: 524288
-- name: DeepSeek-V4-Flash-Vision-Exp
-  provider: AMD
-  worker_ports: []
-  capabilities:
-  - chat
-  - thinking
-  - tools
-  - vision
-  context_length: 200000
 - name: Qwen3.8-Flash-Next
   provider: AMD
   worker_ports: []
@@ -475,7 +412,9 @@ models:
   - chat
   - thinking
   - tools
+  - video
   - vision
+  estimated_vram_mb: null
   context_length: 262144
 - name: nvidia/nemotron-3-ultra-550b-a55b
   provider: nvidia_nim
@@ -575,36 +514,48 @@ models:
   provider: ollama
   worker_bindings:
   - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
     port: 11434
+  - node_id: node-p40-01
+    port: 11435
   capabilities:
-  - decision
-  - tools
-  - thinking
   - chat
+  - decision
+  - thinking
+  - tools
   estimated_vram_mb: null
   context_length: 262144
 - name: tev1:4b
   provider: ollama
   worker_bindings:
   - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
     port: 11434
+  - node_id: node-p40-01
+    port: 11435
   capabilities:
-  - decision
-  - tools
-  - thinking
   - chat
+  - decision
+  - thinking
+  - tools
   estimated_vram_mb: null
   context_length: 262144
 - name: nimble:9b
   provider: ollama
   worker_bindings:
   - node_id: node-01
+    port: 11435
+  - node_id: node-p40-01
     port: 11434
+  - node_id: node-p40-01
+    port: 11435
   capabilities:
-  - decision
-  - tools
-  - thinking
   - chat
+  - decision
+  - thinking
+  - tools
   estimated_vram_mb: null
   context_length: 262144
 - name: clef:27b
@@ -612,8 +563,105 @@ models:
   worker_bindings:
   - node_id: node-01
     port: 11434
+  - node_id: node-mac-01
+    port: 11434
   capabilities:
+  - chat
   - decision
   - vision
   estimated_vram_mb: null
   context_length: 262144
+- name: DeepSeek-V4.1-Flash
+  provider: AMD
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 1048576
+- name: GLM-5.3-Flash
+  provider: AMD
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - video
+  - vision
+  estimated_vram_mb: null
+  context_length: 1000000
+- name: MiMo-V2.6-Flash
+  provider: AMD
+  worker_ports: []
+  capabilities:
+  - audio
+  - chat
+  - thinking
+  - tools
+  - video
+  - vision
+  estimated_vram_mb: null
+  context_length: 1048576
+- name: qwen3.8-flash-next-iq3_xxs
+  provider: K9-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 262144
+- name: iq3_s
+  provider: UM890-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 256000
+- name: iq3_xxs
+  provider: UM890-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 256000
+- name: iq3_xxs
+  provider: M4-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 512000
+- name: minimaxai/minimax-m3.1-flash
+  provider: nvidia_nim
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - video
+  - vision
+  estimated_vram_mb: null
+  context_length: 1000000
+- name: phonon
+  provider: ollama
+  worker_bindings:
+  - node_id: node-mac-01
+    port: 11434
+  capabilities:
+  - audio
+  - chat
+  estimated_vram_mb: null
+  context_length: 8000

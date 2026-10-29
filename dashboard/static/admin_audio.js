@@ -7,6 +7,57 @@
     catch(e) { return iso; }
   }
 
+  function activateAudioTab(tab) {
+    if (!tab) return;
+    var tabs = document.querySelectorAll('.audio-tab');
+    var panels = document.querySelectorAll('.tab-panel');
+    var target = tab.getAttribute('data-audio-tab');
+    tabs.forEach(function(t) { t.classList.toggle('active', t === tab); });
+    panels.forEach(function(p) {
+      p.classList.toggle('active', p.getAttribute('data-audio-panel') === target);
+    });
+    try { if (target) localStorage.setItem('aethermesh.audio.tab', target); } catch(e) {}
+  }
+
+  window.audioTabClick = function(e, el) {
+    try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(ex) {}
+    activateAudioTab(el);
+  };
+
+  function initAudioTabs() {
+    var tabs = document.querySelectorAll('.audio-tab');
+    var container = document.querySelector('.audio-tabs');
+    if (!tabs.length) return;
+
+    if (container) {
+      container.addEventListener('click', function(e) {
+        var tab = e.target.closest('.audio-tab');
+        if (!tab || !container.contains(tab)) return;
+        try { e.preventDefault(); e.stopPropagation(); } catch(ex) {}
+        activateAudioTab(tab);
+      }, true);
+    } else {
+      tabs.forEach(function(tab) {
+        if (tab.__audioTabBound) return;
+        tab.__audioTabBound = true;
+        tab.addEventListener('click', function(e) {
+          try { e.preventDefault(); e.stopPropagation(); } catch(ex) {}
+          activateAudioTab(tab);
+        }, true);
+      });
+    }
+
+    try {
+      var saved = localStorage.getItem('aethermesh.audio.tab');
+      if (saved) {
+        var savedTab = document.querySelector('.audio-tab[data-audio-tab="' + saved + '"]');
+        if (savedTab) {
+          activateAudioTab(savedTab);
+        }
+      }
+    } catch(e) {}
+  }
+
   async function loadTtsSettings() {
     var panel = document.getElementById('tts-settings-panel');
     if (!panel) return;
@@ -191,9 +242,126 @@
     }
   };
 
+  async function loadSpeechOptions() {
+    var voiceSelect = document.getElementById('speech-voice');
+    if (!voiceSelect) return;
+    try {
+      var resp = await fetch('/api/audio/voices');
+      if (!resp.ok) return;
+      var voices = await resp.json();
+      var current = voiceSelect.value;
+      voiceSelect.innerHTML = '<option value="">Default</option>';
+      if (Array.isArray(voices)) {
+        voices.forEach(function(v) {
+          var opt = document.createElement('option');
+          opt.value = v.voice_id || v.name || '';
+          var label = v.name || v.voice_id || '';
+          if (v.language) label += ' [' + v.language + ']';
+          opt.textContent = label;
+          voiceSelect.appendChild(opt);
+        });
+      }
+      if (current && voiceSelect.querySelector('option[value="' + escapeHtml(current).replace(/"/g, '\\"') + '"]')) {
+        voiceSelect.value = current;
+      }
+    } catch(e) {}
+  }
+
+  window.loadSpeechOptions = loadSpeechOptions;
+
+  window.generateSpeech = async function() {
+    var textEl = document.getElementById('speech-input');
+    var modelEl = document.getElementById('speech-model');
+    var voiceEl = document.getElementById('speech-voice');
+    var formatEl = document.getElementById('speech-format');
+    var speedEl = document.getElementById('speech-speed');
+    var instrEl = document.getElementById('speech-instructions');
+    var btn = document.getElementById('btn-generate-speech');
+    var msgEl = document.getElementById('speech-generate-msg');
+    var statusEl = document.getElementById('speech-status');
+    var audioEl = document.getElementById('speech-audio');
+    if (!textEl) return;
+    var input = (textEl.value || '').trim();
+    if (!input) {
+      if (msgEl) { msgEl.textContent = 'Enter text to synthesize.'; msgEl.className = 'speech-status warn'; }
+      if (statusEl) { statusEl.textContent = 'Missing input text.'; statusEl.className = 'speech-status warn'; }
+      return;
+    }
+    var model = modelEl ? modelEl.value : 'phonon';
+    var voice = voiceEl ? voiceEl.value : '';
+    var responseFormat = formatEl ? formatEl.value : 'mp3';
+    var speed = speedEl ? Number(speedEl.value) : 1.0;
+    var instructions = instrEl ? (instrEl.value || '').trim() : '';
+    var restoreBtn = setButtonBusy(btn, 'Generating…');
+    if (msgEl) { msgEl.textContent = 'Calling /v1/audio/speech...'; msgEl.className = 'speech-status'; }
+    if (statusEl) { statusEl.textContent = 'Requesting audio...'; statusEl.className = 'speech-status'; }
+    try {
+      var body = { input: input, model: model, response_format: responseFormat, speed: isNaN(speed) ? 1.0 : speed };
+      if (voice) body.voice = voice;
+      if (instructions) body.instructions = instructions;
+      try {
+        localStorage.setItem('aethermesh.audio.speech.model', model);
+        localStorage.setItem('aethermesh.audio.speech.voice', voice);
+        localStorage.setItem('aethermesh.audio.speech.format', responseFormat);
+        localStorage.setItem('aethermesh.audio.speech.speed', String(speed));
+      } catch(e) {}
+      var resp = await fetch('/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok) {
+        var errText = '';
+        try {
+          var errJson = await resp.json();
+          errText = errJson.detail || errJson.message || JSON.stringify(errJson);
+        } catch(e) {
+          try { errText = await resp.text(); } catch(_e) {}
+        }
+        throw new Error((resp.status) + ' ' + (resp.statusText || '') + (errText ? ': ' + errText : ''));
+      }
+      var blob = await resp.blob();
+      var contentType = resp.headers.get('content-type') || ('audio/' + responseFormat);
+      var url = URL.createObjectURL(blob);
+      if (audioEl) {
+        audioEl.src = url;
+        audioEl.play().catch(function(){});
+      }
+      if (msgEl) { msgEl.textContent = 'Done'; msgEl.className = 'speech-status ok'; }
+      if (statusEl) { statusEl.textContent = 'Generated ' + Math.round(blob.size/1024) + ' KB (' + contentType + ')'; statusEl.className = 'speech-status ok'; }
+    } catch(error) {
+      var errMsg = summarizeError ? summarizeError(error) : (error && error.message ? error.message : String(error));
+      if (msgEl) { msgEl.textContent = 'Failed'; msgEl.className = 'speech-status bad'; }
+      if (statusEl) { statusEl.textContent = errMsg; statusEl.className = 'speech-status bad'; }
+    } finally {
+      if (restoreBtn) restoreBtn();
+    }
+  };
+
+  function initSpeechDefaults() {
+    var modelEl = document.getElementById('speech-model');
+    var voiceEl = document.getElementById('speech-voice');
+    var formatEl = document.getElementById('speech-format');
+    var speedEl = document.getElementById('speech-speed');
+    var speedVal = document.getElementById('speech-speed-value');
+    try {
+      var m = localStorage.getItem('aethermesh.audio.speech.model');
+      if (m && modelEl) modelEl.value = m;
+      var v = localStorage.getItem('aethermesh.audio.speech.voice');
+      if (v && voiceEl) voiceEl.value = v;
+      var f = localStorage.getItem('aethermesh.audio.speech.format');
+      if (f && formatEl) formatEl.value = f;
+      var s = localStorage.getItem('aethermesh.audio.speech.speed');
+      if (s && speedEl) { speedEl.value = s; if (speedVal) speedVal.textContent = Number(s).toFixed(2); }
+    } catch(e) {}
+    loadSpeechOptions();
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
+    initAudioTabs();
     loadTtsSettings();
     loadAsrSettings();
     loadVoices();
+    initSpeechDefaults();
   });
 })();

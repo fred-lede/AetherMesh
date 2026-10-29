@@ -1850,6 +1850,7 @@
     let mmProviders = { local: [], cloud: [] };
     let mmCapabilities = [];
     let mmEditingName = null;
+    let mmEditingProvider = null;
 
     function encodeModelName(name) {
       return encodeURIComponent(name).replace(/%2F/gi, '/');
@@ -1897,9 +1898,6 @@
         mmCapabilities = (await (await fetch('/api/models/capabilities')).json()).capabilities || [];
       } catch (e) {}
     }
-
-    let mmEditingName = null;
-    let mmEditingProvider = null;
 
     async function openModelDrawer(name = null, provider = null, preset = null) {
       await loadModelMeta();

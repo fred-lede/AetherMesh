@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 
@@ -27,6 +28,7 @@ AUDIO_CONTENT_TYPES = {
     "mp3": "audio/mpeg",
     "opus": "audio/opus",
     "flac": "audio/flac",
+    "aac": "audio/aac",
 }
 
 
@@ -51,8 +53,109 @@ def _truncate_for_tts(text: str, max_chars: int = 150) -> str:
     return truncated
 
 
+def _ollama_base_url() -> str:
+    try:
+        base = getattr(settings, "ollama_fallback_base_url", None)()
+        if base:
+            return str(base).rstrip("/")
+    except Exception:
+        pass
+    try:
+        base = getattr(settings, "ollama_default_base_url", None)
+        if callable(base):
+            base = base()
+        if base:
+            return str(base).rstrip("/")
+    except Exception:
+        pass
+    return "http://127.0.0.1:11434"
+
+
+def _resolve_ollama_url_for_model(model: str) -> str:
+    """Resolve Ollama endpoint URL for a model, routing to the correct cluster node."""
+    if model == "phonon":
+        try:
+            from runtime.orchestration.model_registry_store import get_models
+            for entry in get_models():
+                if entry.get("name") == "phonon":
+                    for binding in entry.get("worker_bindings", []):
+                        base_url = settings.worker_base_url(binding)
+                        if base_url:
+                            return base_url.rstrip("/")
+        except Exception:
+            pass
+    return _ollama_base_url()
+
+
+def _check_ollama_speech_supported(base_url: str) -> bool:
+    try:
+        r = httpx.get(f"{base_url}/api/tags", timeout=3)
+        models = [m.get("name", "") for m in r.json().get("models", [])]
+        return any(m.startswith("ollama/phonon") or m == "phonon" for m in models)
+    except Exception:
+        return False
+
+
+async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
+    model = payload.get("model") or "phonon"
+    if isinstance(model, str) and model.startswith("ollama/"):
+        model = model.split("/", 1)[1] or "phonon"
+    if model != "phonon":
+        model = "phonon"
+
+    text = payload.get("input", "") or ""
+    if not text:
+        raise HTTPException(status_code=422, detail="input is required")
+
+    voice = payload.get("voice") or "alloy"
+    response_format = (payload.get("response_format") or "wav").lower()
+    speed = payload.get("speed", 1.0)
+
+    if response_format not in ("wav", "pcm"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ollama phonon only supports 'wav' or 'pcm' response_format, got '{response_format}'",
+        )
+
+    base_url = _resolve_ollama_url_for_model(model)
+
+    body: dict[str, Any] = {
+        "model": model,
+        "input": text,
+        "voice": voice,
+        "response_format": response_format,
+    }
+    if speed is not None and speed != 1.0:
+        try:
+            body["speed"] = float(speed)
+        except Exception:
+            pass
+
+    url = f"{base_url}/v1/audio/speech"
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(url, json=body, headers=headers)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Ollama TTS request failed: {e}")
+
+    if resp.status_code >= 400:
+        detail = resp.text[:500]
+        raise HTTPException(status_code=resp.status_code, detail=detail or "Ollama TTS error")
+
+    content_type = resp.headers.get("content-type") or AUDIO_CONTENT_TYPES.get(response_format, "audio/wav")
+    return Response(content=resp.content, media_type=content_type)
+
+
 @router.post("/v1/audio/speech")
 async def create_speech(payload: dict[str, Any]) -> Response:
+    model = payload.get("model") or ""
+    if isinstance(model, str):
+        mlow = model.lower()
+        if mlow == "phonon" or mlow.endswith("/phonon"):
+            return await _create_speech_ollama(payload)
+
     text = _truncate_for_tts(payload.get("input", ""))
     voice = payload.get("voice", "")
     response_format = payload.get("response_format", "wav")

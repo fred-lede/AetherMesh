@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, quote as url_quote
 
 from dotenv import load_dotenv
 import requests
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Body, Query
 from sqlalchemy.orm import Session as SASession
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
@@ -34,6 +35,8 @@ from runtime.security.models import ApiKey, User
 from runtime.security.auth.password import hash_password
 from runtime.security.auth.jwt import create_access_token
 from runtime.observability import metrics_collector, graph_event_bus
+
+ROUTER_BASE_URL = os.environ.get("AIIH_ROUTER_URL") or "http://127.0.0.1:8001"
 
 LOGGER = logging.getLogger("aiih.dashboard")
 
@@ -938,6 +941,145 @@ def admin_audio_page(request: Request):
         "admin_audio.html",
         {"request": request, "user_role": "admin"},
     )
+
+
+@app.post("/v1/audio/speech")
+async def proxy_audio_speech(request: Request):
+    try:
+        body = await request.body()
+    except Exception:
+        body = b""
+    headers = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["content-type"] = content_type
+    auth = request.headers.get("authorization")
+    if auth:
+        headers["authorization"] = auth
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        headers["x-api-key"] = api_key
+    if not auth and not api_key:
+        env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            headers["x-api-key"] = env_key.strip().split(",")[0].strip()
+        elif hasattr(settings, "api_key") and settings.api_key:
+            headers["x-api-key"] = str(settings.api_key)
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(f"{ROUTER_BASE_URL}/v1/audio/speech", content=body, headers=headers)
+        media_type = resp.headers.get("content-type") or "application/octet-stream"
+        return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Audio proxy error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio proxy error: {e}")
+
+
+@app.api_route("/v1/voices", methods=["GET", "POST"])
+async def proxy_voices(request: Request):
+    try:
+        body = await request.body()
+    except Exception:
+        body = b""
+    headers = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["content-type"] = content_type
+    auth = request.headers.get("authorization")
+    if auth:
+        headers["authorization"] = auth
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        headers["x-api-key"] = api_key
+    if not auth and not api_key:
+        env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            headers["x-api-key"] = env_key.strip().split(",")[0].strip()
+        elif hasattr(settings, "api_key") and settings.api_key:
+            headers["x-api-key"] = str(settings.api_key)
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            if request.method == "GET":
+                resp = await client.get(f"{ROUTER_BASE_URL}/v1/voices", headers=headers)
+            else:
+                resp = await client.post(f"{ROUTER_BASE_URL}/v1/voices", content=body, headers=headers)
+        media_type = resp.headers.get("content-type") or "application/json"
+        return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Audio proxy error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio proxy error: {e}")
+
+
+@app.api_route("/v1/voices/{voice_id}", methods=["GET", "PATCH", "DELETE"])
+@app.api_route("/v1/voices/{voice_id}/{rest:path}", methods=["GET", "PATCH", "DELETE", "POST"])
+async def proxy_voices_detail(request: Request, voice_id: str, rest: str = ""):
+    try:
+        body = await request.body()
+    except Exception:
+        body = b""
+    headers = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["content-type"] = content_type
+    auth = request.headers.get("authorization")
+    if auth:
+        headers["authorization"] = auth
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        headers["x-api-key"] = api_key
+    if not auth and not api_key:
+        env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            headers["x-api-key"] = env_key.strip().split(",")[0].strip()
+        elif hasattr(settings, "api_key") and settings.api_key:
+            headers["x-api-key"] = str(settings.api_key)
+    path = f"/v1/voices/{voice_id}"
+    if rest:
+        path = f"{path}/{rest}"
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.request(request.method, f"{ROUTER_BASE_URL}{path}", content=body, headers=headers)
+        media_type = resp.headers.get("content-type") or "application/octet-stream"
+        return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Audio proxy error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio proxy error: {e}")
+
+
+@app.api_route("/v1/audio/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_audio_other(request: Request, path: str):
+    try:
+        body = await request.body()
+    except Exception:
+        body = b""
+    headers = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["content-type"] = content_type
+    auth = request.headers.get("authorization")
+    if auth:
+        headers["authorization"] = auth
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        headers["x-api-key"] = api_key
+    if not auth and not api_key:
+        env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            headers["x-api-key"] = env_key.strip().split(",")[0].strip()
+        elif hasattr(settings, "api_key") and settings.api_key:
+            headers["x-api-key"] = str(settings.api_key)
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.request(request.method, f"{ROUTER_BASE_URL}/v1/audio/{path}", content=body, headers=headers)
+        media_type = resp.headers.get("content-type") or "application/octet-stream"
+        return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Audio proxy error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio proxy error: {e}")
 
 
 def _build_overview() -> dict[str, Any]:
