@@ -350,8 +350,15 @@
         audioEl.src = url;
         audioEl.play().catch(function(){});
       }
-      if (msgEl) { msgEl.textContent = 'Done'; msgEl.className = 'speech-status ok'; }
-      if (statusEl) { statusEl.textContent = 'Generated ' + Math.round(blob.size/1024) + ' KB (' + contentType + ')'; statusEl.className = 'speech-status ok'; }
+      var fileName = 'speech_' + Date.now() + '.' + responseFormat;
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (msgEl) { msgEl.textContent = 'Done — ' + fileName; msgEl.className = 'speech-status ok'; }
+      if (statusEl) { statusEl.textContent = 'Generated ' + Math.round(blob.size/1024) + ' KB (' + contentType + ') · ' + fileName; statusEl.className = 'speech-status ok'; }
     } catch(error) {
       var errMsg = summarizeError ? summarizeError(error) : (error && error.message ? error.message : String(error));
       if (msgEl) { msgEl.textContent = 'Failed'; msgEl.className = 'speech-status bad'; }
