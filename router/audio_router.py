@@ -107,7 +107,7 @@ async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
     if not text:
         raise HTTPException(status_code=422, detail="input is required")
 
-    voice = payload.get("voice") or "alloy"
+    voice = payload.get("voice") or "Alfie"
     response_format = (payload.get("response_format") or "wav").lower()
     speed = payload.get("speed", 1.0)
 
