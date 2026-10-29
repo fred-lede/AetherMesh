@@ -262,3 +262,162 @@ class TestProviderRouterResilience:
                 pr._ADAPTER_RETRY_COOLDOWN = 30.0
         pr._tts_adapter = None
         pr._tts_adapter_failed_at = 0.0
+
+
+@pytest.fixture
+def ollama_app() -> FastAPI:
+    with patch("router.audio_router.settings.tts_enabled", True):
+        with patch("router.audio_router.get_adapter", return_value=MagicMock()):
+            from router.audio_router import router
+            app = FastAPI()
+            app.include_router(router)
+            yield app
+
+
+@pytest.fixture
+def ollama_client(ollama_app: FastAPI) -> TestClient:
+    return TestClient(ollama_app)
+
+
+PHONON_INFO = {"model": "phonon", "base_url": "http://192.168.1.100:11434"}
+
+
+class TestOllamaTtsDispatch:
+    def test_phonon_routes_to_ollama(self, ollama_client: TestClient) -> None:
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.content = b"fake-wav"
+        fake_resp.headers = {"content-type": "audio/wav"}
+
+        async def fake_post(self, url, json=None, headers=None):
+            return fake_resp
+
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            with patch("httpx.AsyncClient.post", fake_post):
+                resp = ollama_client.post("/v1/audio/speech", json={
+                    "model": "phonon",
+                    "input": "Hello",
+                })
+        assert resp.status_code == 200
+        assert resp.content == b"fake-wav"
+
+    def test_ollama_prefix_routes_to_ollama(self, ollama_client: TestClient) -> None:
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.content = b"fake-wav"
+        fake_resp.headers = {"content-type": "audio/wav"}
+
+        async def fake_post(self, url, json=None, headers=None):
+            assert url == "http://192.168.1.100:11434/v1/audio/speech"
+            return fake_resp
+
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            with patch("httpx.AsyncClient.post", fake_post):
+                resp = ollama_client.post("/v1/audio/speech", json={
+                    "model": "ollama/phonon",
+                    "input": "Hello",
+                })
+        assert resp.status_code == 200
+
+    def test_xtts_model_falls_through_to_adapter(self, ollama_client: TestClient) -> None:
+        adapter = MagicMock()
+        adapter.tts.return_value = b"xtts-bytes"
+        with patch("router.audio_router._ollama_tts_model_info", return_value=None):
+            with patch("router.audio_router.get_adapter", return_value=adapter):
+                resp = ollama_client.post("/v1/audio/speech", json={
+                    "model": "xtts-v2",
+                    "input": "Hello",
+                    "voice": "v1",
+                })
+        assert resp.status_code == 200
+        assert resp.content == b"xtts-bytes"
+        adapter.tts.assert_called_once()
+
+    def test_unsupported_format_rejected(self, ollama_client: TestClient) -> None:
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            resp = ollama_client.post("/v1/audio/speech", json={
+                "model": "phonon",
+                "input": "Hello",
+                "response_format": "mp3",
+            })
+        assert resp.status_code == 400
+        assert "wav" in resp.text
+
+    def test_voice_optional_in_body(self, ollama_client: TestClient) -> None:
+        captured: dict = {}
+
+        async def fake_post(self, url, json=None, headers=None):
+            captured["json"] = json
+            fake_resp = MagicMock()
+            fake_resp.status_code = 200
+            fake_resp.content = b"wav"
+            fake_resp.headers = {"content-type": "audio/wav"}
+            return fake_resp
+
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            with patch("httpx.AsyncClient.post", fake_post):
+                resp = ollama_client.post("/v1/audio/speech", json={
+                    "model": "phonon",
+                    "input": "Hello",
+                })
+        assert resp.status_code == 200
+        assert "voice" not in captured["json"]
+
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            with patch("httpx.AsyncClient.post", fake_post):
+                resp = ollama_client.post("/v1/audio/speech", json={
+                    "model": "phonon",
+                    "input": "Hello",
+                    "voice": "Alfie",
+                })
+        assert resp.status_code == 200
+        assert captured["json"]["voice"] == "Alfie"
+
+
+class TestTtsVoicesEndpoint:
+    def test_fallback_voices_when_node_unreachable(self, ollama_client: TestClient) -> None:
+        with patch("router.audio_router._ollama_tts_model_info", return_value=PHONON_INFO):
+            with patch("router.audio_router._ollama_tts_voices", return_value=([], "unknown")):
+                resp = ollama_client.get("/v1/tts/voices", params={"model": "phonon"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["model"] == "phonon"
+        assert data["voices"] == []
+        assert data["source"] == "unknown"
+
+    def test_unknown_model_returns_404(self, ollama_client: TestClient) -> None:
+        with patch("router.audio_router._ollama_tts_model_info", return_value=None):
+            resp = ollama_client.get("/v1/tts/voices", params={"model": "nonexistent"})
+        assert resp.status_code == 404
+
+    def test_voices_table_has_phonon(self) -> None:
+        from router.audio_router import OLLAMA_TTS_VOICE_FALLBACKS
+        assert "phonon" in OLLAMA_TTS_VOICE_FALLBACKS
+        assert "Alfie" in OLLAMA_TTS_VOICE_FALLBACKS["phonon"]
+
+
+class TestOllamaTtsModelInfo:
+    def test_xtts_v2_not_matched(self) -> None:
+        from router.audio_router import _ollama_tts_model_info
+        assert _ollama_tts_model_info("xtts-v2") is None
+
+    def test_xtts_not_matched(self) -> None:
+        from router.audio_router import _ollama_tts_model_info
+        assert _ollama_tts_model_info("xtts") is None
+
+    def test_phonon_matched(self) -> None:
+        from router.audio_router import _ollama_tts_model_info
+        info = _ollama_tts_model_info("phonon")
+        assert info is not None
+        assert info["model"] == "phonon"
+
+    def test_ollama_prefix_stripped(self) -> None:
+        from router.audio_router import _ollama_tts_model_info
+        info = _ollama_tts_model_info("ollama/phonon")
+        assert info is not None
+        assert info["model"] == "phonon"
+
+    def test_gemma4_not_matched_as_tts(self) -> None:
+        # gemma4 has 'audio' capability but is a chat model, not TTS
+        from router.audio_router import _ollama_tts_model_info
+        assert _ollama_tts_model_info("gemma4:e2b") is None

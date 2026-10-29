@@ -75,37 +75,95 @@ def _ollama_base_url() -> str:
     return "http://127.0.0.1:11434"
 
 
-def _resolve_ollama_url_for_model(model: str) -> str:
-    """Resolve Ollama endpoint URL for a model, routing to the correct cluster node."""
-    if model == "phonon":
-        try:
-            from runtime.orchestration.model_registry_store import get_models
-            for entry in get_models():
-                if entry.get("name") == "phonon":
-                    for binding in entry.get("worker_bindings", []):
-                        base_url = settings.worker_base_url(binding)
-                        if base_url:
-                            return base_url.rstrip("/")
-        except Exception:
-            pass
-    return _ollama_base_url()
+OLLAMA_TTS_VOICE_FALLBACKS: dict[str, list[str]] = {
+    "phonon": [
+        "Alfie", "Azgorath", "Bryony", "Captain Silas Blackwater", "Delia",
+        "Easton", "Edwin", "Elodie-Rose", "Everly", "Fairy Godmother",
+        "Fennick the Young Elf", "Freya", "Grub the Ogre", "Hadley", "Harper",
+        "Hugh", "Imogen", "Juniper", "Lottie", "Maeve", "Master Aldric",
+        "Micah", "Miles", "Morwenna of the Deep", "Old Mortlake", "Pippa",
+        "Preston", "Russell", "Sir Bramwell", "Spencer", "Teddy",
+        "The Snow Queen", "The Thing Under the Stairs", "Toby", "Trevor",
+        "Vyrmathrax the A",
+    ],
+}
 
 
-def _check_ollama_speech_supported(base_url: str) -> bool:
+_TTS_MODEL_KEYWORDS = ("phonon", "kokoro", "f5-tts", "f5tts", "voice", "speech")
+
+
+def _ollama_tts_model_info(model: str) -> dict[str, Any] | None:
+    """Match a model name against the registry; return {model, base_url} when it
+    is an Ollama model with TTS voices.
+
+    A model is treated as an Ollama TTS model when:
+      - provider is 'ollama', AND
+      - the name contains a well-known TTS model keyword, OR
+      - the OLLAMA_TTS_VOICE_FALLBACKS table has an entry for it.
+
+    This deliberately avoids using 'audio' capability, which is also set on
+    Ollama models that merely *accept* audio input (e.g. gemma4)."""
+    if not isinstance(model, str) or not model:
+        return None
     try:
-        r = httpx.get(f"{base_url}/api/tags", timeout=3)
-        models = [m.get("name", "") for m in r.json().get("models", [])]
-        return any(m.startswith("ollama/phonon") or m == "phonon" for m in models)
+        from runtime.orchestration.model_registry_store import get_models
+
+        mlow = model.lower()
+        mstripped = mlow.removeprefix("ollama/")
+        for entry in get_models():
+            if str(entry.get("provider", "")).lower() != "ollama":
+                continue
+            name = str(entry.get("name", ""))
+            if mlow != name.lower() and mstripped != name.lower():
+                continue
+            is_tts = any(kw in name.lower() for kw in _TTS_MODEL_KEYWORDS)
+            is_tts = is_tts or (name in OLLAMA_TTS_VOICE_FALLBACKS)
+            if not is_tts:
+                continue
+            for binding in entry.get("worker_bindings", []):
+                if not isinstance(binding, dict):
+                    continue
+                base_url = settings.worker_base_url(binding)
+                if base_url:
+                    return {"model": name, "base_url": base_url.rstrip("/")}
     except Exception:
-        return False
+        return None
+    return None
 
 
-async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
-    model = payload.get("model") or "phonon"
-    if isinstance(model, str) and model.startswith("ollama/"):
-        model = model.split("/", 1)[1] or "phonon"
-    if model != "phonon":
-        model = "phonon"
+def _ollama_tts_voices(model: str, base_url: str) -> tuple[list[str], str]:
+    """Best-effort voice list from the Ollama node, with hardcoded fallback."""
+    try:
+        r = httpx.get(f"{base_url}/v1/models/{model}", timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            candidates = []
+            for key in ("voices", "voice", "voice_options"):
+                if key in data:
+                    candidates = data[key]
+                    break
+            if isinstance(candidates, list) and candidates:
+                names = []
+                for item in candidates:
+                    if isinstance(item, dict):
+                        names.append(str(item.get("name") or item.get("id") or ""))
+                    else:
+                        names.append(str(item))
+                names = [n for n in names if n]
+                if names:
+                    return names, "ollama"
+    except Exception:
+        pass
+    for key in (model, model.lower()):
+        fallback = OLLAMA_TTS_VOICE_FALLBACKS.get(key)
+        if fallback:
+            return list(fallback), "fallback"
+    return [], "unknown"
+
+
+async def _create_speech_ollama(payload: dict[str, Any], info: dict[str, Any]) -> Response:
+    model = info["model"]
+    base_url = info["base_url"]
 
     text = payload.get("input", "") or ""
     max_chars = payload.get("max_chars")
@@ -115,32 +173,31 @@ async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
         except (TypeError, ValueError):
             pass
     else:
-        text = _truncate_for_tts(text)
+        text = _truncate_for_tts(text, 500)
     if not text:
         raise HTTPException(status_code=422, detail="input is required")
 
-    voice = payload.get("voice") or "Alfie"
+    voice = str(payload.get("voice") or "")
     response_format = (payload.get("response_format") or "wav").lower()
     speed = payload.get("speed", 1.0)
 
     if response_format not in ("wav", "pcm"):
         raise HTTPException(
             status_code=400,
-            detail=f"Ollama phonon only supports 'wav' or 'pcm' response_format, got '{response_format}'",
+            detail=f"Ollama TTS only supports 'wav' or 'pcm' response_format, got '{response_format}'",
         )
-
-    base_url = _resolve_ollama_url_for_model(model)
 
     body: dict[str, Any] = {
         "model": model,
         "input": text,
-        "voice": voice,
         "response_format": response_format,
     }
-    if speed is not None and speed != 1.0:
+    if voice:
+        body["voice"] = voice
+    if speed is not None:
         try:
             body["speed"] = float(speed)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
     url = f"{base_url}/v1/audio/speech"
@@ -160,13 +217,26 @@ async def _create_speech_ollama(payload: dict[str, Any]) -> Response:
     return Response(content=resp.content, media_type=content_type)
 
 
+@router.get("/v1/tts/voices")
+async def list_tts_voices(model: str = "") -> dict[str, Any]:
+    """List voices for an Ollama TTS model (registry-resolved node)."""
+    info = _ollama_tts_model_info(model) if model else None
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"No Ollama TTS model found for '{model}'")
+    voices, source = _ollama_tts_voices(info["model"], info["base_url"])
+    return {
+        "model": info["model"],
+        "voices": voices,
+        "source": source,
+    }
+
+
 @router.post("/v1/audio/speech")
 async def create_speech(payload: dict[str, Any]) -> Response:
     model = payload.get("model") or ""
-    if isinstance(model, str):
-        mlow = model.lower()
-        if mlow == "phonon" or mlow.endswith("/phonon"):
-            return await _create_speech_ollama(payload)
+    info = _ollama_tts_model_info(model)
+    if info is not None:
+        return await _create_speech_ollama(payload, info)
 
     text = _truncate_for_tts(payload.get("input", ""))
     voice = payload.get("voice", "")

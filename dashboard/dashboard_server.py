@@ -943,6 +943,34 @@ def admin_audio_page(request: Request):
     )
 
 
+@app.get("/v1/tts/voices")
+async def proxy_tts_voices(request: Request):
+    query_model = request.query_params.get("model", "")
+    headers = {}
+    auth = request.headers.get("authorization")
+    if auth:
+        headers["authorization"] = auth
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        headers["x-api-key"] = api_key
+    if not auth and not api_key:
+        env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            headers["x-api-key"] = env_key.strip().split(",")[0].strip()
+        elif hasattr(settings, "api_key") and settings.api_key:
+            headers["x-api-key"] = str(settings.api_key)
+    query = f"?model={url_quote(query_model)}"
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.get(f"{ROUTER_BASE_URL}/v1/tts/voices{query}", headers=headers)
+        media_type = resp.headers.get("content-type") or "application/json"
+        return Response(content=resp.content, status_code=resp.status_code, media_type=media_type)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"TTS voices proxy error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS voices proxy error: {e}")
+
+
 @app.post("/v1/audio/speech")
 async def proxy_audio_speech(request: Request):
     try:

@@ -242,19 +242,58 @@
     }
   };
 
-  var PHONON_VOICES = ['Alfie', 'Azgorath', 'Bryony', 'Captain Silas Blackwater', 'Delia', 'Easton', 'Edwin', 'Elodie-Rose', 'Everly', 'Fairy Godmother', 'Fennick the Young Elf', 'Freya', 'Grub the Ogre', 'Hadley', 'Harper', 'Hugh', 'Imogen', 'Juniper', 'Lottie', 'Maeve', 'Master Aldric', 'Micah', 'Miles', 'Morwenna of the Deep', 'Old Mortlake', 'Pippa', 'Preston', 'Russell', 'Sir Bramwell', 'Spencer', 'Teddy', 'The Snow Queen', 'The Thing Under the Stairs', 'Toby', 'Trevor', 'Vyrmathrax the A'];
+  var OLLAMA_TTS_MODEL_NAMES = [];
+  var OLLAMA_TTS_MODEL_SET = {};
+  var TTS_MODEL_KEYWORDS = ['phonon', 'kokoro', 'f5-tts', 'f5tts', 'voice', 'speech'];
 
-  function isPhononModel(model) {
-    return model === 'phonon' || model === 'ollama/phonon' || model.endsWith('/phonon');
+  function _isTtsName(name) {
+    var low = String(name || '').toLowerCase();
+    for (var i = 0; i < TTS_MODEL_KEYWORDS.length; i++) {
+      if (low.indexOf(TTS_MODEL_KEYWORDS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function loadOllamaTtsModels() {
+    return fetch('/api/models')
+      .then(function(resp) { return resp.ok ? resp.json() : null; })
+      .then(function(data) {
+        OLLAMA_TTS_MODEL_NAMES = [];
+        OLLAMA_TTS_MODEL_SET = {};
+        var models = (data && data.models) || [];
+        models.forEach(function(m) {
+          var provider = String(m.provider || '').toLowerCase();
+          var name = String(m.name || '');
+          if (provider === 'ollama' && _isTtsName(name)) {
+            OLLAMA_TTS_MODEL_NAMES.push(name);
+            OLLAMA_TTS_MODEL_SET[name] = true;
+            OLLAMA_TTS_MODEL_SET[name.toLowerCase()] = true;
+          }
+        });
+        OLLAMA_TTS_MODEL_NAMES.sort(function(a, b) {
+          if (_isTtsName(b) === _isTtsName(a)) return a.localeCompare(b);
+          return _isTtsName(b) ? -1 : 1;
+        });
+      })
+      .catch(function() {});
+  }
+
+  function isOllamaTtsModel(model) {
+    if (!model) return false;
+    var m = String(model);
+    var stripped = m.replace(/^ollama\//i, '');
+    if (OLLAMA_TTS_MODEL_SET[m] || OLLAMA_TTS_MODEL_SET[stripped]) return true;
+    if (OLLAMA_TTS_MODEL_SET[m.toLowerCase()] || OLLAMA_TTS_MODEL_SET[stripped.toLowerCase()]) return true;
+    return _isTtsName(stripped);
   }
 
   var MODEL_TEXT_LIMITS = {
-    phonon: 500,
+    default: 500,
     xtts: 150
   };
 
   function _effectiveLimit(model, maxCharsInput) {
-    var base = isPhononModel(model) ? MODEL_TEXT_LIMITS.phonon : MODEL_TEXT_LIMITS.xtts;
+    var base = isOllamaTtsModel(model) ? MODEL_TEXT_LIMITS.default : MODEL_TEXT_LIMITS.xtts;
     if (maxCharsInput) {
       var v = parseInt(maxCharsInput, 10);
       if (!isNaN(v) && v > 0) return v;
@@ -296,19 +335,50 @@
     loadSpeechOptions();
   }
 
+  function populateSpeechModelSelect(selected) {
+    var modelSelect = document.getElementById('speech-model');
+    if (!modelSelect) return;
+    var prev = selected || modelSelect.value;
+    modelSelect.innerHTML = '';
+    OLLAMA_TTS_MODEL_NAMES.forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name + ' (Ollama TTS)';
+      modelSelect.appendChild(opt);
+    });
+    var xttsOpt = document.createElement('option');
+    xttsOpt.value = 'xtts';
+    xttsOpt.textContent = 'xtts (local XTTS)';
+    modelSelect.appendChild(xttsOpt);
+    if (OLLAMA_TTS_MODEL_SET[prev] || OLLAMA_TTS_MODEL_SET[prev.toLowerCase()]) {
+      modelSelect.value = prev;
+    } else if (prev === 'xtts') {
+      modelSelect.value = 'xtts';
+    } else {
+      modelSelect.value = OLLAMA_TTS_MODEL_NAMES[0] || 'xtts';
+    }
+  }
+
   async function loadSpeechOptions() {
     var voiceSelect = document.getElementById('speech-voice');
     if (!voiceSelect) return;
     var modelEl = document.getElementById('speech-model');
     var model = modelEl ? modelEl.value : '';
     voiceSelect.innerHTML = '<option value="">Default</option>';
-    if (isPhononModel(model)) {
-      PHONON_VOICES.forEach(function(name) {
-        var opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        voiceSelect.appendChild(opt);
-      });
+    if (isOllamaTtsModel(model)) {
+      try {
+        var resp = await fetch('/v1/tts/voices?model=' + encodeURIComponent(model));
+        if (resp.ok) {
+          var data = await resp.json();
+          var voices = Array.isArray(data.voices) ? data.voices : [];
+          voices.forEach(function(name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            voiceSelect.appendChild(opt);
+          });
+        }
+      } catch(e) {}
       return;
     }
     try {
@@ -348,7 +418,7 @@
       if (statusEl) { statusEl.textContent = 'Missing input text.'; statusEl.className = 'speech-status warn'; }
       return;
     }
-    var model = modelEl ? modelEl.value : 'phonon';
+    var model = modelEl ? modelEl.value : '';
     var voice = voiceEl ? voiceEl.value : '';
     var responseFormat = formatEl ? formatEl.value : 'mp3';
     var speed = speedEl ? Number(speedEl.value) : 1.0;
@@ -423,18 +493,29 @@
     var formatEl = document.getElementById('speech-format');
     var speedEl = document.getElementById('speech-speed');
     var speedVal = document.getElementById('speech-speed-value');
-    try {
-      var m = localStorage.getItem('aethermesh.audio.speech.model');
-      if (m && modelEl) modelEl.value = m;
-      var v = localStorage.getItem('aethermesh.audio.speech.voice');
+    loadOllamaTtsModels().then(function() {
+      populateSpeechModelSelect(null);
+      var m = '';
+      var v = '';
+      var f = '';
+      var s = '';
+      try {
+        m = localStorage.getItem('aethermesh.audio.speech.model') || '';
+        v = localStorage.getItem('aethermesh.audio.speech.voice') || '';
+        f = localStorage.getItem('aethermesh.audio.speech.format') || '';
+        s = localStorage.getItem('aethermesh.audio.speech.speed') || '';
+      } catch(e) {}
+      if (m && OLLAMA_TTS_MODEL_SET[m]) {
+        modelEl.value = m;
+      } else if (m === 'xtts') {
+        modelEl.value = 'xtts';
+      }
       if (v && voiceEl) voiceEl.value = v;
-      var f = localStorage.getItem('aethermesh.audio.speech.format');
       if (f && formatEl) formatEl.value = f;
-      var s = localStorage.getItem('aethermesh.audio.speech.speed');
       if (s && speedEl) { speedEl.value = s; if (speedVal) speedVal.textContent = Number(s).toFixed(2); }
-    } catch(e) {}
-    updateCharLimit();
-    loadSpeechOptions();
+      updateCharLimit();
+      loadSpeechOptions();
+    });
   }
 
   document.addEventListener('DOMContentLoaded', function() {
