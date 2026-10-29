@@ -394,7 +394,7 @@
               <div class="speech-row">
                 <div class="speech-row-label">Model</div>
                 <div class="speech-inline">
-                  <select id="speech-model" style="min-width:220px;">
+                  <select id="speech-model" style="min-width:220px;" onchange="window.onSpeechModelChanged()">
                     <option value="phonon">phonon (Ollama)</option>
                     <option value="ollama/phonon">ollama/phonon</option>
                     <option value="xtts">xtts (local)</option>

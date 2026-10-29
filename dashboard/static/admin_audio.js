@@ -242,15 +242,31 @@
     }
   };
 
+  var PHONON_VOICES = ['Alfie', 'Azgorath', 'Bryony', 'Captain Silas Blackwater', 'Delia', 'Easton', 'Edwin', 'Elodie-Rose', 'Everly', 'Fairy Godmother', 'Fennick the Young Elf', 'Freya', 'Grub the Ogre', 'Hadley', 'Harper', 'Hugh', 'Imogen', 'Juniper', 'Lottie', 'Maeve', 'Master Aldric', 'Micah', 'Miles', 'Morwenna of the Deep', 'Old Mortlake', 'Pippa', 'Preston', 'Russell', 'Sir Bramwell', 'Spencer', 'Teddy', 'The Snow Queen', 'The Thing Under the Stairs', 'Toby', 'Trevor', 'Vyrmathrax the A'];
+
+  function isPhononModel(model) {
+    return model === 'phonon' || model === 'ollama/phonon' || model.endsWith('/phonon');
+  }
+
   async function loadSpeechOptions() {
     var voiceSelect = document.getElementById('speech-voice');
     if (!voiceSelect) return;
+    var modelEl = document.getElementById('speech-model');
+    var model = modelEl ? modelEl.value : '';
+    voiceSelect.innerHTML = '<option value="">Default</option>';
+    if (isPhononModel(model)) {
+      PHONON_VOICES.forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        voiceSelect.appendChild(opt);
+      });
+      return;
+    }
     try {
       var resp = await fetch('/api/audio/voices');
       if (!resp.ok) return;
       var voices = await resp.json();
-      var current = voiceSelect.value;
-      voiceSelect.innerHTML = '<option value="">Default</option>';
       if (Array.isArray(voices)) {
         voices.forEach(function(v) {
           var opt = document.createElement('option');
@@ -261,13 +277,20 @@
           voiceSelect.appendChild(opt);
         });
       }
-      if (current && voiceSelect.querySelector('option[value="' + escapeHtml(current).replace(/"/g, '\\"') + '"]')) {
-        voiceSelect.value = current;
-      }
     } catch(e) {}
   }
 
   window.loadSpeechOptions = loadSpeechOptions;
+
+  function onSpeechModelChanged() {
+    var modelEl = document.getElementById('speech-model');
+    var voiceEl = document.getElementById('speech-voice');
+    if (!modelEl || !voiceEl) return;
+    voiceEl.value = '';
+    loadSpeechOptions();
+  }
+
+  window.onSpeechModelChanged = onSpeechModelChanged;
 
   window.generateSpeech = async function() {
     var textEl = document.getElementById('speech-input');
