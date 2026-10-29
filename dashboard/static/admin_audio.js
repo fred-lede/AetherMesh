@@ -330,16 +330,6 @@
 
   window.loadSpeechOptions = loadSpeechOptions;
 
-  function onSpeechModelChanged() {
-    var modelEl = document.getElementById('speech-model');
-    var voiceEl = document.getElementById('speech-voice');
-    if (!modelEl || !voiceEl) return;
-    voiceEl.value = '';
-    loadSpeechOptions();
-  }
-
-  window.onSpeechModelChanged = onSpeechModelChanged;
-
   window.generateSpeech = async function() {
     var textEl = document.getElementById('speech-input');
     var modelEl = document.getElementById('speech-model');
@@ -404,7 +394,7 @@
       var fileName = 'speech_' + Date.now() + '.' + responseFormat;
       var downloadBtn = document.getElementById('btn-download-speech');
       if (downloadBtn) {
-        downloadBtn.style.display = '';
+        downloadBtn.style.display = 'inline-block';
         downloadBtn.onclick = function() {
           var a = document.createElement('a');
           a.href = url;
