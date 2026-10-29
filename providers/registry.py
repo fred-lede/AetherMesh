@@ -24,6 +24,7 @@ class Capability(str, Enum):
     STREAMING = "streaming"
     DOCUMENTS = "documents"
     DECISION = "decision"
+    TTS = "tts"
 
 
 CANONICAL_CAPABILITIES: tuple[str, ...] = tuple(c.value for c in Capability)
@@ -58,6 +59,8 @@ CAPABILITY_ALIASES: dict[str, Capability] = {
     "file": Capability.DOCUMENTS,
     "files": Capability.DOCUMENTS,
     "decision": Capability.DECISION,
+    "tts": Capability.TTS,
+    "speech": Capability.TTS,
 }
 
 

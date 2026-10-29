@@ -1367,6 +1367,7 @@ _CAPABILITY_GROUPS: list[dict[str, str]] = [
     {"value": "embeddings", "label": "Embedding", "group": "other"},
     {"value": "rerank", "label": "Reranker", "group": "other"},
     {"value": "decision", "label": "Decision", "group": "other"},
+    {"value": "tts", "label": "TTS", "group": "modality"},
 ]
 
 _MODEL_LOCAL_PROVIDERS = ["ollama", "xtts", "llama-server", "oMLX", "LM-Studio"]

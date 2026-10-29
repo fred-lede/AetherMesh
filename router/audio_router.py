@@ -98,6 +98,7 @@ def _ollama_tts_model_info(model: str) -> dict[str, Any] | None:
 
     A model is treated as an Ollama TTS model when:
       - provider is 'ollama', AND
+      - the model has the 'tts' capability, OR
       - the name contains a well-known TTS model keyword, OR
       - the OLLAMA_TTS_VOICE_FALLBACKS table has an entry for it.
 
@@ -116,8 +117,12 @@ def _ollama_tts_model_info(model: str) -> dict[str, Any] | None:
             name = str(entry.get("name", ""))
             if mlow != name.lower() and mstripped != name.lower():
                 continue
-            is_tts = any(kw in name.lower() for kw in _TTS_MODEL_KEYWORDS)
-            is_tts = is_tts or (name in OLLAMA_TTS_VOICE_FALLBACKS)
+            caps = {str(c).lower() for c in (entry.get("capabilities") or [])}
+            is_tts = "tts" in caps
+            if not is_tts:
+                is_tts = any(kw in name.lower() for kw in _TTS_MODEL_KEYWORDS)
+            if not is_tts:
+                is_tts = name in OLLAMA_TTS_VOICE_FALLBACKS
             if not is_tts:
                 continue
             for binding in entry.get("worker_bindings", []):

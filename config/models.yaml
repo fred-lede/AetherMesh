@@ -661,7 +661,21 @@ models:
   - node_id: node-mac-01
     port: 11434
   capabilities:
+  - tts
   - audio
   - chat
   estimated_vram_mb: null
   context_length: 8000
+- name: lfm3-audio:2b
+  provider: ollama
+  worker_bindings:
+  - node_id: node-01
+    port: 11435
+  capabilities:
+  - tts
+  - audio
+  - chat
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 125000

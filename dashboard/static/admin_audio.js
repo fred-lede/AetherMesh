@@ -244,15 +244,6 @@
 
   var OLLAMA_TTS_MODEL_NAMES = [];
   var OLLAMA_TTS_MODEL_SET = {};
-  var TTS_MODEL_KEYWORDS = ['phonon', 'kokoro', 'f5-tts', 'f5tts', 'voice', 'speech'];
-
-  function _isTtsName(name) {
-    var low = String(name || '').toLowerCase();
-    for (var i = 0; i < TTS_MODEL_KEYWORDS.length; i++) {
-      if (low.indexOf(TTS_MODEL_KEYWORDS[i]) !== -1) return true;
-    }
-    return false;
-  }
 
   function loadOllamaTtsModels() {
     return fetch('/api/models')
@@ -263,17 +254,14 @@
         var models = (data && data.models) || [];
         models.forEach(function(m) {
           var provider = String(m.provider || '').toLowerCase();
-          var name = String(m.name || '');
-          if (provider === 'ollama' && _isTtsName(name)) {
-            OLLAMA_TTS_MODEL_NAMES.push(name);
-            OLLAMA_TTS_MODEL_SET[name] = true;
-            OLLAMA_TTS_MODEL_SET[name.toLowerCase()] = true;
+          var caps = (m.capabilities || []).map(function(c) { return String(c).toLowerCase(); });
+          if (provider === 'ollama' && caps.indexOf('tts') !== -1) {
+            OLLAMA_TTS_MODEL_NAMES.push(m.name);
+            OLLAMA_TTS_MODEL_SET[m.name] = true;
+            OLLAMA_TTS_MODEL_SET[m.name.toLowerCase()] = true;
           }
         });
-        OLLAMA_TTS_MODEL_NAMES.sort(function(a, b) {
-          if (_isTtsName(b) === _isTtsName(a)) return a.localeCompare(b);
-          return _isTtsName(b) ? -1 : 1;
-        });
+        OLLAMA_TTS_MODEL_NAMES.sort(function(a, b) { return a.localeCompare(b); });
       })
       .catch(function() {});
   }
@@ -284,7 +272,7 @@
     var stripped = m.replace(/^ollama\//i, '');
     if (OLLAMA_TTS_MODEL_SET[m] || OLLAMA_TTS_MODEL_SET[stripped]) return true;
     if (OLLAMA_TTS_MODEL_SET[m.toLowerCase()] || OLLAMA_TTS_MODEL_SET[stripped.toLowerCase()]) return true;
-    return _isTtsName(stripped);
+    return false;
   }
 
   var MODEL_TEXT_LIMITS = {
