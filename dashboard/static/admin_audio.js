@@ -248,6 +248,41 @@
     return model === 'phonon' || model === 'ollama/phonon' || model.endsWith('/phonon');
   }
 
+  var MODEL_TEXT_LIMITS = {
+    phonon: 500,
+    xtts: 150
+  };
+
+  function onSpeechInputChanged() {
+    var inputEl = document.getElementById('speech-input');
+    var countEl = document.getElementById('speech-char-count');
+    var modelEl = document.getElementById('speech-model');
+    if (!inputEl || !countEl) return;
+    var model = modelEl ? modelEl.value : '';
+    var limit = isPhononModel(model) ? MODEL_TEXT_LIMITS.phonon : MODEL_TEXT_LIMITS.xtts;
+    var len = (inputEl.value || '').length;
+    countEl.textContent = len + ' / ' + limit + (limit ? ' chars' : '');
+    countEl.style.color = len > limit ? 'var(--danger, #f87171)' : 'var(--muted)';
+  }
+
+  function updateCharLimit() {
+    var modelEl = document.getElementById('speech-model');
+    var inputEl = document.getElementById('speech-input');
+    if (!modelEl || !inputEl) return;
+    onSpeechInputChanged();
+  }
+
+  window.onSpeechInputChanged = onSpeechInputChanged;
+
+  function onSpeechModelChanged() {
+    var modelEl = document.getElementById('speech-model');
+    var voiceEl = document.getElementById('speech-voice');
+    if (!modelEl || !voiceEl) return;
+    voiceEl.value = '';
+    updateCharLimit();
+    loadSpeechOptions();
+  }
+
   async function loadSpeechOptions() {
     var voiceSelect = document.getElementById('speech-voice');
     if (!voiceSelect) return;
@@ -384,6 +419,7 @@
       var s = localStorage.getItem('aethermesh.audio.speech.speed');
       if (s && speedEl) { speedEl.value = s; if (speedVal) speedVal.textContent = Number(s).toFixed(2); }
     } catch(e) {}
+    updateCharLimit();
     loadSpeechOptions();
   }
 

@@ -389,7 +389,8 @@
             <form class="speech-form" id="speech-form" onsubmit="event.preventDefault(); window.generateSpeech();">
               <div>
                 <div class="speech-row-label" style="margin-bottom:8px;">Input Text</div>
-                <textarea id="speech-input" class="speech-textarea" placeholder="Enter text to synthesize... (up to model limits)" spellcheck="false"></textarea>
+                <textarea id="speech-input" class="speech-textarea" placeholder="Enter text to synthesize... (up to model limits)" spellcheck="false" oninput="window.onSpeechInputChanged()"></textarea>
+                <div id="speech-char-count" style="font-size:0.8rem;color:var(--muted);margin-top:4px;">0 / —</div>
               </div>
               <div class="speech-row">
                 <div class="speech-row-label">Model</div>
