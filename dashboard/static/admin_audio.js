@@ -245,6 +245,18 @@
   var OLLAMA_TTS_MODEL_NAMES = [];
   var OLLAMA_TTS_MODEL_SET = {};
   var _modelsCache = null;
+  var _lastSpeechUrl = '';
+  var _lastSpeechFileName = 'speech.wav';
+
+  window.downloadSpeech = function() {
+    if (!_lastSpeechUrl) return;
+    var a = document.createElement('a');
+    a.href = _lastSpeechUrl;
+    a.download = _lastSpeechFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   function _isTtsModelName(name) {
     // keyword-based fallback for models not yet in /api/models
@@ -350,6 +362,8 @@
     loadSpeechOptions();
   }
 
+  window.onSpeechModelChanged = onSpeechModelChanged;
+
   function populateSpeechModelSelect(selected) {
     var modelSelect = document.getElementById('speech-model');
     if (!modelSelect) return;
@@ -374,17 +388,21 @@
     }
   }
 
+  var _voicesFetchGen = 0;
   async function loadSpeechOptions() {
     var voiceSelect = document.getElementById('speech-voice');
     if (!voiceSelect) return;
     var modelEl = document.getElementById('speech-model');
     var model = modelEl ? modelEl.value : '';
+    var gen = ++_voicesFetchGen;
     voiceSelect.innerHTML = '<option value="">Default</option>';
     if (isOllamaTtsModel(model)) {
       try {
         var resp = await fetch('/v1/tts/voices?model=' + encodeURIComponent(model));
+        if (gen !== _voicesFetchGen) return;
         if (resp.ok) {
           var data = await resp.json();
+          if (gen !== _voicesFetchGen) return;
           var voices = Array.isArray(data.voices) ? data.voices : [];
           voices.forEach(function(name) {
             var opt = document.createElement('option');
@@ -398,8 +416,10 @@
     }
     try {
       var resp = await fetch('/api/audio/voices');
+      if (gen !== _voicesFetchGen) return;
       if (!resp.ok) return;
       var voices = await resp.json();
+      if (gen !== _voicesFetchGen) return;
       if (Array.isArray(voices)) {
         voices.forEach(function(v) {
           var opt = document.createElement('option');
@@ -477,17 +497,11 @@
         audioEl.play().catch(function(){});
       }
       var fileName = 'speech_' + Date.now() + '.' + responseFormat;
+      _lastSpeechUrl = url;
+      _lastSpeechFileName = fileName;
       var downloadBtn = document.getElementById('btn-download-speech');
       if (downloadBtn) {
         downloadBtn.style.display = 'inline-block';
-        downloadBtn.onclick = function() {
-          var a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        };
       }
       if (msgEl) { msgEl.textContent = 'Done'; msgEl.className = 'speech-status ok'; }
       if (statusEl) { statusEl.textContent = 'Generated ' + Math.round(blob.size/1024) + ' KB (' + contentType + ')'; statusEl.className = 'speech-status ok'; }
