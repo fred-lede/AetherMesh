@@ -244,11 +244,23 @@
 
   var OLLAMA_TTS_MODEL_NAMES = [];
   var OLLAMA_TTS_MODEL_SET = {};
+  var _modelsCache = null;
+
+  function _isTtsModelName(name) {
+    // keyword-based fallback for models not yet in /api/models
+    var low = String(name || '').toLowerCase();
+    var keywords = ['phonon', 'kokoro', 'f5-tts', 'f5tts', 'voice', 'speech'];
+    for (var i = 0; i < keywords.length; i++) {
+      if (low.indexOf(keywords[i]) !== -1) return true;
+    }
+    return false;
+  }
 
   function loadOllamaTtsModels() {
     return fetch('/api/models')
       .then(function(resp) { return resp.ok ? resp.json() : null; })
       .then(function(data) {
+        _modelsCache = data;
         OLLAMA_TTS_MODEL_NAMES = [];
         OLLAMA_TTS_MODEL_SET = {};
         var models = (data && data.models) || [];
@@ -270,9 +282,24 @@
     if (!model) return false;
     var m = String(model);
     var stripped = m.replace(/^ollama\//i, '');
+    // 1. check pre-loaded set
     if (OLLAMA_TTS_MODEL_SET[m] || OLLAMA_TTS_MODEL_SET[stripped]) return true;
     if (OLLAMA_TTS_MODEL_SET[m.toLowerCase()] || OLLAMA_TTS_MODEL_SET[stripped.toLowerCase()]) return true;
-    return false;
+    // 2. check live cache
+    if (_modelsCache && Array.isArray(_modelsCache.models)) {
+      for (var i = 0; i < _modelsCache.models.length; i++) {
+        var entry = _modelsCache.models[i];
+        var provider = String(entry.provider || '').toLowerCase();
+        var caps = (entry.capabilities || []).map(function(c) { return String(c).toLowerCase(); });
+        var entryName = String(entry.name || '').toLowerCase();
+        if (provider === 'ollama' && caps.indexOf('tts') !== -1 &&
+            (entryName === m.toLowerCase() || entryName === stripped.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+    // 3. keyword fallback
+    return _isTtsModelName(stripped);
   }
 
   var MODEL_TEXT_LIMITS = {
@@ -493,10 +520,8 @@
         f = localStorage.getItem('aethermesh.audio.speech.format') || '';
         s = localStorage.getItem('aethermesh.audio.speech.speed') || '';
       } catch(e) {}
-      if (m && OLLAMA_TTS_MODEL_SET[m]) {
+      if (m && (isOllamaTtsModel(m) || m === 'xtts')) {
         modelEl.value = m;
-      } else if (m === 'xtts') {
-        modelEl.value = 'xtts';
       }
       if (v && voiceEl) voiceEl.value = v;
       if (f && formatEl) formatEl.value = f;
