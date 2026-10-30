@@ -6,7 +6,7 @@
 # `llama-server --rerank` process. This script launches it.
 #
 # Usage:
-#   ./scripts/start-rerank-server.sh [model_name] [port]
+#   ./scripts/start-rerank-server.sh [model_name] [port] [gpu]
 #
 # Examples:
 #   ./scripts/start-rerank-server.sh                        # bge-reranker-v2-m3, port 11436
@@ -14,6 +14,9 @@
 #   ./scripts/start-rerank-server.sh qwen3-reranker-0.6b 11437
 #
 # The model name selects a GGUF blob from the Ollama model store.
+# [gpu] is the physical CUDA ordinal (default 1); it is exported as
+# CUDA_VISIBLE_DEVICES so the other GPUs stay hidden from the process.
+# AIIH_RERANK_CUDA_DEVICES overrides it; AIIH_RERANK_DEVICE is deprecated.
 
 set -euo pipefail
 
@@ -63,20 +66,19 @@ fi
 PORT="${2:-11436}"
 HOST="${AIIH_RERANK_HOST:-127.0.0.1}"
 CTX_SIZE="${AIIH_RERANK_CTX_SIZE:-8192}"
-# GPU to use for the reranker.
-#   - macOS (Metal): single GPU, always -mg 0
-#   - Windows/Linux (CUDA): AIIH_RERANK_DEVICE = CUDA ordinal (default 1)
-OS_NAME="$(uname -s)"
-DEVICE_ARGS=()
-if [[ -n "${AIIH_RERANK_DEVICE:-}" ]]; then
-  DEVICE_ARGS=(-mg "$AIIH_RERANK_DEVICE")
-elif [[ "$OS_NAME" == "Darwin" ]]; then
-  DEVICE_ARGS=(-mg 0)
-else
-  DEVICE_ARGS=(-mg 1)
-fi
 
-echo "Starting reranker on $HOST:$PORT (ctx=$CTX_SIZE) with ${DEVICE_ARGS[*]}..."
+# GPU selection: physical CUDA ordinal to run on.
+#   AIIH_RERANK_CUDA_DEVICES  (primary)
+#   AIIH_RERANK_DEVICE        (deprecated alias)
+#   third CLI argument        (resolved by the AetherMesh launcher)
+#   default                   1
+GPU="${AIIH_RERANK_CUDA_DEVICES:-${AIIH_RERANK_DEVICE:-${3:-1}}}"
+
+# Only the selected GPU is visible to the process. llama-server's -mg must
+# therefore be 0: with a single visible device that is the only valid index.
+export CUDA_VISIBLE_DEVICES="$GPU"
+
+echo "Starting reranker on $HOST:$PORT (ctx=$CTX_SIZE, gpu=$GPU, CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES)..."
 exec "$LLAMA_SERVER" \
   --model "$BLOB_DIR/$BLOB" \
   --rerank \
@@ -84,4 +86,4 @@ exec "$LLAMA_SERVER" \
   --port "$PORT" \
   --ctx-size "$CTX_SIZE" \
   -ngl 99 \
-  "${DEVICE_ARGS[@]}"
+  -mg 0

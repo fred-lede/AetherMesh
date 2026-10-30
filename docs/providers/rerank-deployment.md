@@ -64,16 +64,51 @@ Ollama 隨附的 `llama-server` 在 NVIDIA 平台是 **CPU-only 建置**，`-mg 
 
 #### 選 GPU（Windows 與 Linux 通用）
 
-用 `AIIH_RERANK_DEVICE`（CUDA ordinal，傳 `-mg N`）選 GPU：
+reranker 跑在**實體 CUDA ordinal** 上：
 
-- `AIIH_RERANK_DEVICE=0`：第一張離散 GPU
-- `AIIH_RERANK_DEVICE=1`：第二張離散 GPU（預設）
+- `0`：第一張離散 GPU（例如 RTX 5090）
+- `1`：第二張離散 GPU（例如 RTX 4070 Ti SUPER，**預設**）
 
-在 bash 設定：`export AIIH_RERANK_DEVICE=1`；在 cmd 設定：`set AIIH_RERANK_DEVICE=1`。亦可寫入 `scripts/start-rerank-server.sh`（Linux/macOS）或 `.bat`（Windows）。
+**解析優先序**（由上到下，先命中者勝出）：
+
+1. `AIIH_RERANK_CUDA_DEVICES` 環境變數（主設定）
+2. `AIIH_RERANK_DEVICE`（**已棄用**的別名，為相容舊設定保留）
+3. `config/cluster.yaml` 中 `local_workers[]` 對應 port 的 `gpu_id`
+4. 預設 `1`
+
+在 bash 設定：`export AIIH_RERANK_CUDA_DEVICES=1`；在 cmd 設定：`set AIIH_RERANK_CUDA_DEVICES=1`。
+若要持久化到 Windows，請用 `setx AIIH_RERANK_CUDA_DEVICES 1`（重開 cmd 生效）。
+
+> **注意 `.env` 的影響**：launcher 會用 `load_dotenv(..., override=True)` 載入 `.env`，
+> 因此**若 `.env` 內含 `AIIH_RERANK_CUDA_DEVICES`，它會覆蓋 shell 中的同名變數**。
+> 想讓 shell / 系統層級的環境變數優先，請勿把該變數寫進 `.env`（只需寫在
+> `config/cluster.yaml`，由第 3 級規則接手）。
+
+`config/cluster.yaml` 的對應設定：
+
+```yaml
+local_workers:
+  - port: 11436
+    gpu_id: 1        # 實體 CUDA ordinal；1 = RTX 4070 Ti SUPER
+    role: rerank
+```
+
+> **重要**：腳本把解析結果寫入 `CUDA_VISIBLE_DEVICES`，因此**只有被選中的那張卡對進程可見**，其他 GPU 完全不會被初始化。
+> 僅靠 llama-server 的 `-mg N` **無法**隔離 GPU —— llama.cpp 仍會在所有可見裝置上初始化 CUDA，在多卡機器上可能導致載入失敗或佔用其他卡的 VRAM。
+> 由於設定 `CUDA_VISIBLE_DEVICES` 後進程只看得到一張卡（內部編號為 `0`），腳本固定使用 `-mg 0`。
+
+手動啟動時也可直接用第三個位置參數指定：
+
+```bash
+./scripts/start-rerank-server.sh bge-reranker-v2-m3 11436 0   # 指定第一張卡
+cmd /c scripts\start-rerank-server.bat bge-reranker-v2-m3 11436 0
+```
+
+環境變數仍優先於位置參數。
 
 ### macOS (Metal)
 
-Ollama 附帶的 macOS `llama-server` 已是 Metal 版，直接用即可，無需 `AIIH_LLAMA_SERVER`。Apple Silicon 只有單一 GPU，腳本自動用 `-mg 0`。
+Ollama 附帶的 macOS `llama-server` 已是 Metal 版，直接用即可，無需 `AIIH_LLAMA_SERVER`。Apple Silicon 只有單一 GPU，`CUDA_VISIBLE_DEVICES` 對 Metal 無效，腳本仍使用 `-mg 0`。
 
 ```bash
 # 直接使用 Ollama 附帶的 Metal 版

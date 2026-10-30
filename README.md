@@ -1008,8 +1008,8 @@ the same debug and provider variables.
     node-01: 192.168.1.200     # IP the worker agent binds to
     node-p40-01: 192.168.1.123
   ```
-  `local_workers` defines which Ollama ports run on this machine, their GPU
-  assignment, and intended workload role. Each port runs an independent
+  `local_workers` defines which local ports run on this machine, their GPU
+  assignment, and intended workload role. Ollama ports run one independent
   `ollama serve` process pinned to a specific GPU:
   ```yaml
   local_workers:
@@ -1020,17 +1020,19 @@ the same debug and provider variables.
       gpu_id: 1
       role: embeddings    # Embeddings, vision, lightweight models
     - port: 11436
-      gpu_id: 0
-      role: reasoning     # Long-context / chain-of-thought models
+      gpu_id: 1
+      role: rerank        # Standalone llama-server --rerank (not Ollama)
     - port: 11437
       gpu_id: 1
       role: agents        # Agent / tool-calling tasks
   ```
-  Start them with:
+  `gpu_id` is the physical CUDA ordinal. For the rerank port it is the
+  default that `AIIH_RERANK_CUDA_DEVICES` overrides; see
+  `docs/providers/rerank-deployment.md`.
+  Start the Ollama ports with:
   ```bash
-  # GPU 0 (ports 11434, 11436)
+  # GPU 0 (port 11434)
   CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11434 ollama serve &
-  CUDA_VISIBLE_DEVICES=0 OLLAMA_HOST=0.0.0.0:11436 ollama serve &
 
   # GPU 1 (ports 11435, 11437)
   CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=0.0.0.0:11435 ollama serve &

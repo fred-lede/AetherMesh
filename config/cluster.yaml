@@ -16,8 +16,8 @@ local_workers:
     gpu_id: 1
     role: embeddings
   - port: 11436
-    gpu_id: 0
-    role: reasoning
+    gpu_id: 1
+    role: rerank
   - port: 11437
     gpu_id: 1
     role: agents

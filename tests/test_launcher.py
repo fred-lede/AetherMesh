@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -108,6 +109,103 @@ class TestIntentionalFlag:
         sp.start()
         assert sp.intentionally_stopped is False
         sp.stop(0.1)
+
+
+class TestRerankGpuResolution:
+    def _cluster_file(self, tmp_path, body: str):
+        path = tmp_path / "cluster.yaml"
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def _clear_env(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIIH_RERANK_CUDA_DEVICES", raising=False)
+        monkeypatch.delenv("AIIH_RERANK_DEVICE", raising=False)
+
+    def test_env_var_wins_over_cluster_yaml(self, tmp_path, monkeypatch) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11436\n    gpu_id: 0\n    role: rerank\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        monkeypatch.setenv("AIIH_RERANK_CUDA_DEVICES", "1")
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_deprecated_alias_wins_over_cluster_yaml(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11436\n    gpu_id: 0\n    role: rerank\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        monkeypatch.setenv("AIIH_RERANK_DEVICE", "1")
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_cluster_yaml_used_when_env_unset(self, tmp_path, monkeypatch) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11436\n    gpu_id: 1\n    role: rerank\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_cluster_yaml_gpu_zero_is_honoured(self, tmp_path, monkeypatch) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11436\n    gpu_id: 0\n    role: rerank\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "0"
+
+    def test_cluster_entry_for_a_different_port_is_ignored(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11434\n    gpu_id: 0\n    role: coding\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_falls_back_to_default_when_nothing_configured(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        cluster = self._cluster_file(tmp_path, "local_workers: []\n")
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_falls_back_to_default_when_cluster_file_missing(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            launcher_mod, "_RERANK_CLUSTER_PATH", Path("/nonexistent/cluster.yaml")
+        )
+        self._clear_env(monkeypatch)
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-1] == "1"
+
+    def test_gpu_is_passed_as_third_argument(self, tmp_path, monkeypatch) -> None:
+        cluster = self._cluster_file(
+            tmp_path,
+            "local_workers:\n  - port: 11436\n    gpu_id: 1\n    role: rerank\n",
+        )
+        monkeypatch.setattr(launcher_mod, "_RERANK_CLUSTER_PATH", cluster)
+        self._clear_env(monkeypatch)
+        monkeypatch.setenv("AIIH_RERANK_CUDA_DEVICES", "1")
+        cmd = launcher_mod._rerank_command()
+        assert cmd[-3] == "bge-reranker-v2-m3"
+        assert cmd[-2] == "11436"
+        assert cmd[-1] == "1"
 
 
 class TestSupervisorSentryStaleness:

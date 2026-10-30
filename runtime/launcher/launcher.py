@@ -41,6 +41,10 @@ def _child_creation_flags() -> int:
 
 _CHILD_CREATION_FLAGS = _child_creation_flags()
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_RERANK_CLUSTER_PATH = _REPO_ROOT / "config" / "cluster.yaml"
+_RERANK_DEFAULT_GPU = "1"
+
 
 SERVICE_DEFS: list[dict[str, Any]] = [
     {
@@ -128,14 +132,61 @@ def _port(svc: dict[str, Any]) -> int:
     return svc["port_default"]
 
 
+def _rerank_gpu_from_cluster(port: int) -> str | None:
+    try:
+        import yaml
+
+        data = yaml.safe_load(_RERANK_CLUSTER_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    for worker in data.get("local_workers") or []:
+        if not isinstance(worker, dict):
+            continue
+        try:
+            worker_port = int(worker.get("port"))
+        except (TypeError, ValueError):
+            continue
+        if worker_port != port:
+            continue
+        gpu = worker.get("gpu_id")
+        if gpu is None:
+            return None
+        try:
+            return str(int(gpu))
+        except (TypeError, ValueError):
+            return str(gpu)
+    return None
+
+
+def _resolve_rerank_gpu(port: int) -> str:
+    """Resolve the CUDA ordinal the reranker runs on.
+
+    AIIH_RERANK_CUDA_DEVICES wins, then the deprecated AIIH_RERANK_DEVICE
+    alias, then cluster.yaml's gpu_id for the rerank port, then the default.
+    The value is a physical CUDA ordinal; the start script turns it into
+    CUDA_VISIBLE_DEVICES so the other GPUs stay hidden from the process.
+    """
+    for name in ("AIIH_RERANK_CUDA_DEVICES", "AIIH_RERANK_DEVICE"):
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    from_cluster = _rerank_gpu_from_cluster(port)
+    if from_cluster is not None:
+        return from_cluster
+    return _RERANK_DEFAULT_GPU
+
+
 def _rerank_command() -> list[str]:
     root = Path(__file__).resolve().parent.parent.parent
     port = _port({"name": "rerank", "port_env": None, "port_default": 11436})
+    gpu = _resolve_rerank_gpu(port)
     if os.name == "nt":
         script = root / "scripts" / "start-rerank-server.bat"
-        return ["cmd", "/c", str(script), "bge-reranker-v2-m3", str(port)]
+        return ["cmd", "/c", str(script), "bge-reranker-v2-m3", str(port), gpu]
     script = root / "scripts" / "start-rerank-server.sh"
-    return ["/bin/bash", str(script), "bge-reranker-v2-m3", str(port)]
+    return ["/bin/bash", str(script), "bge-reranker-v2-m3", str(port), gpu]
 
 
 def _cmd_for(svc: dict[str, Any]) -> list[str]:

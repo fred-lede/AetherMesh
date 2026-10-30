@@ -7,14 +7,16 @@ REM To use a GPU you must point AIIH_LLAMA_SERVER at a CUDA build of
 REM llama.cpp (Ollama's bundled llama-server.exe is CPU-only). For example:
 REM   set AIIH_LLAMA_SERVER=C:\ai\tools\llama-cpp\b10964\llama-server.exe
 REM
-REM Usage: start-rerank-server.bat [model] [port]
+REM Usage: start-rerank-server.bat [model] [port] [gpu]
 REM   start-rerank-server.bat                bge-reranker-v2-m3, port 11436
 REM   start-rerank-server.bat bge-reranker-v2-m3 11436
 REM   start-rerank-server.bat qwen3-reranker-0.6b 11437
+REM
+REM [gpu] is the physical CUDA ordinal to run on (default 1). It is exported
+REM as CUDA_VISIBLE_DEVICES so every other GPU stays hidden from the process.
+REM AIIH_RERANK_CUDA_DEVICES overrides it; AIIH_RERANK_DEVICE is a deprecated
+REM alias. Because only one device is visible, llama-server's -mg must be 0.
 setlocal
-
-REM Force rerank to use RTX 4070 (GPU 1). Hide GPU 0 to avoid stale CUDA context.
-set "CUDA_VISIBLE_DEVICES=1"
 
 REM Priority: explicit AIIH_LLAMA_SERVER, else Ollama's bundled binary.
 if defined AIIH_LLAMA_SERVER (
@@ -51,7 +53,13 @@ set "PORT=%~2"
 if "%PORT%"=="" set "PORT=11436"
 if not defined AIIH_RERANK_HOST set "AIIH_RERANK_HOST=127.0.0.1"
 if not defined AIIH_RERANK_CTX_SIZE set "AIIH_RERANK_CTX_SIZE=8192"
-if not defined AIIH_RERANK_DEVICE set "AIIH_RERANK_DEVICE=1"
 
-echo Starting reranker on %AIIH_RERANK_HOST%:%PORT% ^(ctx=%AIIH_RERANK_CTX_SIZE%, mg=%AIIH_RERANK_DEVICE%^)...
-"%LLAMA_SERVER%" --model "%BLOB_DIR%\%BLOB%" --rerank --host %AIIH_RERANK_HOST% --port %PORT% --ctx-size %AIIH_RERANK_CTX_SIZE% -mg %AIIH_RERANK_DEVICE% -ngl 99
+REM Resolve the GPU ordinal: env override, deprecated alias, then argument.
+if not defined AIIH_RERANK_CUDA_DEVICES if defined AIIH_RERANK_DEVICE set "AIIH_RERANK_CUDA_DEVICES=%AIIH_RERANK_DEVICE%"
+if not defined AIIH_RERANK_CUDA_DEVICES set "AIIH_RERANK_CUDA_DEVICES=%~3"
+if not defined AIIH_RERANK_CUDA_DEVICES set "AIIH_RERANK_CUDA_DEVICES=1"
+set "GPU=%AIIH_RERANK_CUDA_DEVICES%"
+set "CUDA_VISIBLE_DEVICES=%GPU%"
+
+echo Starting reranker on %AIIH_RERANK_HOST%:%PORT% ^(ctx=%AIIH_RERANK_CTX_SIZE%, gpu=%GPU%^, CUDA_VISIBLE_DEVICES=%CUDA_VISIBLE_DEVICES%^)...
+"%LLAMA_SERVER%" --model "%BLOB_DIR%\%BLOB%" --rerank --host %AIIH_RERANK_HOST% --port %PORT% --ctx-size %AIIH_RERANK_CTX_SIZE% -mg 0 -ngl 99
