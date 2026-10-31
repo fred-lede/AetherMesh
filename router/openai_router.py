@@ -174,7 +174,8 @@ def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse
 
 
 @app.get("/health")
-def health() -> dict[str, Any]:
+@app.get("/healthz")
+async def health() -> dict[str, Any]:
     return {"status": "ok", "service": "router"}
 
 
