@@ -718,9 +718,16 @@ class ModelRoutingEngine:
         rows: list[dict[str, Any]] = []
 
         for alias, target in aliases.items():
-            model = self._find_in_registry(target, registry_models)
-            provider = str(model.get("provider", "")) if model else ""
-            worker = self._worker_for_model(target, target, registry_models) if model else None
+            hint_provider = ""
+            model_name = target
+            if "/" in target and not target.startswith(("http://", "https://")):
+                hint_provider = canonical_provider(target.split("/", 1)[0])
+                model_name = target.split("/", 1)[1]
+            model = self._find_in_registry(model_name, registry_models)
+            provider = str(model.get("provider", "")) if model else hint_provider
+            if model is not None and hint_provider and provider.lower() != hint_provider.lower():
+                provider = hint_provider
+            worker = self._worker_for_model(target, model_name, registry_models) if model else None
             worker_label = ""
             if worker and worker.get("base_url"):
                 worker_label = str(worker["base_url"])
