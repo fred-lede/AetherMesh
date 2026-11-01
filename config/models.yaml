@@ -643,7 +643,7 @@ models:
   - tools
   - vision
   estimated_vram_mb: null
-  context_length: 512000
+  context_length: 256000
 - name: minimaxai/minimax-m3.1-flash
   provider: nvidia_nim
   worker_ports: []
@@ -679,3 +679,53 @@ models:
   - vision
   estimated_vram_mb: null
   context_length: 125000
+- name: q2_0
+  provider: M4-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 256000
+- name: q2_0
+  provider: K9-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 256000
+- name: coder-iq1_m
+  provider: K9-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 128000
+- name: coder-iq1_m
+  provider: UM890-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 128000
+- name: q2_0
+  provider: UM890-Strata
+  worker_ports: []
+  capabilities:
+  - chat
+  - thinking
+  - tools
+  - vision
+  estimated_vram_mb: null
+  context_length: 256000
