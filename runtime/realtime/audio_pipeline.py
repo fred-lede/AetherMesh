@@ -48,19 +48,21 @@ class RealtimeAudioPipeline:
         pcm_16k = resample_pcm16_24k_to_16k(pcm_24k)
         await self._stream.add_audio(pcm_16k)
         transcripts = await self._stream.transcribe_if_ready()
-        return await self._translate_transcripts(transcripts, emit)
+        return await self._translate_transcripts(transcripts, emit, is_final=False)
 
     async def close(
         self,
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
         transcripts = await self._stream.flush()
-        return await self._translate_transcripts(transcripts, emit)
+        return await self._translate_transcripts(transcripts, emit, is_final=True)
 
     async def _translate_transcripts(
         self,
         transcripts: list[dict[str, Any]],
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        *,
+        is_final: bool = False,
     ) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
 
@@ -74,7 +76,14 @@ class RealtimeAudioPipeline:
             source = str(transcript.get("text") or "").strip()
             if not source:
                 continue
-            await publish({"type": "session.input_transcript.delta", "delta": source})
+            seg = int(transcript.get("seg", 0))
+            await publish({
+                "type": "session.input_transcript.delta",
+                "delta": source,
+                "text": source,
+                "seg": seg,
+                "is_final": is_final,
+            })
             payload = {
                 "model": self._model,
                 "messages": [
@@ -97,8 +106,19 @@ class RealtimeAudioPipeline:
                 if not isinstance(translated, str):
                     raise RuntimeError("translation returned no text")
             except Exception as exc:
-                await publish({"type": "error", "error": {"type": "server_error", "message": str(exc)}})
+                await publish({
+                    "type": "error",
+                    "error": {"type": "server_error", "message": str(exc)},
+                    "seg": seg,
+                    "is_final": is_final,
+                })
                 continue
             if translated:
-                await publish({"type": "session.output_transcript.delta", "delta": translated})
+                await publish({
+                    "type": "session.output_transcript.delta",
+                    "delta": translated,
+                    "text": translated,
+                    "seg": seg,
+                    "is_final": is_final,
+                })
         return events
