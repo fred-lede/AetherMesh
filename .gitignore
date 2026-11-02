@@ -165,3 +165,20 @@ runtime/launcher/launcher.pid
 runtime/launcher/launcher_sentry.json
 runtime/launcher/supervisor.pid
 logs/launcher_supervisor.log
+
+# Ad-hoc test / scratch files at repo root
+--max-time
+-o
+check_audio.py
+check_k9_conn.py
+check_k9_raw.py
+check_q2_variants.py
+check_router_q2.py
+sample_output.md
+test_image.png
+test_m4.py
+test_sample.pdf
+test_sample_out/
+test_with_image.pdf
+test_with_image_out/
+config/models.yaml.bak
