@@ -167,6 +167,7 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
 
     session = RealtimeSession(model=websocket.query_params.get("model", ""))
     await websocket.send_json({"type": "session.created", "session": dict(session.session)})
+    _t0 = time.monotonic()
     audio_pipeline: RealtimeAudioPipeline | None = None
     audio_queue: asyncio.Queue[tuple[int, bytes] | None] | None = None
     audio_task: asyncio.Task | None = None
@@ -297,6 +298,8 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                     except Exception as exc:
                         await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "server_error", "message": str(exc)}})
                 await send_json({"type": "session.closed"})
+                lifetime_s = time.monotonic() - _t0
+                logger.info("Realtime websocket session.close (lifetime=%.1fs)", lifetime_s)
                 await websocket.close()
                 return
 
@@ -326,8 +329,14 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                 continue
             if event_type not in {"session.update", "conversation.item.create", "ping", "input_audio_buffer.append", "input_audio_buffer.commit"}:
                 await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": f"unsupported event type '{event_type}'"}})
-    except WebSocketDisconnect:
-        logger.info("Realtime websocket disconnected")
+    except WebSocketDisconnect as exc:
+        lifetime_s = time.monotonic() - _t0
+        logger.info(
+            "Realtime websocket disconnected (lifetime=%.1fs, close_code=%s, reason=%s)",
+            lifetime_s,
+            getattr(exc, "code", None),
+            getattr(exc, "reason", None),
+        )
     finally:
         await stop_audio_processing(cancel=True)
         if response_task is not None and not response_task.done():

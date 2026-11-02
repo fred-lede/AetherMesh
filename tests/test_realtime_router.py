@@ -355,3 +355,19 @@ async def test_first_audio_frame_uses_preloaded_asr_model(realtime_dependencies,
     await realtime_router.realtime_websocket(ws)
     assert "asr" not in calls, "first audio frame must not trigger lazy ASR load"
     assert any(event["type"] == "session.input_transcript.delta" for event in ws.sent)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_logs_lifetime_and_reason(realtime_dependencies, caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    disconnect_logs = [r.getMessage() for r in caplog.records if "Realtime websocket" in r.getMessage()]
+    assert disconnect_logs, f"expected a disconnect log, got none"
+    log_line = disconnect_logs[-1]
+    assert "lifetime" in log_line, f"disconnect log should report lifetime, got: {log_line!r}"
