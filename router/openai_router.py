@@ -93,6 +93,12 @@ async def _startup_file_cleanup() -> None:
     _cleanup_task = asyncio.create_task(mgr.background_cleanup_loop())
 
 
+@app.on_event("startup")
+async def _startup_preload_asr() -> None:
+    from router.realtime_router import preload_asr
+    preload_asr()
+
+
 @app.on_event("shutdown")
 async def _shutdown_file_cleanup() -> None:
     global _cleanup_task

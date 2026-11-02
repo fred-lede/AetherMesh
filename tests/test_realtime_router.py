@@ -328,3 +328,30 @@ async def test_bearer_auth_failure_closes_socket(monkeypatch):
     await realtime_router.realtime_websocket(ws)
     assert ws.sent[0]["error"]["type"] == "authentication_error"
     assert ws.close_code == 4001
+
+
+@pytest.mark.asyncio
+async def test_first_audio_frame_uses_preloaded_asr_model(realtime_dependencies, monkeypatch):
+    import router.realtime_router as rr
+    asr_model = rr.get_adapter("asr")._model
+    monkeypatch.setattr(rr, "_asr_ready", True)
+    monkeypatch.setattr(rr, "_preloaded_asr_model", asr_model)
+
+    calls: list[str] = []
+    orig = rr.get_adapter
+
+    def spy(name: str, *a, **k):
+        calls.append(name)
+        return orig(name, *a, **k)
+
+    monkeypatch.setattr(rr, "get_adapter", spy)
+
+    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    assert "asr" not in calls, "first audio frame must not trigger lazy ASR load"
+    assert any(event["type"] == "session.input_transcript.delta" for event in ws.sent)
