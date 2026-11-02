@@ -168,6 +168,7 @@ class Settings:
     asr_device_index: int = field(default_factory=lambda: int(os.getenv("AIIH_ASR_DEVICE_INDEX", "0")))
     asr_compute_type: str = field(default_factory=lambda: os.getenv("AIIH_ASR_COMPUTE_TYPE", "float16"))
     asr_models_dir: str | None = field(default_factory=lambda: os.getenv("AIIH_ASR_MODELS_DIR"))
+    asr_provider: str = field(default_factory=lambda: os.getenv("AIIH_ASR_PROVIDER", "faster_whisper").strip().lower())
     image_gen_enabled: bool = field(default_factory=lambda: _env_bool("AIIH_IMAGE_GEN_ENABLED", "false"))
     image_gen_default_model: str = field(
         default_factory=lambda: os.getenv("AIIH_IMAGE_GEN_DEFAULT_MODEL", "x/z-image-turbo:fp8")
@@ -447,6 +448,22 @@ class Settings:
 
     def save_web_search_config(self, data: dict[str, Any]) -> None:
         path = self.config_path("web_search.json")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+
+    def load_asr_config(self) -> dict[str, Any]:
+        path = self.config_path("asr_config.json")
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_asr_config(self, data: dict[str, Any]) -> None:
+        path = self.config_path("asr_config.json")
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
