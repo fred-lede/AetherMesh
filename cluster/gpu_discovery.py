@@ -23,12 +23,12 @@ def _discover_nvidia_gpus() -> list[dict[str, Any]]:
     commands = [
         [
             "nvidia-smi",
-            "--query-gpu=index,name,memory.total,utilization.gpu,temperature.gpu,power.draw",
+            "--query-gpu=index,name,memory.total,memory.used,utilization.gpu,temperature.gpu,power.draw",
             "--format=csv,noheader,nounits",
         ],
         [
             "nvidia-smi",
-            "--query-gpu=index,name,memory.total,utilization.gpu,temperature.gpu",
+            "--query-gpu=index,name,memory.total,memory.used,utilization.gpu,temperature.gpu",
             "--format=csv,noheader,nounits",
         ],
     ]
@@ -56,18 +56,22 @@ def _discover_nvidia_gpus() -> list[dict[str, Any]]:
         if not line:
             continue
         parts = [part.strip() for part in line.split(",")]
-        if len(parts) not in {5, 6}:
+        if len(parts) not in {6, 7}:
             continue
 
-        gpu_id, name, memory_total, utilization, temperature = parts[:5]
-        power_draw = parts[5] if len(parts) == 6 else "0"
+        gpu_id, name, memory_total, memory_used, utilization, temperature = parts[:6]
+        power_draw = parts[6] if len(parts) == 7 else "0"
 
         try:
+            total_mb = int(float(memory_total))
+            used_mb = int(float(memory_used))
             gpus.append(
                 {
                     "id": int(gpu_id),
                     "name": name,
-                    "memory": int(float(memory_total)),
+                    "memory": total_mb,
+                    "memory_used_mb": used_mb,
+                    "memory_free_mb": max(0, total_mb - used_mb),
                     "utilization": _safe_float(utilization),
                     "temperature": _safe_float(temperature),
                     "power_watts": _safe_float(power_draw),
@@ -89,6 +93,8 @@ def _discover_macos_mps_gpu() -> list[dict[str, Any]]:
             "id": 0,
             "name": "Apple Silicon GPU (MPS)",
             "memory": total_mb,
+            "memory_used_mb": used_mb,
+            "memory_free_mb": None,
             "utilization": utilization,
             "temperature": temperature,
             "power_watts": power_watts,
