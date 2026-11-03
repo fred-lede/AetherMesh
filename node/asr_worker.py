@@ -30,9 +30,16 @@ def _build_adapter() -> Any:
         )
     from providers.faster_whisper_adapter import FasterWhisperAdapter
 
+    device = settings.asr_device
+    if device.strip().lower() not in ("cpu", "cuda"):
+        logger.warning(
+            "ASR device '%s' unsupported by faster_whisper (cpu/cuda only); falling back to cpu",
+            settings.asr_device,
+        )
+        device = "cpu"
     return FasterWhisperAdapter(
         model_name=settings.asr_model,
-        device=settings.asr_device,
+        device=device,
         device_index=settings.asr_device_index,
         compute_type=settings.asr_compute_type,
         download_dir=settings.asr_models_dir,

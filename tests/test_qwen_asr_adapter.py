@@ -101,6 +101,20 @@ def test_cpu_uses_float32(fake_qwen):
     assert instance.init_kwargs["dtype"] == "float32"
 
 
+def test_mps_uses_float32_and_mps_device_map(fake_qwen):
+    instance, _ = fake_qwen
+    QwenASRAdapter(device="mps", device_index=1)
+    assert instance.init_kwargs["device_map"] == "mps"
+    assert instance.init_kwargs["dtype"] == "float32"
+
+
+@pytest.mark.parametrize("raw", ["MPS ", " mps"])
+def test_mps_device_normalized(fake_qwen, raw):
+    instance, _ = fake_qwen
+    QwenASRAdapter(device=raw)
+    assert instance.init_kwargs["device_map"] == "mps"
+
+
 def test_bytes_transcribe_returns_text(fake_qwen):
     instance, calls = fake_qwen
     adapter = QwenASRAdapter(device="cpu")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -106,6 +107,40 @@ def test_transcription_correct_token_200(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"text": "hello from node"}
     engine.transcribe.assert_called_once()
+
+
+def test_build_adapter_faster_whisper_mps_downgrades_to_cpu(monkeypatch, caplog):
+    import providers.faster_whisper_adapter as fw_module
+
+    captured: dict = {}
+
+    class FakeFasterWhisperAdapter:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(fw_module, "FasterWhisperAdapter", FakeFasterWhisperAdapter)
+    monkeypatch.setattr(asr_worker.settings, "asr_provider", "faster_whisper")
+    monkeypatch.setattr(asr_worker.settings, "asr_device", "mps")
+    with caplog.at_level(logging.WARNING, logger="node.asr_worker"):
+        asr_worker._build_adapter()
+    assert captured["device"] == "cpu"
+    assert any("mps" in record.getMessage().lower() for record in caplog.records)
+
+
+def test_build_adapter_qwen_mps_passthrough(monkeypatch):
+    import providers.qwen_asr_adapter as qwen_module
+
+    captured: dict = {}
+
+    class FakeQwenAdapter:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(qwen_module, "QwenASRAdapter", FakeQwenAdapter)
+    monkeypatch.setattr(asr_worker.settings, "asr_provider", "qwen_asr")
+    monkeypatch.setattr(asr_worker.settings, "asr_device", "mps")
+    asr_worker._build_adapter()
+    assert captured["device"] == "mps"
 
 
 def test_probe_asr_worker_healthy(monkeypatch):

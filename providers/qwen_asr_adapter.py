@@ -49,10 +49,16 @@ class _QwenTranscriber:
                 "qwen-asr is not installed; run: pip install -U qwen-asr",
                 status_code=503,
             ) from exc
-        on_cuda = device.strip().lower() == "cuda"
+        normalized = device.strip().lower()
+        if normalized == "cuda":
+            dtype, device_map = torch.bfloat16, f"cuda:{device_index}"
+        elif normalized == "mps":
+            dtype, device_map = torch.float32, "mps"
+        else:
+            dtype, device_map = torch.float32, "cpu"
         kwargs: dict[str, Any] = {
-            "dtype": torch.bfloat16 if on_cuda else torch.float32,
-            "device_map": f"cuda:{device_index}" if on_cuda else "cpu",
+            "dtype": dtype,
+            "device_map": device_map,
         }
         if download_dir:
             kwargs["cache_dir"] = download_dir
