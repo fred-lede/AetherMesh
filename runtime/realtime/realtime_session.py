@@ -6,6 +6,8 @@ import time
 import uuid
 from typing import Any
 
+from runtime.realtime.openai_events import new_event_id
+
 MAX_AUDIO_FRAME_BYTES = 1_048_576
 
 
@@ -48,9 +50,9 @@ class RealtimeSession:
         if not isinstance(event_type, str) or not event_type:
             return [{"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": "event type must be a string"}}]
         if event_type == "session.update":
-            return [self._apply_session_update(data)]
+            return [{**self._apply_session_update(data), "event_id": new_event_id()}]
         if event_type == "conversation.item.create":
-            return [self._add_item(data)]
+            return [{**self._add_item(data), "event_id": new_event_id()}]
         if event_type == "ping":
             return [{"type": "pong", "time": _now_ms()}]
         if event_type in {"input_audio_buffer.append", "session.input_audio_buffer.append"}:

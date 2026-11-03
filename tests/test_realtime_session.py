@@ -19,9 +19,19 @@ def test_session_update():
         {"type": "session.update", "session": {"model": "m2", "instructions": "be brief", "temperature": 0.2}}
     )
     assert events[0]["type"] == "session.updated"
+    assert events[0].get("event_id"), "session.updated must carry an event_id"
     assert session.session["model"] == "m2"
     assert session.session["instructions"] == "be brief"
     assert session.session["temperature"] == 0.2
+
+
+def test_conversation_item_created_event_carries_event_id():
+    session = RealtimeSession()
+    events = session.handle_event(
+        {"type": "conversation.item.create", "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}}
+    )
+    assert events[0]["type"] == "conversation.item.created"
+    assert events[0].get("event_id"), "conversation.item.created must carry an event_id"
 
 
 def test_conversation_item_create_text():

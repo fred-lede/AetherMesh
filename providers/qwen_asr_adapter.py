@@ -64,7 +64,7 @@ class _QwenTranscriber:
             kwargs["cache_dir"] = download_dir
         self._model = Qwen3ASRModel.from_pretrained(model_name, **kwargs)
 
-    def transcribe(self, samples: np.ndarray, language: str = "") -> tuple[list[Any], Any]:
+    def transcribe(self, samples: np.ndarray, language: str = "", **kwargs) -> tuple[list[Any], Any]:
         qwen_language = _LANGUAGE_CODES.get(language.strip().lower()) if language else None
         results = self._model.transcribe(
             audio=(np.asarray(samples, dtype=np.float32), 16000),

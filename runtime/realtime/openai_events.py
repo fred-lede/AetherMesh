@@ -6,8 +6,27 @@ from typing import Any
 ANCHOR_PURPOSE = "anchor"
 
 
-def _event_id() -> str:
+def new_event_id() -> str:
     return f"evt_{uuid.uuid4().hex[:24]}"
+
+
+def _event_id() -> str:
+    return new_event_id()
+
+
+def input_item_created_event(item_id: str) -> dict[str, Any]:
+    return {
+        "type": "conversation.item.created",
+        "event_id": _event_id(),
+        "item": {
+            "id": item_id,
+            "object": "realtime.item",
+            "type": "message",
+            "role": "user",
+            "status": "completed",
+            "content": [{"type": "input_audio", "transcript": None}],
+        },
+    }
 
 
 def transcription_completed_event(item_id: str, transcript: str) -> dict[str, Any]:
@@ -26,6 +45,7 @@ def response_sequence_for_text(
     response_id: str,
     item_id: str,
     conversation_id: str,
+    previous_item_id: str | None = None,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -46,6 +66,28 @@ def response_sequence_for_text(
             "item": {"id": item_id, "type": "message", "role": "assistant", "status": "in_progress", "content": []},
         },
         {
+            "type": "conversation.item.created",
+            "event_id": _event_id(),
+            "previous_item_id": previous_item_id,
+            "item": {
+                "id": item_id,
+                "object": "realtime.item",
+                "type": "message",
+                "role": "assistant",
+                "status": "in_progress",
+                "content": [],
+            },
+        },
+        {
+            "type": "response.content_part.added",
+            "event_id": _event_id(),
+            "response_id": response_id,
+            "item_id": item_id,
+            "output_index": 0,
+            "content_index": 0,
+            "part": {"type": "text", "text": ""},
+        },
+        {
             "type": "response.output_text.delta",
             "event_id": _event_id(),
             "response_id": response_id,
@@ -62,6 +104,20 @@ def response_sequence_for_text(
             "output_index": 0,
             "content_index": 0,
             "text": text,
+        },
+        {
+            "type": "response.output_item.done",
+            "event_id": _event_id(),
+            "response_id": response_id,
+            "output_index": 0,
+            "item": {
+                "id": item_id,
+                "object": "realtime.item",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "text", "text": text}],
+            },
         },
         {
             "type": "response.done",

@@ -123,11 +123,19 @@ async def test_session_close_flushes_last_audio_before_closed(realtime_dependenc
         {"type": "session.close"},
     ])
     await realtime_router.realtime_websocket(ws)
-    assert [event["type"] for event in ws.sent[-3:]] == [
+    flushed_types = [event["type"] for event in ws.sent if event["type"] in (
         "session.input_transcript.delta",
         "session.output_transcript.delta",
-        "session.closed",
+        "response.created",
+        "response.done",
+    )]
+    assert flushed_types == [
+        "session.input_transcript.delta",
+        "session.output_transcript.delta",
+        "response.created",
+        "response.done",
     ]
+    assert ws.sent[-1]["type"] == "session.closed"
 
 
 @pytest.mark.asyncio
@@ -484,14 +492,31 @@ async def test_audio_stream_also_emits_openai_transcription_and_response_events(
         {"type": "session.close"},
     ])
     await realtime_router.realtime_websocket(ws)
+    assert ws.sent[0].get("event_id"), "session.created must carry an event_id"
     types = [event["type"] for event in ws.sent]
     assert "conversation.item.input_audio_transcription.completed" in types
     completed = next(e for e in ws.sent if e["type"] == "conversation.item.input_audio_transcription.completed")
     assert completed["transcript"] == "hello there"
     assert completed["item_id"] == "item_1"
-    order = ["response.created", "response.output_item.added", "response.output_text.delta", "response.output_text.done", "response.done"]
+    assert completed.get("event_id")
+    order = [
+        "conversation.item.created",
+        "conversation.item.input_audio_transcription.completed",
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.output_item.done",
+        "response.done",
+    ]
     indices = [types.index(t) for t in order]
-    assert indices == sorted(indices), f"response sequence out of order: {[t for t in types if t in order]}"
+    assert indices == sorted(indices), f"canonical event order broken: {[t for t in types if t in order]}"
+    input_item = next(e for e in ws.sent if e["type"] == "conversation.item.created" and e["item"]["role"] == "user")
+    assert input_item["item"]["id"] == "item_1"
+    assistant_item = next(e for e in ws.sent if e["type"] == "conversation.item.created" and e["item"]["role"] == "assistant")
+    assert assistant_item["item"]["id"] == "msg_1"
+    assert assistant_item["previous_item_id"] == "item_1"
     out_delta = next(e for e in ws.sent if e["type"] == "response.output_text.delta")
     assert out_delta["delta"] == "你好"
     assert out_delta["item_id"] == "msg_1"
@@ -527,9 +552,15 @@ async def test_response_create_echoes_metadata_request_and_emits_output_text_del
     created = next(e for e in ws.sent if e["type"] == "response.created")
     assert created["response"]["metadata"] == {"request": "sokuji_7"}
     assert created["response"]["conversation_id"]
+    assert created.get("event_id"), "response.created must carry an event_id"
+    assistant_items = [e for e in ws.sent if e["type"] == "conversation.item.created" and e["item"]["role"] == "assistant"]
+    assert assistant_items, "assistant item must be announced via conversation.item.created"
+    assert assistant_items[0].get("event_id")
+    assert assistant_items[0]["previous_item_id"], "assistant item must name the user item it follows"
     done = next(e for e in ws.sent if e["type"] == "response.done")
     assert done["response"]["metadata"] == {"request": "sokuji_7"}
     assert done["response"]["status"] == "completed"
     delta = next(e for e in ws.sent if e["type"] == "response.output_text.delta")
     assert delta["delta"] == "你好"
+    assert delta.get("event_id")
     assert any(e["type"] == "response.text.delta" for e in ws.sent), "legacy dialect deltas must be kept"

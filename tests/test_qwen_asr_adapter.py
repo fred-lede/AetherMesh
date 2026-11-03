@@ -71,6 +71,13 @@ def test_stream_contract_shape(fake_qwen):
     assert info.language == "Chinese"
 
 
+def test_stream_transcribe_tolerates_whisper_convention_kwargs(fake_qwen):
+    instance, _ = fake_qwen
+    adapter = QwenASRAdapter(device="cpu")
+    segments, _info = adapter._model.transcribe(_samples(), language="", task="transcribe")
+    assert segments[0].text == "你好世界"
+
+
 def test_language_auto_detect_passes_none(fake_qwen):
     instance, calls = fake_qwen
     adapter = QwenASRAdapter(device="cpu")
