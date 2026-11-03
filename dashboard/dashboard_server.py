@@ -2280,6 +2280,47 @@ def audio_status(request: Request) -> dict[str, Any]:
     return {"tts": tts_info, "asr": asr_info}
 
 
+def _router_api_key() -> str:
+    env_key = os.environ.get("AIIH_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if env_key:
+        return env_key.strip().split(",")[0].strip()
+    if hasattr(settings, "api_key") and settings.api_key:
+        return str(settings.api_key)
+    return ""
+
+
+async def _asr_config_proxy(method: str, body: bytes | None = None):
+    headers = {"x-api-key": _router_api_key()}
+    if body is not None:
+        headers["content-type"] = "application/json"
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if method == "GET":
+                resp = await client.get(f"{ROUTER_BASE_URL}/api/asr/config", headers=headers)
+            else:
+                resp = await client.post(f"{ROUTER_BASE_URL}/api/asr/config", content=body or b"", headers=headers)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"ASR config proxy error: {exc}")
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = {"message": resp.text[:200]}
+    return JSONResponse(status_code=resp.status_code, content=payload)
+
+
+@api.get("/asr/config")
+async def asr_config_get(request: Request):
+    _require_admin(request)
+    return await _asr_config_proxy("GET")
+
+
+@api.post("/asr/config")
+async def asr_config_post(request: Request):
+    _require_admin(request)
+    body = await request.body()
+    return await _asr_config_proxy("POST", body=body)
+
+
 @api.get("/audio/voices")
 def audio_list_voices(request: Request) -> list[dict[str, Any]]:
     _require_admin(request)

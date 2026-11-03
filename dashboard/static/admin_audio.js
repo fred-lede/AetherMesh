@@ -83,26 +83,153 @@
     }
   }
 
+  var ASR_STATE_PILL = { ready: 'ok', loading: 'warn', failed: 'bad', disabled: 'disabled', idle: 'disabled' };
+
   async function loadAsrSettings() {
     var panel = document.getElementById('asr-settings-panel');
     if (!panel) return;
     try {
-      var resp = await fetch('/api/audio/status');
+      var resp = await fetch('/api/asr/config');
+      if (resp.status === 401 || resp.status === 403) { redirectLogin(); return; }
+      if (resp.status === 503) { panel.innerHTML = '<span class="pill warn">Router unreachable</span>'; return; }
       if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load</span>'; return; }
-      var s = await resp.json();
-      var asr = s.asr || {};
-      var enabled = asr.enabled;
-      var pillCls = enabled ? 'ok' : 'disabled';
-      panel.innerHTML = '<div class="settings-grid">' +
-        '<div class="label">Status</div><div class="value"><span class="pill ' + pillCls + '">' + (enabled ? 'Enabled' : 'Disabled') + '</span></div><div></div>' +
-        '<div class="label">Model</div><div class="value"><code>' + escapeHtml(asr.model || '—') + '</code></div><div></div>' +
-        '<div class="label">Device</div><div class="value"><code>' + escapeHtml(asr.device || '—') + (asr.device_index != null && asr.device_index > 0 ? ' (index ' + asr.device_index + ')' : '') + '</code></div><div></div>' +
-        '<div class="label">Compute</div><div class="value"><code>' + escapeHtml(asr.compute_type || '—') + '</code></div><div></div>' +
-      '</div>' +
-      (enabled ? '<div class="hint">Use <code>POST /v1/audio/transcriptions</code> or <code>/v1/audio/translations</code> to transcribe audio files.</div>' : '');
+      renderAsrSettings(panel, await resp.json());
     } catch(e) {
       panel.innerHTML = '<span class="pill warn">Error</span>';
     }
+  }
+
+  function asrTargetLabel(t) {
+    if (t.memory_free_mb != null) {
+      return t.id + ' — ' + (t.name || '') + ' (free ' + (t.memory_free_mb / 1024).toFixed(1) + ' GB)';
+    }
+    return t.id + (t.name ? ' — ' + t.name : '');
+  }
+
+  function updateAsrModelOptions(engines, provider, selected) {
+    var modelSel = document.getElementById('asr-model');
+    if (!modelSel) return;
+    var models = engines[provider] || [];
+    modelSel.innerHTML = models.map(function(m) {
+      return '<option value="' + escapeHtml(m) + '"' + (m === selected ? ' selected' : '') + '>' + escapeHtml(m) + '</option>';
+    }).join('');
+  }
+
+  function renderAsrSettings(panel, cfg) {
+    var state = cfg.state || 'idle';
+    var pillCls = ASR_STATE_PILL[state] || 'disabled';
+    var active = cfg.active || {};
+    var requested = cfg.requested || {};
+    var html = '<div class="settings-grid">' +
+      '<div class="label">Status</div><div class="value"><span class="pill ' + pillCls + '">' + escapeHtml(state) + '</span>' +
+      (state === 'failed' && cfg.error ? ' <span style="color:var(--bad)">' + escapeHtml(cfg.error) + '</span>' : '') + '</div><div></div>' +
+      '<div class="label">Active</div><div class="value"><code>' + escapeHtml(active.provider || '—') + ' / ' + escapeHtml(active.model || '—') + ' @ ' + escapeHtml(active.target_id || '—') + '</code></div><div></div>' +
+      '</div>';
+    if (state === 'disabled') {
+      panel.innerHTML = html + '<div class="hint">ASR is disabled (AIIH_ASR_ENABLED=false). Enable it in .env and restart the router.</div>';
+      return;
+    }
+    var localTargets = (cfg.targets && cfg.targets.local) || [];
+    var nodeTargets = (cfg.targets && cfg.targets.nodes) || [];
+    var options = '';
+    localTargets.forEach(function(t) {
+      options += '<option value="' + escapeHtml(t.id) + '">' + escapeHtml(asrTargetLabel(t)) + '</option>';
+    });
+    nodeTargets.forEach(function(t) {
+      var label = t.id + (t.engine ? ' — ' + t.engine + '/' + t.model : ' — asr worker');
+      options += '<option value="' + escapeHtml(t.id) + '"' + (t.reachable ? '' : ' disabled') + '>' + escapeHtml(label) + (t.reachable ? '' : ' (unreachable)') + '</option>';
+    });
+    var engineOptions = '';
+    Object.keys(cfg.engines || {}).forEach(function(p) {
+      engineOptions += '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>';
+    });
+    var selectedTarget = requested.target_id || active.target_id || '';
+    var selectedProvider = requested.provider || active.provider || '';
+    var selectedModel = requested.model || active.model || '';
+    html += '<div class="upload-row" style="margin-top:10px">' +
+      '<select id="asr-target">' + options + '</select>' +
+      '<select id="asr-provider">' + engineOptions + '</select>' +
+      '<select id="asr-model"></select>' +
+      '<button class="btn btn-sm" id="btn-asr-apply" onclick="window.applyAsrConfig()">Apply</button>' +
+      '<span id="asr-apply-msg" style="margin-left:8px;font-size:0.82rem;color:var(--muted)"></span>' +
+      '</div>' +
+      '<div class="hint">Switching loads the new engine in the background; the current one keeps serving until the swap completes. First load can take 30-60s.</div>' +
+      '<div class="hint">Use <code>POST /v1/audio/transcriptions</code> or <code>/v1/audio/translations</code> to transcribe audio files.</div>';
+    panel.innerHTML = html;
+    var targetSel = document.getElementById('asr-target');
+    var providerSel = document.getElementById('asr-provider');
+    var modelSel = document.getElementById('asr-model');
+    if (selectedTarget) targetSel.value = selectedTarget;
+    if (selectedProvider) providerSel.value = selectedProvider;
+    updateAsrModelOptions(cfg.engines || {}, providerSel.value, selectedModel);
+    var syncEngineDisabled = function() {
+      var isNode = targetSel.value.indexOf('node:') === 0;
+      providerSel.disabled = isNode;
+      modelSel.disabled = isNode;
+    };
+    providerSel.addEventListener('change', function() { updateAsrModelOptions(cfg.engines || {}, providerSel.value, ''); });
+    targetSel.addEventListener('change', syncEngineDisabled);
+    syncEngineDisabled();
+  }
+
+  window.applyAsrConfig = async function() {
+    var btn = document.getElementById('btn-asr-apply');
+    var msg = document.getElementById('asr-apply-msg');
+    var target = document.getElementById('asr-target').value;
+    var isNode = target.indexOf('node:') === 0;
+    var body = { target_id: target };
+    if (!isNode) {
+      body.provider = document.getElementById('asr-provider').value;
+      body.model = document.getElementById('asr-model').value;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+    if (msg) { msg.textContent = 'Loading new engine… (first load 30-60s)'; msg.style.color = 'var(--warn)'; }
+    try {
+      var resp = await fetch('/api/asr/config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (resp.status === 401 || resp.status === 403) { redirectLogin(); return; }
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        var detail = err.detail || {};
+        var text = detail.message || ('HTTP ' + resp.status);
+        if (detail.valid_gpu_ids) text += ' (valid GPUs: ' + detail.valid_gpu_ids.join(', ') + ')';
+        if (detail.valid_models) text += ' (valid models: ' + detail.valid_models.join(', ') + ')';
+        if (detail.valid_providers) text += ' (valid providers: ' + detail.valid_providers.join(', ') + ')';
+        if (msg) { msg.textContent = text; msg.style.color = 'var(--bad)'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Apply'; }
+        return;
+      }
+      await pollAsrState();
+    } catch(e) {
+      if (msg) { msg.textContent = 'Error: ' + e; msg.style.color = 'var(--bad)'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Apply'; }
+    }
+  };
+
+  async function pollAsrState() {
+    var deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+      await new Promise(function(resolve) { setTimeout(resolve, 2000); });
+      try {
+        var resp = await fetch('/api/asr/config');
+        if (!resp.ok) continue;
+        var cfg = await resp.json();
+        var panel = document.getElementById('asr-settings-panel');
+        if (panel) renderAsrSettings(panel, cfg);
+        if (cfg.state !== 'loading') {
+          if (cfg.state === 'failed') {
+            var msg = document.getElementById('asr-apply-msg');
+            if (msg) { msg.textContent = cfg.error || 'load failed'; msg.style.color = 'var(--bad)'; }
+          }
+          return;
+        }
+      } catch(e) { continue; }
+    }
+    var msg = document.getElementById('asr-apply-msg');
+    if (msg) { msg.textContent = 'Still loading after 120s — check the router log.'; msg.style.color = 'var(--warn)'; }
   }
 
   async function loadVoices() {
