@@ -279,14 +279,13 @@ class ASRManager:
         self._load_worker(target, provider, model)
 
     def reload(self, target_id: str, provider: str | None = None, model: str | None = None) -> dict[str, Any]:
-        with self._lock:
-            if self._state == "loading":
-                raise ASRConfigError("an ASR reload is already in progress", status_code=409)
         resolved_provider = (provider or settings.asr_provider).strip().lower()
         resolved_model = (model or "").strip()
         target = self.resolve_target(target_id)
         resolved_provider, resolved_model = self._validate(target, resolved_provider, resolved_model)
         with self._lock:
+            if self._state == "loading":
+                raise ASRConfigError("an ASR reload is already in progress", status_code=409)
             self._requested_info = {
                 "target_id": target.target_id,
                 "provider": resolved_provider,

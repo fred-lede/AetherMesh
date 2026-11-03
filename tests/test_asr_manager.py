@@ -177,6 +177,68 @@ def test_reload_concurrent_returns_409(env):
     _wait_state(manager, "ready")
 
 
+def test_reload_race_validation_vs_check_yields_single_worker(env):
+    node_calls = {"n": 0}
+
+    def node_builder(target, provider, model):
+        node_calls["n"] += 1
+        return _fake_adapter("node")
+
+    fetch_entered = threading.Event()
+    fetch_gate = threading.Event()
+    build_gate = threading.Event()
+
+    def gated_fetch():
+        fetch_entered.set()
+        fetch_gate.wait(timeout=5)
+        return [
+            {"node_id": "x", "ip": "10.0.0.1", "metadata": {"asr_worker": {"port": 9450, "healthy": True}}},
+        ]
+
+    env.setattr(asr_manager_module, "_fetch_cluster_nodes", gated_fetch)
+
+    def slow_cuda_builder(target, provider, model):
+        build_gate.wait(timeout=5)
+        return _fake_adapter("cuda")
+
+    builders = {
+        "local_cuda": slow_cuda_builder,
+        "local_cpu": lambda t, p, m: _fake_adapter("cpu"),
+        "node": node_builder,
+    }
+    manager, persisted = _make_manager(builders)
+
+    result: dict = {}
+
+    def caller_a():
+        try:
+            manager.reload("node:x", provider=None, model=None)
+            result["error"] = None
+        except ASRConfigError as exc:
+            result["error"] = exc
+
+    thread = threading.Thread(target=caller_a, daemon=True)
+    thread.start()
+    assert fetch_entered.wait(timeout=5)
+
+    snapshot = manager.reload("local:cuda:0", provider="faster_whisper", model=None)
+    assert snapshot["state"] == "loading"
+
+    fetch_gate.set()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert isinstance(result["error"], ASRConfigError)
+    assert result["error"].status_code == 409
+    assert node_calls["n"] == 0
+    assert len(persisted) == 1
+
+    build_gate.set()
+    _wait_state(manager, "ready")
+    snapshot = manager.snapshot()
+    assert snapshot["version"] == 1
+    assert node_calls["n"] == 0
+
+
 def test_reload_unknown_target_400(env):
     manager = ASRManager(builders={}, dispose=MagicMock(), persist=lambda d: None)
     with pytest.raises(ASRConfigError) as excinfo:
