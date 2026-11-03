@@ -104,6 +104,14 @@ SERVICE_DEFS: list[dict[str, Any]] = [
         "desc": "Worker agent (health reporting)",
     },
     {
+        "name": "asr_worker",
+        "module": "node.asr_worker:app",
+        "host": "0.0.0.0",
+        "port_env": "AIIH_ASR_PORT",
+        "port_default": 9450,
+        "desc": "ASR transcription worker (OpenAI-compatible /v1/audio/transcriptions)",
+    },
+    {
         "name": "task_worker",
         "module": None,
         "host": None,

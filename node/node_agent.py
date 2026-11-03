@@ -16,6 +16,18 @@ from config.settings import settings
 app = FastAPI(title="AetherMesh Node Agent", version="4.0.0")
 
 
+def _probe_asr_worker() -> dict[str, Any]:
+    port = int(os.getenv("AIIH_ASR_PORT", "9450"))
+    try:
+        response = requests.get(f"http://127.0.0.1:{port}/health", timeout=2)
+        if response.ok:
+            data = response.json()
+            return {"port": port, "healthy": True, "engine": data.get("engine"), "model": data.get("model")}
+    except (requests.RequestException, ValueError):
+        pass
+    return {"port": port, "healthy": False, "engine": None, "model": None}
+
+
 class NodeAgent:
     def __init__(self) -> None:
         self.node_id = settings.local_node_id()
@@ -169,6 +181,7 @@ class NodeAgent:
                 "worker_runtime": worker_runtime,
                 "detail_refresh_s": self._detail_refresh_s,
                 "detail_cached_at": self._last_detail_refresh,
+                "asr_worker": _probe_asr_worker(),
             },
         }
 
