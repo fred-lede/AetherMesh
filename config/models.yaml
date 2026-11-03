@@ -450,6 +450,18 @@ models:
   capabilities:
   - audio
   estimated_vram_mb: null
+- name: Qwen/Qwen3-ASR-0.6B
+  provider: asr
+  worker_ports: []
+  capabilities:
+  - audio
+  estimated_vram_mb: null
+- name: Qwen/Qwen3-ASR-1.7B
+  provider: asr
+  worker_ports: []
+  capabilities:
+  - audio
+  estimated_vram_mb: null
 - name: x/z-image-turbo:fp8
   provider: ollama
   worker_bindings:

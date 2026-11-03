@@ -9,7 +9,7 @@ import pytest
 import requests
 
 import runtime.asr.asr_manager as asr_manager_module
-from runtime.asr.asr_manager import ASRConfigError, ASRManager
+from runtime.asr.asr_manager import ASRConfigError, ASRManager, LOCAL_ENGINES
 
 
 def _fake_adapter(name: str = "fake") -> MagicMock:
@@ -391,3 +391,11 @@ def test_get_adapter_during_loading_returns_previous(env):
     assert manager.get_adapter() is adapter_a
     gate.set()
     _wait_state(manager, "ready")
+
+
+def test_qwen_asr_models_listed_in_model_registry():
+    from runtime.orchestration import model_registry_store as store
+
+    registry_names = {str(m.get("name", "")) for m in store.get_models()}
+    missing = [m for m in LOCAL_ENGINES["qwen_asr"] if m not in registry_names]
+    assert missing == []
