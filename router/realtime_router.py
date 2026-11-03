@@ -3,15 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import threading
 import time
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from config.settings import settings
-from runtime.orchestration.provider_router import adapter as get_adapter
+from runtime.asr.asr_manager import asr_manager
 from runtime.realtime.audio_pipeline import RealtimeAudioPipeline
 from runtime.realtime.realtime_session import RealtimeSession
 from runtime.security.database import SessionLocal
@@ -21,41 +19,9 @@ logger = logging.getLogger("router.realtime_router")
 
 router = APIRouter()
 
-_asr_ready = False
-_preloaded_asr_model: Any = None
-_preload_thread: threading.Thread | None = None
-
 
 def preload_asr() -> None:
-    """Load the ASR adapter now so the first realtime audio frame is not blocked.
-
-    Idempotent. Runs on a background thread; _asr_ready flips when done.
-    Safe to call from a FastAPI startup hook.
-    """
-    global _asr_ready, _preload_thread
-    if _asr_ready:
-        return
-    if not settings.asr_enabled:
-        logger.info("ASR disabled; skipping pre-load")
-        return
-    if _preload_thread is not None and _preload_thread.is_alive():
-        return
-    _preload_thread = threading.Thread(target=_preload_asr_worker, daemon=True, name="asr-preload")
-    _preload_thread.start()
-
-
-def _preload_asr_worker() -> None:
-    global _asr_ready, _preloaded_asr_model
-    t0 = time.monotonic()
-    try:
-        adapter = get_adapter("asr")
-        if adapter is not None:
-            _preloaded_asr_model = adapter._model
-            _asr_ready = True
-            logger.info("ASR pre-loaded in %.1fs", time.monotonic() - t0)
-    except Exception:
-        logger.exception("ASR pre-load failed; falling back to lazy load on first frame")
-        _asr_ready = False
+    asr_manager.preload()
 
 
 async def _verify_ws_api_key(api_key: str) -> bool:
@@ -183,6 +149,7 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
 
     async def process_audio(queue: asyncio.Queue[tuple[int, bytes] | None]) -> None:
         nonlocal audio_pipeline
+        manager_version = asr_manager.version()
         while True:
             item = await queue.get()
             if item is None:
@@ -190,16 +157,13 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                 return
             generation, pcm = item
             try:
-                if audio_pipeline is None:
-                    if _asr_ready and _preloaded_asr_model is not None:
-                        asr_model = _preloaded_asr_model
-                    else:
-                        asr_adapter = await asyncio.to_thread(get_adapter, "asr")
-                        if asr_adapter is None:
-                            raise RuntimeError("ASR adapter unavailable")
-                        asr_model = asr_adapter._model
+                if audio_pipeline is None or asr_manager.version() != manager_version:
+                    audio_pipeline = None
+                    adapter = await asyncio.to_thread(asr_manager.get_adapter)
+                    if adapter is None:
+                        raise RuntimeError("ASR adapter unavailable")
                     audio_pipeline = RealtimeAudioPipeline(
-                        asr_model=asr_model,
+                        asr_model=adapter._model,
                         service=service,
                         model=session.session.get("model") or "",
                         target_language=session.session["target_language"],

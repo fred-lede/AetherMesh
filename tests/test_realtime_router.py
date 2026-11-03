@@ -23,6 +23,18 @@ class FakeASRModel:
         return [SimpleNamespace(text="hello there")], SimpleNamespace(language="en")
 
 
+class VersionedASRManager:
+    def __init__(self) -> None:
+        self._version = 0
+        self.models: list[FakeASRModel] = [FakeASRModel()]
+
+    def version(self) -> int:
+        return self._version
+
+    def get_adapter(self):
+        return SimpleNamespace(_model=self.models[-1])
+
+
 class FakeWebSocket:
     def __init__(self, events, *, api_key="test-key", model="local-chat-model"):
         self.headers = {"authorization": f"Bearer {api_key}"}
@@ -43,6 +55,9 @@ class FakeWebSocket:
             import asyncio
 
             await asyncio.sleep(event[1])
+            return await self.receive()
+        if isinstance(event, tuple) and event[0] == "call":
+            event[1]()
             return await self.receive()
         if isinstance(event, str):
             return {"text": event}
@@ -65,8 +80,9 @@ def realtime_dependencies(monkeypatch):
 
     monkeypatch.setattr(realtime_router, "_verify_ws_api_key", verify)
     monkeypatch.setattr(realtime_router.settings, "asr_enabled", True)
-    asr_model = FakeASRModel()
-    monkeypatch.setattr(realtime_router, "get_adapter", lambda _name: SimpleNamespace(_model=asr_model), raising=False)
+    manager = VersionedASRManager()
+    monkeypatch.setattr(realtime_router, "asr_manager", manager, raising=False)
+    asr_model = manager.models[0]
     from runtime.orchestration import openai_handler
 
     monkeypatch.setattr(openai_handler, "RouterService", lambda: service)
@@ -247,7 +263,7 @@ async def test_asr_disabled_returns_error(realtime_dependencies, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unavailable_asr_adapter_returns_error(realtime_dependencies, monkeypatch):
-    monkeypatch.setattr(realtime_router, "get_adapter", lambda _name: None)
+    monkeypatch.setattr(realtime_router.asr_manager, "get_adapter", lambda: None)
     pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
     ws = FakeWebSocket([
         {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
@@ -331,30 +347,54 @@ async def test_bearer_auth_failure_closes_socket(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_first_audio_frame_uses_preloaded_asr_model(realtime_dependencies, monkeypatch):
-    import router.realtime_router as rr
-    asr_model = rr.get_adapter("asr")._model
-    monkeypatch.setattr(rr, "_asr_ready", True)
-    monkeypatch.setattr(rr, "_preloaded_asr_model", asr_model)
+async def test_pipeline_built_once_from_manager_adapter(realtime_dependencies, monkeypatch):
+    manager = realtime_router.asr_manager
+    calls: list[int] = []
+    orig_get_adapter = manager.get_adapter
 
-    calls: list[str] = []
-    orig = rr.get_adapter
+    def spy():
+        calls.append(1)
+        return orig_get_adapter()
 
-    def spy(name: str, *a, **k):
-        calls.append(name)
-        return orig(name, *a, **k)
-
-    monkeypatch.setattr(rr, "get_adapter", spy)
+    monkeypatch.setattr(manager, "get_adapter", spy)
 
     pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
     ws = FakeWebSocket([
         {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
         {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
         {"type": "session.close"},
     ])
     await realtime_router.realtime_websocket(ws)
-    assert "asr" not in calls, "first audio frame must not trigger lazy ASR load"
     assert any(event["type"] == "session.input_transcript.delta" for event in ws.sent)
+    assert len(calls) == 1, "pipeline must be built once from the manager adapter, not per frame"
+
+
+@pytest.mark.asyncio
+async def test_asr_version_change_rebuilds_pipeline_with_new_model(realtime_dependencies):
+    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    manager = realtime_router.asr_manager
+    new_model = FakeASRModel()
+
+    def switch_engine():
+        manager.models.append(new_model)
+        manager._version += 1
+
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        ("delay", 0.05),
+        ("call", switch_engine),
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    events = [event for event in ws.sent if event["type"] == "session.input_transcript.delta"]
+    assert len(events) == 2
+    assert manager.models[0].samples_seen > 0
+    assert new_model.samples_seen > 0
+    assert ws.sent[-1]["type"] == "session.closed"
+    assert ws.close_code == 1000
 
 
 @pytest.mark.asyncio
