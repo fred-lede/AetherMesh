@@ -227,23 +227,19 @@ class TestAdapterInitFailure:
 
 
 class TestProviderRouterResilience:
-    def test_asr_factory_cooldown(self) -> None:
+    def test_asr_adapter_delegates_to_manager(self) -> None:
+        from runtime.asr import asr_manager as asr_manager_module
         from runtime.orchestration import provider_router as pr
-        import importlib
-        importlib.reload(pr)
-        pr._asr_adapter = None
-        pr._asr_adapter_failed_at = 0.0
-        with patch.object(pr.settings, "asr_enabled", True):
-            with patch.object(pr, "FasterWhisperAdapter", side_effect=RuntimeError("CUDA error")):
-                result = pr._get_asr_adapter()
-                assert result is None
-                assert pr._asr_adapter_failed_at > 0
-                pr._ADAPTER_RETRY_COOLDOWN = 9999.0
-                result2 = pr._get_asr_adapter()
-                assert result2 is None
-                pr._ADAPTER_RETRY_COOLDOWN = 30.0
-        pr._asr_adapter = None
-        pr._asr_adapter_failed_at = 0.0
+
+        with patch.object(asr_manager_module.asr_manager, "get_adapter", return_value="sentinel-adapter"):
+            assert pr._get_asr_adapter() == "sentinel-adapter"
+
+    def test_asr_adapter_none_when_disabled(self) -> None:
+        from runtime.asr import asr_manager as asr_manager_module
+        from runtime.orchestration import provider_router as pr
+
+        with patch.object(asr_manager_module.asr_manager, "get_adapter", return_value=None):
+            assert pr._get_asr_adapter() is None
 
     def test_tts_factory_cooldown(self) -> None:
         from runtime.orchestration import provider_router as pr

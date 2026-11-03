@@ -21,11 +21,6 @@ except ImportError:
     XTTSAdapter = None  # type: ignore[assignment, misc]
 
 try:
-    from providers.faster_whisper_adapter import FasterWhisperAdapter
-except ImportError:
-    FasterWhisperAdapter = None  # type: ignore[assignment, misc]
-
-try:
     from providers.image_gen_adapter import ImageGenAdapter
 except ImportError:
     ImageGenAdapter = None  # type: ignore[assignment, misc]
@@ -187,8 +182,6 @@ def adapter(provider: str, worker: dict[str, Any] | None = None) -> Any:
             raise ValueError("XTTS adapter not available (TTS not installed)")
         return _get_tts_adapter()
     if provider == "asr":
-        if FasterWhisperAdapter is None:
-            raise ValueError("ASR adapter not available (faster-whisper not installed)")
         return _get_asr_adapter()
     if provider == "image_gen":
         if ImageGenAdapter is None:
@@ -239,34 +232,10 @@ def _get_tts_adapter() -> Any:
         return None
 
 
-_asr_adapter: Any | None = None
-_asr_adapter_failed_at: float = 0.0
-
-
 def _get_asr_adapter() -> Any:
-    global _asr_adapter, _asr_adapter_failed_at
-    if _asr_adapter is not None:
-        return _asr_adapter
-    if not settings.asr_enabled:
-        return None
-    if _asr_adapter_failed_at and (time.monotonic() - _asr_adapter_failed_at < _ADAPTER_RETRY_COOLDOWN):
-        logger.warning("ASR adapter recently failed, retrying after cooldown (%.0fs remaining)",
-                       _ADAPTER_RETRY_COOLDOWN - (time.monotonic() - _asr_adapter_failed_at))
-        return None
-    try:
-        _asr_adapter = FasterWhisperAdapter(
-            model_name=settings.asr_model,
-            device=settings.asr_device,
-            device_index=settings.asr_device_index,
-            compute_type=settings.asr_compute_type,
-            download_dir=settings.asr_models_dir,
-        )
-        _asr_adapter_failed_at = 0.0
-        return _asr_adapter
-    except Exception:
-        _asr_adapter_failed_at = time.monotonic()
-        logger.exception("ASR adapter creation failed")
-        return None
+    from runtime.asr.asr_manager import asr_manager
+
+    return asr_manager.get_adapter()
 
 
 _image_gen_adapter: Any | None = None

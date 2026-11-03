@@ -2240,7 +2240,8 @@ def audio_status(request: Request) -> dict[str, Any]:
         raise
     except Exception:
         raise HTTPException(status_code=403, detail="Admin access required")
-    from runtime.orchestration.provider_router import _tts_adapter, _asr_adapter
+    from runtime.asr.asr_manager import asr_manager
+    from runtime.orchestration.provider_router import _tts_adapter
     tts_info: dict[str, Any] = {"enabled": settings.tts_enabled}
     asr_info: dict[str, Any] = {"enabled": settings.asr_enabled}
     if settings.tts_enabled:
@@ -2260,12 +2261,19 @@ def audio_status(request: Request) -> dict[str, Any]:
         tts_info["device"] = settings.tts_device
         tts_info["dtype"] = settings.tts_dtype
     if settings.asr_enabled:
-        if _asr_adapter is not None:
+        snapshot = asr_manager.snapshot()
+        asr_info["state"] = snapshot["state"]
+        asr_info["version"] = snapshot["version"]
+        if snapshot["error"]:
+            asr_info["error"] = snapshot["error"]
+        adapter = asr_manager.get_adapter()
+        if adapter is not None:
             try:
-                asr_info.update(_asr_adapter.health_check())
+                asr_info.update(adapter.health_check())
             except Exception:
                 pass
-        asr_info["model"] = settings.asr_model
+        active = snapshot.get("active") or {}
+        asr_info["model"] = active.get("model") or settings.asr_model
         asr_info["device"] = settings.asr_device
         asr_info["device_index"] = settings.asr_device_index
         asr_info["compute_type"] = settings.asr_compute_type
