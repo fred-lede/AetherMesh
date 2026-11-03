@@ -371,9 +371,17 @@ async def test_pipeline_built_once_from_manager_adapter(realtime_dependencies, m
 
 
 @pytest.mark.asyncio
-async def test_asr_version_change_rebuilds_pipeline_with_new_model(realtime_dependencies):
+async def test_asr_version_change_rebuilds_pipeline_with_new_model(realtime_dependencies, monkeypatch):
     pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
     manager = realtime_router.asr_manager
+    calls: list[int] = []
+    orig_get_adapter = manager.get_adapter
+
+    def spy():
+        calls.append(1)
+        return orig_get_adapter()
+
+    monkeypatch.setattr(manager, "get_adapter", spy)
     new_model = FakeASRModel()
 
     def switch_engine():
@@ -386,13 +394,15 @@ async def test_asr_version_change_rebuilds_pipeline_with_new_model(realtime_depe
         ("delay", 0.05),
         ("call", switch_engine),
         {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
         {"type": "session.close"},
     ])
     await realtime_router.realtime_websocket(ws)
     events = [event for event in ws.sent if event["type"] == "session.input_transcript.delta"]
-    assert len(events) == 2
+    assert len(events) == 3
     assert manager.models[0].samples_seen > 0
     assert new_model.samples_seen > 0
+    assert len(calls) == 2, "pipeline must be rebuilt once at the switch, then reused for later frames"
     assert ws.sent[-1]["type"] == "session.closed"
     assert ws.close_code == 1000
 

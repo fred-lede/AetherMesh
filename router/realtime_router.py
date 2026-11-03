@@ -168,6 +168,7 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                         model=session.session.get("model") or "",
                         target_language=session.session["target_language"],
                     )
+                    manager_version = asr_manager.version()
                 async def emit(outbound: dict) -> None:
                     if generation == audio_generation:
                         await send_json(outbound)
