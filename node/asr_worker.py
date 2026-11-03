@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 
 from config.settings import settings
 
@@ -64,7 +65,15 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.post("/v1/audio/transcriptions")
+def _verify_worker_token(authorization: str | None = Header(default=None)) -> None:
+    expected = os.getenv("AIIH_ASR_WORKER_TOKEN", "")
+    if not expected:
+        return
+    if not secrets.compare_digest(authorization or "", f"Bearer {expected}"):
+        raise HTTPException(status_code=401, detail="invalid or missing asr worker token")
+
+
+@app.post("/v1/audio/transcriptions", dependencies=[Depends(_verify_worker_token)])
 def transcriptions(file: UploadFile = File(...), language: str = Form("")) -> dict[str, Any]:
     try:
         adapter = get_adapter()

@@ -352,6 +352,28 @@ def test_list_targets_control_plane_down_degrades(env):
     assert [t["id"] for t in targets["local"]] == ["local:cuda:0", "local:cuda:1", "local:cpu"]
 
 
+def test_reload_control_plane_malformed_json_maps_503(env):
+    def malformed():
+        raise ValueError("malformed JSON")
+
+    env.setattr(asr_manager_module, "_fetch_cluster_nodes", malformed)
+    manager = ASRManager(builders={}, dispose=MagicMock(), persist=lambda d: None)
+    with pytest.raises(ASRConfigError) as excinfo:
+        manager.reload("node:x", provider=None, model=None)
+    assert excinfo.value.status_code == 503
+
+
+def test_list_targets_malformed_json_degrades_unreachable(env):
+    def malformed():
+        raise ValueError("malformed JSON")
+
+    env.setattr(asr_manager_module, "_fetch_cluster_nodes", malformed)
+    manager = ASRManager(builders={}, dispose=MagicMock(), persist=lambda d: None)
+    targets = manager.list_targets()
+    assert targets["nodes_unreachable"] is True
+    assert targets["nodes"] == []
+
+
 def test_get_adapter_during_loading_returns_previous(env):
     adapter_a = _fake_adapter("a")
     gate = threading.Event()

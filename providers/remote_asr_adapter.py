@@ -44,8 +44,8 @@ class _RemoteTranscriber:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
-    def _fail(self, message: str) -> ASRProviderError:
-        return ASRProviderError(f"asr worker node={self._node_id} at {self._base_url} {message}", status_code=503)
+    def _fail(self, message: str, status_code: int = 503) -> ASRProviderError:
+        return ASRProviderError(f"asr worker node={self._node_id} at {self._base_url} {message}", status_code=status_code)
 
     def transcribe_file(self, audio: bytes, language: str = "") -> str:
         files = {"file": ("upload.bin", audio, "application/octet-stream")}
@@ -71,7 +71,8 @@ class _RemoteTranscriber:
         except requests.RequestException as exc:
             raise self._fail(f"unreachable: {exc}") from exc
         if not response.ok:
-            raise self._fail(f"returned HTTP {response.status_code}: {response.text[:200]}")
+            status_code = response.status_code if 400 <= response.status_code < 500 else 503
+            raise self._fail(f"returned HTTP {response.status_code}: {response.text[:200]}", status_code=status_code)
         try:
             payload = response.json()
         except ValueError as exc:

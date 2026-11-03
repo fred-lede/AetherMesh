@@ -124,6 +124,24 @@ def test_connection_error_maps_to_503(monkeypatch):
     assert "unreachable" in str(excinfo.value)
 
 
+def test_http_400_from_worker_maps_to_400(monkeypatch):
+    monkeypatch.setattr(remote_module.requests, "post", lambda *a, **k: _response(ok=False, status_code=400, text="bad request"))
+    adapter = RemoteASRAdapter(node_id="n1", base_url="http://10.0.0.9:9450")
+    with pytest.raises(ASRProviderError) as excinfo:
+        adapter.transcribe(b"x")
+    assert excinfo.value.status_code == 400
+    assert "n1" in str(excinfo.value)
+    assert "HTTP 400" in str(excinfo.value)
+
+
+def test_http_500_from_worker_maps_to_503(monkeypatch):
+    monkeypatch.setattr(remote_module.requests, "post", lambda *a, **k: _response(ok=False, status_code=500, text="boom"))
+    adapter = RemoteASRAdapter(node_id="n1", base_url="http://10.0.0.9:9450")
+    with pytest.raises(ASRProviderError) as excinfo:
+        adapter.transcribe(b"x")
+    assert excinfo.value.status_code == 503
+
+
 def test_health_check_reachable(monkeypatch):
     monkeypatch.setattr(
         remote_module.requests, "get",

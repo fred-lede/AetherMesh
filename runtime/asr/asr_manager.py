@@ -154,7 +154,7 @@ class ASRManager:
         now = time.monotonic()
         with self._lock:
             if self._gpu_cache and now - self._gpu_cache_at < _GPU_CACHE_TTL_S:
-                return self._gpu_cache
+                return list(self._gpu_cache)
         try:
             gpus = discover_gpus()
         except Exception:
@@ -162,7 +162,7 @@ class ASRManager:
         with self._lock:
             self._gpu_cache = gpus
             self._gpu_cache_at = now
-        return gpus
+        return list(self._gpu_cache)
 
     def resolve_target(self, target_id: str) -> ASRTarget:
         if not target_id or not isinstance(target_id, str):
@@ -187,7 +187,7 @@ class ASRManager:
     def _resolve_node_base_url(self, node_id: str) -> str:
         try:
             nodes = _fetch_cluster_nodes()
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             raise ASRConfigError(f"control-plane unreachable: {exc}", status_code=503) from exc
         for node in nodes:
             if node.get("node_id") != node_id:
@@ -375,7 +375,7 @@ class ASRManager:
         nodes_unreachable = False
         try:
             cluster_nodes = _fetch_cluster_nodes()
-        except requests.RequestException:
+        except (requests.RequestException, ValueError):
             nodes_unreachable = True
             cluster_nodes = []
         for node in cluster_nodes:

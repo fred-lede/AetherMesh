@@ -12,6 +12,7 @@ import node.asr_worker as asr_worker
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(asr_worker, "_adapter", None)
+    monkeypatch.delenv("AIIH_ASR_WORKER_TOKEN", raising=False)
     app = FastAPI()
     app.include_router(asr_worker.app.router)
     return TestClient(app)
@@ -75,6 +76,36 @@ def test_transcription_engine_error_maps_provider_status(client, monkeypatch):
     monkeypatch.setattr(asr_worker, "_build_adapter", lambda: engine)
     resp = client.post("/v1/audio/transcriptions", files={"file": ("a.wav", b"x", "audio/wav")})
     assert resp.status_code == 400
+
+
+def test_transcription_missing_token_401(client, monkeypatch):
+    monkeypatch.setenv("AIIH_ASR_WORKER_TOKEN", "secret")
+    resp = client.post("/v1/audio/transcriptions", files={"file": ("a.wav", b"x", "audio/wav")})
+    assert resp.status_code == 401
+
+
+def test_transcription_wrong_token_401(client, monkeypatch):
+    monkeypatch.setenv("AIIH_ASR_WORKER_TOKEN", "secret")
+    resp = client.post(
+        "/v1/audio/transcriptions",
+        files={"file": ("a.wav", b"x", "audio/wav")},
+        headers={"Authorization": "Bearer wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_transcription_correct_token_200(client, monkeypatch):
+    engine = _engine({"text": "hello from node"})
+    monkeypatch.setattr(asr_worker, "_build_adapter", lambda: engine)
+    monkeypatch.setenv("AIIH_ASR_WORKER_TOKEN", "secret")
+    resp = client.post(
+        "/v1/audio/transcriptions",
+        files={"file": ("a.wav", b"x", "audio/wav")},
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"text": "hello from node"}
+    engine.transcribe.assert_called_once()
 
 
 def test_probe_asr_worker_healthy(monkeypatch):

@@ -121,7 +121,7 @@
     var active = cfg.active || {};
     var requested = cfg.requested || {};
     var html = '<div class="settings-grid">' +
-      '<div class="label">Status</div><div class="value"><span class="pill ' + pillCls + '">' + escapeHtml(state) + '</span>' +
+      '<div class="label">Status</div><div class="value"><span class="pill ' + pillCls + '" id="asr-state-pill">' + escapeHtml(state) + '</span>' +
       (state === 'failed' && cfg.error ? ' <span style="color:var(--bad)">' + escapeHtml(cfg.error) + '</span>' : '') + '</div><div></div>' +
       '<div class="label">Active</div><div class="value"><code>' + escapeHtml(active.provider || '—') + ' / ' + escapeHtml(active.model || '—') + ' @ ' + escapeHtml(active.target_id || '—') + '</code></div><div></div>' +
       '</div>';
@@ -218,7 +218,12 @@
         if (!resp.ok) continue;
         var cfg = await resp.json();
         var panel = document.getElementById('asr-settings-panel');
-        if (panel) renderAsrSettings(panel, cfg);
+        if (cfg.state === 'loading') {
+          var pill = document.getElementById('asr-state-pill');
+          if (pill) { pill.textContent = 'loading'; pill.className = 'pill warn'; }
+        } else if (panel) {
+          renderAsrSettings(panel, cfg);
+        }
         if (cfg.state !== 'loading') {
           if (cfg.state === 'failed') {
             var msg = document.getElementById('asr-apply-msg');

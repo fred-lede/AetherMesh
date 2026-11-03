@@ -24,6 +24,16 @@ def _wav_bytes(samples: np.ndarray, sample_rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
+def _wav_bytes_8bit(raw: bytes, sample_rate: int = 16000) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(1)
+        wav.setframerate(sample_rate)
+        wav.writeframes(raw)
+    return buf.getvalue()
+
+
 @pytest.fixture
 def fake_qwen(monkeypatch):
     calls: list[dict] = []
@@ -114,6 +124,22 @@ def test_bytes_rejects_wrong_sample_rate(fake_qwen):
         adapter.transcribe(_wav_bytes(_samples(), sample_rate=44100))
     assert excinfo.value.status_code == 400
     assert "16kHz" in str(excinfo.value)
+
+
+def test_bytes_decodes_8bit_wav_as_unsigned(fake_qwen):
+    instance, calls = fake_qwen
+    adapter = QwenASRAdapter(device="cpu")
+    adapter.transcribe(_wav_bytes_8bit(bytes([0, 128, 255])))
+    audio, sr = calls[0]["audio"]
+    assert sr == 16000
+    np.testing.assert_allclose(audio, [-1.0, 0.0, 0.9921875], atol=1e-6)
+
+
+def test_bytes_rejects_short_riff_prefix(fake_qwen):
+    adapter = QwenASRAdapter(device="cpu")
+    with pytest.raises(ASRProviderError) as excinfo:
+        adapter.transcribe(b"RIFF")
+    assert excinfo.value.status_code == 400
 
 
 def test_inference_error_wrapped_as_503(fake_qwen):

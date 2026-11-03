@@ -92,7 +92,7 @@ class QwenASRAdapter(ASRProviderAdapter):
 
     @staticmethod
     def _decode_wav(audio: bytes) -> np.ndarray:
-        if audio[:4] != b"RIFF":
+        if len(audio) < 12 or audio[:4] != b"RIFF":
             raise ASRProviderError("qwen_asr file input supports 16kHz WAV only", status_code=400)
         try:
             with wave.open(io.BytesIO(audio), "rb") as wav:
@@ -104,7 +104,7 @@ class QwenASRAdapter(ASRProviderAdapter):
             raise ASRProviderError("qwen_asr file input supports 16kHz WAV only", status_code=400) from exc
         if sample_rate != 16000:
             raise ASRProviderError(f"qwen_asr file input must be 16kHz WAV (got {sample_rate}Hz)", status_code=400)
-        dtype = {1: np.int8, 2: np.int16, 4: np.int32}.get(sampwidth)
+        dtype = {1: np.uint8, 2: np.int16, 4: np.int32}.get(sampwidth)
         if dtype is None:
             raise ASRProviderError(f"unsupported WAV sample width {sampwidth}", status_code=400)
         samples = np.frombuffer(frames, dtype=dtype).astype(np.float32)
