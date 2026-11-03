@@ -100,6 +100,17 @@ def test_probe_asr_worker_down(monkeypatch):
     assert probe == {"port": 9450, "healthy": False, "engine": None, "model": None}
 
 
+def test_probe_asr_worker_bad_port_env_degrades(monkeypatch):
+    import node.node_agent as node_agent_module
+
+    def _fail(*a, **k):
+        raise AssertionError("requests.get must not be called when AIIH_ASR_PORT is non-numeric")
+
+    monkeypatch.setattr(node_agent_module.requests, "get", _fail)
+    monkeypatch.setenv("AIIH_ASR_PORT", "not-a-number")
+    assert node_agent_module._probe_asr_worker() == {"port": 9450, "healthy": False, "engine": None, "model": None}
+
+
 def test_node_agent_payload_includes_asr_worker(monkeypatch):
     import node.node_agent as node_agent_module
 

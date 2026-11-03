@@ -17,8 +17,9 @@ app = FastAPI(title="AetherMesh Node Agent", version="4.0.0")
 
 
 def _probe_asr_worker() -> dict[str, Any]:
-    port = int(os.getenv("AIIH_ASR_PORT", "9450"))
+    port = 9450
     try:
+        port = int(os.getenv("AIIH_ASR_PORT", "9450"))
         response = requests.get(f"http://127.0.0.1:{port}/health", timeout=2)
         if response.ok:
             data = response.json()
