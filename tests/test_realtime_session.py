@@ -40,10 +40,21 @@ def test_conversation_item_create_unsupported():
     assert session.items == []
 
 
-def test_audio_buffer_not_supported():
+def test_standard_audio_append_is_aliased_to_session_buffer():
     session = RealtimeSession()
-    events = session.handle_event({"type": "input_audio_buffer.append"})
-    assert events[0]["type"] == "error"
+    pcm = b"\x01\x00\xff\x7f"
+    events = session.handle_event({
+        "type": "input_audio_buffer.append",
+        "audio": base64.b64encode(pcm).decode(),
+    })
+    assert events == []
+    assert session.take_audio() == pcm
+
+
+def test_standard_commit_and_clear_are_silent_noops():
+    session = RealtimeSession()
+    assert session.handle_event({"type": "input_audio_buffer.commit"}) == []
+    assert session.handle_event({"type": "input_audio_buffer.clear"}) == []
 
 
 def test_realingo_session_update_sets_target_language():
@@ -136,6 +147,11 @@ def test_build_messages_ignores_non_text_items():
 def test_extract_item_text_mixed_parts():
     item = {"type": "message", "content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]}
     assert _extract_item_text(item) == "a b"
+
+
+def test_extract_item_text_accepts_openai_input_text_parts():
+    item = {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+    assert _extract_item_text(item) == "hello"
 
 
 def test_build_messages_empty():

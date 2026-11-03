@@ -30,10 +30,12 @@ class RealtimeAudioPipeline:
         model: str,
         target_language: str,
         window_seconds: float = 2.5,
+        instructions: str = "",
     ) -> None:
         self._service = service
         self._model = model
         self._target_language = target_language
+        self._instructions = str(instructions or "").strip()
         self._stream = StreamingASR(
             model=asr_model,
             interim=False,
@@ -84,12 +86,16 @@ class RealtimeAudioPipeline:
                 "seg": seg,
                 "is_final": is_final,
             })
+            if self._instructions:
+                system_prompt = self._instructions
+            else:
+                system_prompt = f"Translate the following speech into {self._target_language}. Return only the translation."
             payload = {
                 "model": self._model,
                 "messages": [
                     {
                         "role": "system",
-                        "content": f"Translate the following speech into {self._target_language}. Return only the translation.",
+                        "content": system_prompt,
                     },
                     {"role": "user", "content": source},
                 ],

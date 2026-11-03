@@ -176,6 +176,27 @@ async def test_close_emits_is_final_true_on_transcript_deltas():
 
 
 @pytest.mark.asyncio
+async def test_instructions_override_translation_prompt():
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "hi"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="",
+        instructions="Translate the speech into English. Return only the translation.",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    payload = service.handle_chat.call_args.args[0]
+    assert payload["messages"][0] == {
+        "role": "system",
+        "content": "Translate the speech into English. Return only the translation.",
+    }
+    assert payload["messages"][1] == {"role": "user", "content": "hello world"}
+
+
+@pytest.mark.asyncio
 async def test_transcript_events_do_not_append_trailing_whitespace():
     model = _model("hello world")
     service = MagicMock()

@@ -36,15 +36,19 @@ class VersionedASRManager:
 
 
 class FakeWebSocket:
-    def __init__(self, events, *, api_key="test-key", model="local-chat-model"):
+    def __init__(self, events, *, api_key="test-key", model="local-chat-model", protocols=None):
         self.headers = {"authorization": f"Bearer {api_key}"}
+        if protocols:
+            self.headers["sec-websocket-protocol"] = ", ".join(protocols)
         self.query_params = {"model": model}
+        self.scope = {"subprotocols": list(protocols or [])}
         self.events = iter(events)
         self.sent = []
         self.close_code = None
+        self.accepted_subprotocol = None
 
-    async def accept(self):
-        pass
+    async def accept(self, subprotocol=None):
+        self.accepted_subprotocol = subprotocol
 
     async def receive(self):
         try:
@@ -421,3 +425,111 @@ async def test_disconnect_logs_lifetime_and_reason(realtime_dependencies, caplog
     assert disconnect_logs, f"expected a disconnect log, got none"
     log_line = disconnect_logs[-1]
     assert "lifetime" in log_line, f"disconnect log should report lifetime, got: {log_line!r}"
+
+
+@pytest.mark.asyncio
+async def test_subprotocol_key_authenticates_and_realtime_is_echoed(realtime_dependencies, monkeypatch):
+    seen: dict[str, str] = {}
+
+    async def verify(key):
+        seen["key"] = key
+        return key == "secret-1"
+
+    monkeypatch.setattr(realtime_router, "_verify_ws_api_key", verify)
+    ws = FakeWebSocket(
+        [{"type": "session.close"}],
+        api_key="",
+        protocols=["realtime", "openai-insecure-api-key.secret-1"],
+    )
+    await realtime_router.realtime_websocket(ws)
+    assert seen["key"] == "secret-1"
+    assert ws.accepted_subprotocol == "realtime"
+    assert ws.sent[-1]["type"] == "session.closed"
+
+
+@pytest.mark.asyncio
+async def test_instructions_only_session_passes_gate_via_standard_append(realtime_dependencies):
+    service = realtime_dependencies
+    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    instructions = "Translate the speech into English. Return only the translation."
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"instructions": instructions}},
+        {"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    assert not any(event["type"] == "error" for event in ws.sent)
+    assert any(event["type"] == "session.output_transcript.delta" for event in ws.sent)
+    payload = service.handle_chat.call_args.args[0]
+    assert payload["messages"][0] == {"role": "system", "content": instructions}
+
+
+@pytest.mark.asyncio
+async def test_audio_input_without_target_language_or_instructions_is_rejected(realtime_dependencies):
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    assert any("before audio input" in event.get("error", {}).get("message", "") for event in ws.sent)
+
+
+@pytest.mark.asyncio
+async def test_audio_stream_also_emits_openai_transcription_and_response_events(realtime_dependencies):
+    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    types = [event["type"] for event in ws.sent]
+    assert "conversation.item.input_audio_transcription.completed" in types
+    completed = next(e for e in ws.sent if e["type"] == "conversation.item.input_audio_transcription.completed")
+    assert completed["transcript"] == "hello there"
+    assert completed["item_id"] == "item_1"
+    order = ["response.created", "response.output_item.added", "response.output_text.delta", "response.output_text.done", "response.done"]
+    indices = [types.index(t) for t in order]
+    assert indices == sorted(indices), f"response sequence out of order: {[t for t in types if t in order]}"
+    out_delta = next(e for e in ws.sent if e["type"] == "response.output_text.delta")
+    assert out_delta["delta"] == "你好"
+    assert out_delta["item_id"] == "msg_1"
+    out_done = next(e for e in ws.sent if e["type"] == "response.output_text.done")
+    assert out_done["text"] == "你好"
+
+
+@pytest.mark.asyncio
+async def test_anchor_response_create_replies_out_of_band_without_llm(realtime_dependencies):
+    service = realtime_dependencies
+    ws = FakeWebSocket([
+        {"type": "response.create", "response": {"conversation": "none", "output_modalities": ["text"], "metadata": {"purpose": "anchor"}}},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    service.handle_chat.assert_not_called()
+    created = next(e for e in ws.sent if e["type"] == "response.created")
+    assert created["response"]["conversation_id"] is None
+    assert created["response"]["metadata"] == {"purpose": "anchor"}
+    done = next(e for e in ws.sent if e["type"] == "response.done")
+    assert done["response"]["conversation_id"] is None
+    assert done["response"]["metadata"] == {"purpose": "anchor"}
+
+
+@pytest.mark.asyncio
+async def test_response_create_echoes_metadata_request_and_emits_output_text_deltas(realtime_dependencies):
+    ws = FakeWebSocket([
+        {"type": "conversation.item.create", "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}},
+        {"type": "response.create", "response": {"metadata": {"request": "sokuji_7"}}},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    created = next(e for e in ws.sent if e["type"] == "response.created")
+    assert created["response"]["metadata"] == {"request": "sokuji_7"}
+    assert created["response"]["conversation_id"]
+    done = next(e for e in ws.sent if e["type"] == "response.done")
+    assert done["response"]["metadata"] == {"request": "sokuji_7"}
+    assert done["response"]["status"] == "completed"
+    delta = next(e for e in ws.sent if e["type"] == "response.output_text.delta")
+    assert delta["delta"] == "你好"
+    assert any(e["type"] == "response.text.delta" for e in ws.sent), "legacy dialect deltas must be kept"

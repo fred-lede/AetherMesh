@@ -19,7 +19,7 @@ def _extract_item_text(item: dict[str, Any]) -> str | None:
         return None
     parts: list[str] = []
     for part in item.get("content") or []:
-        if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str):
+        if isinstance(part, dict) and part.get("type") in {"text", "input_text"} and isinstance(part.get("text"), str):
             parts.append(part["text"])
         elif isinstance(part, str):
             parts.append(part)
@@ -53,13 +53,13 @@ class RealtimeSession:
             return [self._add_item(data)]
         if event_type == "ping":
             return [{"type": "pong", "time": _now_ms()}]
-        if event_type == "session.input_audio_buffer.append":
+        if event_type in {"input_audio_buffer.append", "session.input_audio_buffer.append"}:
             return self._append_audio(data)
+        if event_type in {"input_audio_buffer.commit", "input_audio_buffer.clear"}:
+            return []
         if event_type == "session.close":
             self.audio_closed = True
             return []
-        if event_type in {"input_audio_buffer.append", "input_audio_buffer.commit"}:
-            return [{"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": "audio input is not supported"}}]
         return []
 
     def _append_audio(self, data: dict[str, Any]) -> list[dict[str, Any]]:
