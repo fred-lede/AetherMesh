@@ -32,6 +32,7 @@ from router.files_router import router as files_router
 from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
 from router.skills_router import skills_router
 from router.audit_router import router as audit_router
+from router.asr_admin_router import router as asr_admin_router
 from router.realtime_router import router as realtime_router
 from router.rag_router import create_rag_router
 from router.sessions_router import create_sessions_router
@@ -125,6 +126,7 @@ app.include_router(usage_router)
 app.include_router(traces_router)
 app.include_router(decision_router)
 app.include_router(document_router)
+app.include_router(asr_admin_router)
 
 if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router
