@@ -2404,7 +2404,7 @@ app.include_router(api)
 
 if __name__ == "__main__":
     import uvicorn
-    kwargs = {}
+    kwargs = {"ws_ping_interval": 20, "ws_ping_timeout": 120}
     cert = os.getenv("AIIH_SSL_CERTFILE", "").strip()
     key = os.getenv("AIIH_SSL_KEYFILE", "").strip()
     if cert and key:
