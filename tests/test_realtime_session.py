@@ -83,6 +83,43 @@ def test_realingo_session_update_sets_target_language():
     assert session.session["transcription_model"] == "gpt-realtime-whisper"
 
 
+def test_sokuji_session_update_stores_output_modalities():
+    session = RealtimeSession(model="translategemma:4b")
+    events = session.handle_event({
+        "type": "session.update",
+        "session": {
+            "output_modalities": ["audio"],
+            "instructions": "Translate the speech.",
+            "audio": {
+                "input": {
+                    "transcription": {"model": "Qwen/Qwen3-ASR-0.6B"},
+                    "turn_detection": {"type": "server_vad", "silence_duration_ms": 200},
+                },
+                "output": {"voice": "alloy"},
+            },
+        },
+    })
+    assert events[0]["type"] == "session.updated"
+    assert session.session["output_modalities"] == ["audio"]
+    assert events[0]["session"]["output_modalities"] == ["audio"]
+    assert session.wants_audio_transcripts() is True
+
+
+def test_wants_audio_transcripts_defaults_to_text_form():
+    session = RealtimeSession()
+    assert session.session["output_modalities"] == ["text"]
+    assert session.wants_audio_transcripts() is False
+    session.handle_event({"type": "session.update", "session": {"output_modalities": ["text"]}})
+    assert session.wants_audio_transcripts() is False
+
+
+def test_output_modalities_empty_list_keeps_previous_value():
+    session = RealtimeSession()
+    session.handle_event({"type": "session.update", "session": {"output_modalities": ["audio"]}})
+    session.handle_event({"type": "session.update", "session": {"output_modalities": []}})
+    assert session.session["output_modalities"] == ["audio"]
+
+
 def test_realingo_audio_append_decodes_pcm16():
     session = RealtimeSession()
     pcm = b"\x01\x00\xff\x7f"

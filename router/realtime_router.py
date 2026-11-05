@@ -13,6 +13,9 @@ from runtime.asr.asr_manager import asr_manager
 from runtime.realtime.audio_pipeline import RealtimeAudioPipeline
 from runtime.realtime.openai_events import (
     anchor_response_sequence,
+    audio_transcript_delta_event,
+    audio_transcript_done_event,
+    input_item_added_event,
     input_item_created_event,
     is_anchor_request,
     new_event_id,
@@ -59,7 +62,7 @@ def _chunk_text(text: str, size: int = 40) -> list[str]:
 AUDIO_APPEND_TYPES = {"session.input_audio_buffer.append", "input_audio_buffer.append"}
 
 
-def openai_realtime_extras(event: dict) -> list[dict]:
+def openai_realtime_extras(event: dict, *, audio_transcripts: bool = False) -> list[dict]:
     event_type = event.get("type")
     if event_type == "session.input_transcript.delta":
         text = str(event.get("text") or event.get("delta") or "").strip()
@@ -68,6 +71,7 @@ def openai_realtime_extras(event: dict) -> list[dict]:
         item_id = f"item_{event.get('seg', 0)}"
         return [
             input_item_created_event(item_id),
+            input_item_added_event(item_id),
             transcription_completed_event(item_id, text),
         ]
     if event_type == "session.output_transcript.delta":
@@ -81,6 +85,7 @@ def openai_realtime_extras(event: dict) -> list[dict]:
             item_id=f"msg_{seg}",
             conversation_id="conv_local",
             previous_item_id=f"item_{seg}",
+            audio_transcripts=audio_transcripts,
         )
     return []
 
@@ -135,6 +140,7 @@ async def _stream_response(websocket: WebSocket, session: RealtimeSession, servi
             "part": {"type": "text", "text": ""},
         })
         text = await _run_completion(session, service)
+        audio_transcripts = session.wants_audio_transcripts()
         for chunk in _chunk_text(text):
             await send({
                 "type": "response.text.delta",
@@ -143,26 +149,32 @@ async def _stream_response(websocket: WebSocket, session: RealtimeSession, servi
                 "item_id": item_id,
                 "delta": chunk,
             })
+            if audio_transcripts:
+                await send(audio_transcript_delta_event(chunk, response_id=response_id, item_id=item_id))
+            else:
+                await send({
+                    "type": "response.output_text.delta",
+                    "event_id": new_event_id(),
+                    "response_id": response_id,
+                    "item_id": item_id,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": chunk,
+                })
+            await asyncio.sleep(0.01)
+        await send({"type": "response.text.done", "event_id": new_event_id(), "response_id": response_id, "item_id": item_id, "text": text})
+        if audio_transcripts:
+            await send(audio_transcript_done_event(text, response_id=response_id, item_id=item_id))
+        else:
             await send({
-                "type": "response.output_text.delta",
+                "type": "response.output_text.done",
                 "event_id": new_event_id(),
                 "response_id": response_id,
                 "item_id": item_id,
                 "output_index": 0,
                 "content_index": 0,
-                "delta": chunk,
+                "text": text,
             })
-            await asyncio.sleep(0.01)
-        await send({"type": "response.text.done", "event_id": new_event_id(), "response_id": response_id, "item_id": item_id, "text": text})
-        await send({
-            "type": "response.output_text.done",
-            "event_id": new_event_id(),
-            "response_id": response_id,
-            "item_id": item_id,
-            "output_index": 0,
-            "content_index": 0,
-            "text": text,
-        })
         await send({
             "type": "response.output_item.done",
             "event_id": new_event_id(),
@@ -229,14 +241,35 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
 
     async def emit_with_extras(outbound: dict) -> None:
         await send_json(outbound)
-        for extra in openai_realtime_extras(outbound):
+        for extra in openai_realtime_extras(outbound, audio_transcripts=session.wants_audio_transcripts()):
             await send_json(extra)
+
+    AUDIO_IDLE_POLL_SECONDS = 1.0
 
     async def process_audio(queue: asyncio.Queue[tuple[int, bytes] | None]) -> None:
         nonlocal audio_pipeline
         manager_version = asr_manager.version()
         while True:
-            item = await queue.get()
+            generation = audio_generation
+
+            async def emit(outbound: dict) -> None:
+                if generation != audio_generation:
+                    return
+                await emit_with_extras(outbound)
+
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=AUDIO_IDLE_POLL_SECONDS)
+            except asyncio.TimeoutError:
+                if audio_pipeline is not None and asr_manager.version() == manager_version:
+                    try:
+                        await audio_pipeline.flush_idle(emit=emit)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        if generation == audio_generation:
+                            await send_json({"type": "error", "error": {"type": "server_error", "message": str(exc)}})
+                            audio_pipeline = None
+                continue
             if item is None:
                 queue.task_done()
                 return
@@ -255,11 +288,6 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                         instructions=str(session.session.get("instructions") or ""),
                     )
                     manager_version = asr_manager.version()
-                async def emit(outbound: dict) -> None:
-                    if generation != audio_generation:
-                        return
-                    await emit_with_extras(outbound)
-
                 await audio_pipeline.add_audio(pcm, emit=emit)
             except asyncio.CancelledError:
                 raise
@@ -328,7 +356,15 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                         await send_json(anchor_event)
                     continue
                 if response_task is not None and not response_task.done():
-                    await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": "a response is already in progress"}})
+                    await send_json({
+                        "type": "error",
+                        "event_id": data.get("event_id"),
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "conversation_already_has_active_response",
+                            "message": "a response is already in progress",
+                        },
+                    })
                     continue
                 metadata = response_body.get("metadata") if isinstance(response_body, dict) else None
                 response_task = asyncio.create_task(_stream_response(websocket, session, service, send_json, metadata=metadata))

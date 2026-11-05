@@ -35,6 +35,7 @@ class RealtimeSession:
             "model": model or "",
             "instructions": "",
             "modalities": ["text"],
+            "output_modalities": ["text"],
             "tools": [],
             "temperature": 0.8,
             "max_output_tokens": 1024,
@@ -118,9 +119,15 @@ class RealtimeSession:
                 self.session["target_language"] = language.strip()
         if "modalities" in updates and isinstance(updates["modalities"], list):
             self.session["modalities"] = updates["modalities"]
+        if "output_modalities" in updates and isinstance(updates["output_modalities"], list) and updates["output_modalities"]:
+            self.session["output_modalities"] = updates["output_modalities"]
         if "tools" in updates and isinstance(updates["tools"], list):
             self.session["tools"] = updates["tools"]
         return {"type": "session.updated", "session": dict(self.session)}
+
+    def wants_audio_transcripts(self) -> bool:
+        modalities = self.session.get("output_modalities")
+        return isinstance(modalities, list) and "audio" in modalities
 
     def _add_item(self, data: dict[str, Any]) -> dict[str, Any]:
         item = data.get("item") or {}

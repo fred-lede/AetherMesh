@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +12,10 @@ from runtime.realtime.audio_pipeline import RealtimeAudioPipeline, resample_pcm1
 
 def _pcm24(samples: int = 2400) -> bytes:
     return np.full(samples, 1000, dtype=np.int16).tobytes()
+
+
+def _silence24(samples: int = 24_000) -> bytes:
+    return np.zeros(samples, dtype="<i2").tobytes()
 
 
 def _model(text: str = "hello world") -> MagicMock:
@@ -40,11 +45,12 @@ async def test_audio_chunk_emits_source_and_translated_text_deltas():
     )
     events = await pipeline.add_audio(_pcm24())
     assert [e["type"] for e in events] == [
+        "input_audio_buffer.speech_started",
         "session.input_transcript.delta",
         "session.output_transcript.delta",
     ]
-    assert events[0]["delta"] == "hello world" and events[0]["text"] == "hello world"
-    assert events[1]["delta"] == "你好世界" and events[1]["text"] == "你好世界"
+    assert events[1]["delta"] == "hello world" and events[1]["text"] == "hello world"
+    assert events[2]["delta"] == "你好世界" and events[2]["text"] == "你好世界"
     assert service.handle_chat.call_args.args[0]["model"] == "local-chat-model"
     assert "zh" in service.handle_chat.call_args.args[0]["messages"][0]["content"]
 
@@ -64,11 +70,116 @@ async def test_close_flushes_audio_below_the_streaming_window():
     await pipeline.add_audio(_pcm24(4800))
     events = await pipeline.close()
     assert [e["type"] for e in events] == [
+        "input_audio_buffer.speech_stopped",
+        "input_audio_buffer.committed",
         "session.input_transcript.delta",
         "session.output_transcript.delta",
     ]
-    assert events[0]["delta"] == "last words" and events[0]["text"] == "last words"
-    assert events[1]["delta"] == "最後一句" and events[1]["text"] == "最後一句"
+    assert events[2]["delta"] == "last words" and events[2]["text"] == "last words"
+    assert events[3]["delta"] == "最後一句" and events[3]["text"] == "最後一句"
+
+
+@pytest.mark.asyncio
+async def test_vad_turn_frames_carry_item_ids_in_order():
+    model = _model()
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=2.5,
+    )
+    events = await pipeline.add_audio(_pcm24(4800) + _silence24(24_000))
+    assert [e["type"] for e in events] == [
+        "input_audio_buffer.speech_started",
+        "input_audio_buffer.speech_stopped",
+        "input_audio_buffer.committed",
+    ]
+    assert events[0]["item_id"] == "item_in_1"
+    assert events[1]["item_id"] == "item_in_1"
+    assert events[2]["item_id"] == "item_in_1"
+    assert events[2]["previous_item_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_vad_item_ids_increase_across_turns():
+    model = _model()
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=2.5,
+    )
+    await pipeline.add_audio(_pcm24(4800) + _silence24(24_000))
+    events = await pipeline.add_audio(_pcm24(4800) + _silence24(24_000))
+    started = [e for e in events if e["type"] == "input_audio_buffer.speech_started"]
+    assert [e["item_id"] for e in started] == ["item_in_2"]
+
+
+@pytest.mark.asyncio
+async def test_silent_audio_emits_no_speech_frames():
+    model = _model()
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=2.5,
+    )
+    events = await pipeline.add_audio(_silence24(24_000))
+    assert not any(e["type"].startswith("input_audio_buffer.speech") for e in events)
+    events = await pipeline.close()
+    assert not any(e["type"] in {"input_audio_buffer.speech_stopped", "input_audio_buffer.committed"} for e in events)
+
+
+@pytest.mark.asyncio
+async def test_flush_idle_emits_transcripts_when_audio_stops():
+    model = _model("turn ended")
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "結束了"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=2.5,
+        idle_timeout=0.05,
+    )
+    await pipeline.add_audio(_pcm24(4800))
+    await asyncio.sleep(0.08)
+    events = await pipeline.flush_idle()
+    assert [e["type"] for e in events] == [
+        "session.input_transcript.delta",
+        "session.output_transcript.delta",
+    ]
+    assert events[0]["text"] == "turn ended"
+    assert events[0]["is_final"] is True
+
+
+@pytest.mark.asyncio
+async def test_flush_idle_is_a_noop_when_audio_is_still_fresh():
+    model = _model()
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=2.5,
+        idle_timeout=0.05,
+    )
+    await pipeline.add_audio(_pcm24(4800))
+    events = await pipeline.flush_idle()
+    assert events == []
+    service.handle_chat.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -83,10 +194,10 @@ async def test_translation_without_choices_preserves_source_text_and_emits_error
         window_seconds=0.1,
     )
     events = await pipeline.add_audio(_pcm24())
-    assert events[0]["type"] == "session.input_transcript.delta"
-    assert events[0]["delta"] == "hello world" and events[0]["text"] == "hello world"
-    assert events[1]["type"] == "error"
-    assert events[1]["error"]["message"] == "translation returned no choices"
+    assert events[1]["type"] == "session.input_transcript.delta"
+    assert events[1]["delta"] == "hello world" and events[1]["text"] == "hello world"
+    assert events[2]["type"] == "error"
+    assert events[2]["error"]["message"] == "translation returned no choices"
 
 
 @pytest.mark.asyncio
@@ -101,9 +212,9 @@ async def test_translation_provider_failure_preserves_source_and_emits_error():
         window_seconds=0.1,
     )
     events = await pipeline.add_audio(_pcm24())
-    assert events[0]["type"] == "session.input_transcript.delta"
-    assert events[1]["type"] == "error"
-    assert events[1]["error"]["message"] == "provider unavailable"
+    assert events[1]["type"] == "session.input_transcript.delta"
+    assert events[2]["type"] == "error"
+    assert events[2]["error"]["message"] == "provider unavailable"
 
 
 @pytest.mark.asyncio
@@ -116,7 +227,7 @@ async def test_source_delta_is_emitted_before_translation_and_survives_failure()
     service = MagicMock()
 
     def fail_translation(_payload):
-        assert emitted[0]["type"] == "session.input_transcript.delta"
+        assert any(e["type"] == "session.input_transcript.delta" for e in emitted)
         raise RuntimeError("provider unavailable")
 
     service.handle_chat.side_effect = fail_translation
@@ -128,8 +239,10 @@ async def test_source_delta_is_emitted_before_translation_and_survives_failure()
         window_seconds=0.1,
     )
     await pipeline.add_audio(_pcm24(), emit=emit)
-    assert emitted[0]["delta"] == "hello world"
-    assert emitted[1]["type"] == "error"
+    transcript_events = [e for e in emitted if e["type"] == "session.input_transcript.delta"]
+    assert transcript_events[0]["delta"] == "hello world"
+    assert emitted[-1]["type"] == "error"
+    assert emitted.index(transcript_events[0]) < emitted.index(emitted[-1])
 
 
 @pytest.mark.asyncio

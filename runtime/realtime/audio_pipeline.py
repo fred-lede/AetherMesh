@@ -6,6 +6,12 @@ from typing import Any, Awaitable, Callable
 import numpy as np
 
 from providers.streaming_asr import StreamingASR
+from runtime.realtime.openai_events import (
+    input_buffer_committed_event,
+    speech_started_event,
+    speech_stopped_event,
+)
+from runtime.realtime.turn_detector import TurnDetector
 
 
 def resample_pcm16_24k_to_16k(pcm: bytes) -> bytes:
@@ -31,6 +37,7 @@ class RealtimeAudioPipeline:
         target_language: str,
         window_seconds: float = 2.5,
         instructions: str = "",
+        idle_timeout: float = 0.8,
     ) -> None:
         self._service = service
         self._model = model
@@ -40,24 +47,81 @@ class RealtimeAudioPipeline:
             model=asr_model,
             interim=False,
             window_seconds=window_seconds,
+            idle_timeout=idle_timeout,
         )
+        self._detector = TurnDetector()
+        self._turn = 0
+        self._turn_item_id = ""
 
     async def add_audio(
         self,
         pcm_24k: bytes,
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
+        events = await self._feed_detector(pcm_24k, emit)
         pcm_16k = resample_pcm16_24k_to_16k(pcm_24k)
         await self._stream.add_audio(pcm_16k)
         transcripts = await self._stream.transcribe_if_ready()
-        return await self._translate_transcripts(transcripts, emit, is_final=False)
+        events.extend(await self._translate_transcripts(transcripts, emit, is_final=False))
+        return events
 
     async def close(
         self,
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
+        events = await self._end_speaking_turn(emit)
         transcripts = await self._stream.flush()
+        events.extend(await self._translate_transcripts(transcripts, emit, is_final=True))
+        return events
+
+    async def flush_idle(
+        self,
+        emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> list[dict[str, Any]]:
+        transcripts = await self._stream.transcribe_if_ready()
         return await self._translate_transcripts(transcripts, emit, is_final=True)
+
+    async def _publish_all(
+        self,
+        events: list[dict[str, Any]],
+        emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
+    ) -> None:
+        for event in events:
+            if emit is None:
+                continue
+            await emit(event)
+
+    async def _feed_detector(
+        self,
+        pcm_24k: bytes,
+        emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
+    ) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        for speech_event in self._detector.feed(pcm_24k):
+            if speech_event == "start":
+                self._turn += 1
+                self._turn_item_id = f"item_in_{self._turn}"
+                events.append(speech_started_event(self._turn_item_id))
+            else:
+                item_id = self._turn_item_id or f"item_in_{self._turn + 1}"
+                self._turn_item_id = ""
+                events.append(speech_stopped_event(item_id))
+                events.append(input_buffer_committed_event(item_id))
+        await self._publish_all(events, emit)
+        return events
+
+    async def _end_speaking_turn(
+        self,
+        emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
+    ) -> list[dict[str, Any]]:
+        if not self._detector.speaking:
+            return []
+        self._detector.end_turn()
+        item_id = self._turn_item_id or f"item_in_{self._turn + 1}"
+        self._turn_item_id = ""
+        events = [speech_stopped_event(item_id), input_buffer_committed_event(item_id)]
+        await self._publish_all(events, emit)
+        return events
 
     async def _translate_transcripts(
         self,

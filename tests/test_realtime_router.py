@@ -308,12 +308,110 @@ async def test_second_response_create_is_rejected_while_one_is_active(realtime_d
     ws = FakeWebSocket([
         {"type": "conversation.item.create", "item": {"type": "message", "role": "user", "content": [{"type": "text", "text": "hello"}]}},
         {"type": "response.create"},
-        {"type": "response.create"},
+        {"type": "response.create", "event_id": "sokuji_2"},
         {"type": "response.cancel"},
         {"type": "session.close"},
     ])
     await realtime_router.realtime_websocket(ws)
-    assert any(event.get("error", {}).get("message") == "a response is already in progress" for event in ws.sent)
+    refusal = next(event for event in ws.sent if event.get("error", {}).get("message") == "a response is already in progress")
+    assert refusal["error"]["code"] == "conversation_already_has_active_response", "the client re-queues only refusals carrying this code"
+    assert refusal["event_id"] == "sokuji_2", "refusal must echo the client's event id"
+
+
+@pytest.mark.asyncio
+async def test_auto_turn_vad_frames_and_audio_transcript_form(realtime_dependencies):
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {
+            "output_modalities": ["audio"],
+            "instructions": "Translate the speech into Chinese. Return only the translation.",
+            "tool_choice": "none",
+            "tools": [],
+            "audio": {
+                "input": {
+                    "transcription": {"model": "Qwen/Qwen3-ASR-0.6B"},
+                    "turn_detection": {"type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 300, "silence_duration_ms": 200, "create_response": True},
+                },
+                "output": {"voice": "alloy"},
+            },
+        }},
+        {"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    types = [event["type"] for event in ws.sent]
+    order = [
+        "input_audio_buffer.speech_started",
+        "input_audio_buffer.speech_stopped",
+        "input_audio_buffer.committed",
+        "conversation.item.added",
+        "response.created",
+        "response.output_item.added",
+        "response.output_audio_transcript.delta",
+        "response.output_audio_transcript.done",
+        "response.output_item.done",
+        "response.done",
+    ]
+    indices = [types.index(t) for t in order]
+    assert indices == sorted(indices), f"frame order broken: {types}"
+    assert "response.output_text.delta" not in types, "audio legs must send exactly one transcript form"
+    assert "response.output_text.done" not in types
+    started = next(event for event in ws.sent if event["type"] == "input_audio_buffer.speech_started")
+    assert started["item_id"] == "item_in_1"
+    committed = next(event for event in ws.sent if event["type"] == "input_audio_buffer.committed")
+    assert committed["item_id"] == "item_in_1"
+    assert committed["previous_item_id"] is None
+    user_added = next(event for event in ws.sent if event["type"] == "conversation.item.added" and event["item"]["role"] == "user")
+    assert user_added["previous_item_id"] is None
+    assert user_added["item"]["id"] == "item_1"
+    assistant_added = next(event for event in ws.sent if event["type"] == "conversation.item.added" and event["item"]["role"] == "assistant")
+    assert assistant_added["previous_item_id"] == "item_1"
+    delta = next(event for event in ws.sent if event["type"] == "response.output_audio_transcript.delta")
+    assert delta["delta"] == "你好"
+    assert delta["response_id"] and delta["item_id"]
+    done = next(event for event in ws.sent if event["type"] == "response.output_audio_transcript.done")
+    assert done["transcript"] == "你好"
+    assert not any(event["type"] == "response.create" for event in ws.sent)
+
+
+@pytest.mark.asyncio
+async def test_manual_response_with_audio_modalities_uses_audio_transcript_form(realtime_dependencies):
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"output_modalities": ["audio"], "instructions": "Translate the speech."}},
+        {"type": "conversation.item.create", "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}},
+        {"type": "response.create", "response": {"metadata": {"request": "sokuji_9"}}},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    types = [event["type"] for event in ws.sent]
+    assert "response.output_audio_transcript.delta" in types
+    assert "response.output_audio_transcript.done" in types
+    assert "response.output_text.delta" not in types, "audio legs must send exactly one transcript form"
+    assert "response.output_text.done" not in types
+    assert "response.text.delta" in types, "legacy dialect deltas must be kept"
+    done = next(event for event in ws.sent if event["type"] == "response.output_audio_transcript.done")
+    assert done["transcript"] == "你好"
+    created = next(event for event in ws.sent if event["type"] == "response.created")
+    assert created["response"]["metadata"] == {"request": "sokuji_9"}
+
+
+@pytest.mark.asyncio
+async def test_audio_still_answered_when_client_stops_sending_after_a_turn(realtime_dependencies):
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {
+            "output_modalities": ["audio"],
+            "instructions": "Translate the speech into Chinese. Return only the translation.",
+        }},
+        {"type": "input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        ("delay", 1.5),
+    ])
+    await realtime_router.realtime_websocket(ws)
+    types = [event["type"] for event in ws.sent]
+    assert "session.input_transcript.delta" in types, "the idle ASR flush must fire even when no further audio arrives"
+    assert "response.created" in types
+    assert "response.done" in types
+    assert "response.output_audio_transcript.done" in types
 
 
 @pytest.mark.asyncio
