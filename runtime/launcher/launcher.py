@@ -216,6 +216,10 @@ def _cmd_for(svc: dict[str, Any]) -> list[str]:
         "info",
         "--timeout-keep-alive",
         "300",
+        "--ws-ping-interval",
+        "20",
+        "--ws-ping-timeout",
+        "120",
     ]
     log_config = Path(__file__).resolve().parent.parent.parent / "config" / "uvicorn_log_config.json"
     if log_config.exists():

@@ -59,6 +59,17 @@ def test_launcher_uses_uvicorn_log_config():
     assert "uvicorn_log_config.json" in " ".join(cmd)
 
 
+def test_launcher_uvicorn_commands_tolerate_slow_ws_pongs():
+    svc = next(s for s in launcher.SERVICE_DEFS if s.get("name") == "openai_router")
+    cmd = launcher._cmd_for(svc)
+    text = " ".join(cmd)
+    assert "--ws-ping-interval" in text and "--ws-ping-timeout" in text, (
+        "uvicorn's default 20 s pong deadline kills realtime sessions (1011 keepalive ping timeout)"
+    )
+    timeout_index = cmd.index("--ws-ping-timeout")
+    assert cmd[timeout_index + 1] == "120"
+
+
 def test_uvicorn_log_config_access_formatter_renders():
     import json
     import logging

@@ -78,6 +78,7 @@ pytest tests/test_orchestration.py -x -v -k "memory"
 - 57 total audio tests passing
 
 ## Critical Gotchas (continued)
+- **WebSocket keepalive (realtime)**: uvicorn defaults `ws_ping_interval=20` / `ws_ping_timeout=20` kill any WS client whose pong is >20 s late with `1011 "keepalive ping timeout"` (Sokuji realtime sessions died at connect+40 s). Always start uvicorn with `--ws-ping-interval 20 --ws-ping-timeout 120`. The launcher (`runtime/launcher/launcher.py::_cmd_for`) bakes this in; manual starts must pass the flags. Diagnose with `Realtime websocket disconnected (…, close_code=…)` in the router log.
 - **XTTS subprocess**: Adapter no longer has `_model` attr. All GPU in `_worker_main()`. Do NOT call `_load_model()` or `_load_embedding()` from adapter — removed. Worker loads model at startup, caches across requests, dies on CUDA assert.
 - **`_send_worker_request()`**: Sends dict via `_request_queue`, awaits `_response_queue`. Returns `data[0]` for `("ok", data)`, `None` for `("ok",)`. 503 on worker death, 504 on timeout.
 - **`_ensure_worker()`**: Lazy-start worker, cooldown on repeated failures. Call before any queue op.
