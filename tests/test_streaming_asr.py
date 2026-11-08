@@ -205,3 +205,33 @@ class TestSilentFailures:
         model.transcribe.assert_not_called()
         warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
         assert not warnings, f"silence is ordinary and must stay quiet, got: {warnings}"
+
+
+class TestQuietAudio:
+    """A microphone at a low gain must still be transcribed."""
+
+    async def test_quiet_speech_is_transcribed(self, caplog) -> None:
+        import logging
+
+        caplog.set_level(logging.WARNING)
+        model = MagicMock()
+        seg = MagicMock()
+        seg.text = " quiet words "
+        seg.language = "en"
+        model.transcribe.return_value = ([seg], MagicMock(language="en"))
+        stream = StreamingASR(model=model, language="", interim=False, window_seconds=0.1)
+        # rms 0.0067 — a tenth of what the old fixed cutoff expected.
+        amplitude = int(0.0067 * 32767)
+        await stream.add_audio(np.full(3200, amplitude, dtype=np.int16).tobytes())
+        results = await stream.transcribe_if_ready()
+        assert [r["text"] for r in results] == ["quiet words"]
+        model.transcribe.assert_called_once()
+
+    async def test_silence_is_still_skipped(self) -> None:
+        model = MagicMock()
+        model.transcribe.return_value = ([], MagicMock(language="en"))
+        stream = StreamingASR(model=model, language="", interim=False, window_seconds=0.1)
+        await stream.add_audio(np.zeros(3200, dtype=np.int16).tobytes())
+        results = await stream.transcribe_if_ready()
+        assert results == []
+        model.transcribe.assert_not_called()

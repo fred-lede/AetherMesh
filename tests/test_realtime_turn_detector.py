@@ -62,3 +62,21 @@ def test_events_continue_across_turns():
     detector = TurnDetector()
     assert detector.feed(_loud(4_800) + _quiet(24_000)) == ["start", "stop"]
     assert detector.feed(_loud(4_800) + _quiet(24_000)) == ["start", "stop"]
+
+
+class TestQuietSpeech:
+    """A microphone at a low gain must still produce turns."""
+
+    def test_quiet_speech_starts_and_stops_a_turn(self):
+        detector = TurnDetector(silence_ms=100, min_speech_ms=20)
+        amplitude = int(0.0067 * 32767)
+        quiet = np.full(24_000, amplitude, dtype=np.int16).tobytes()
+        events = detector.feed(quiet)
+        assert events == ["start"], f"quiet speech must open a turn, got {events}"
+        silence = np.zeros(24_000, dtype=np.int16).tobytes()
+        assert detector.feed(silence) == ["stop"], "quiet speech must close its turn"
+
+    def test_room_tone_opens_no_turn(self):
+        detector = TurnDetector(silence_ms=100, min_speech_ms=20)
+        tone = (np.random.default_rng(3).normal(0, 0.002, 24_000) * 32767).astype(np.int16).tobytes()
+        assert detector.feed(tone) == [], "steady room tone is not speech"

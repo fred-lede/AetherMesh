@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from providers.level import LevelGate
+
 logger = logging.getLogger("providers.streaming_asr")
 
 
@@ -24,7 +26,7 @@ class StreamingASR:
         task: str = "transcribe",
         window_seconds: float = 2.5,
         idle_timeout: float = 0.8,
-        vad_threshold: float = 0.01,
+        vad_threshold: float = 0.003,
     ) -> None:
         self._model = model
         self._language = language
@@ -33,6 +35,10 @@ class StreamingASR:
         self._window_samples = int(window_seconds * 16000)
         self._idle_timeout = idle_timeout
         self._vad_threshold = vad_threshold
+        # The silence cutoff follows the input level: a fixed one drops a quiet microphone
+        # entirely, and a dropped chunk is a lost sentence. `vad_threshold` is the floor
+        # under it — the level below which audio is silence whatever else has been heard.
+        self._gate = LevelGate(absolute_min=vad_threshold, ratio=0.25, decay=0.9)
 
         self._buffer = bytearray()
         self._processed_up_to = 0
@@ -107,7 +113,8 @@ class StreamingASR:
                 return []
         samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(samples ** 2)))
-        if rms < self._vad_threshold:
+        self._gate.update(rms)
+        if not self._gate.admits(rms):
             return []
         kwargs: dict[str, Any] = {"task": self._task}
         if self._language:

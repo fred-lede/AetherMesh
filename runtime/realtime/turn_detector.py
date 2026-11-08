@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import numpy as np
 
+from providers.level import LevelGate
+
 SAMPLE_RATE = 24_000
 
 
 class TurnDetector:
     """Energy VAD over 24 kHz PCM16: reports where a spoken turn starts and ends.
 
-    A turn starts when a 20 ms window's RMS crosses ``threshold`` and ends
+    A turn starts when a 20 ms window's RMS crosses the threshold and ends
     after ``silence_ms`` of quiet. The quiet is counted in samples, so the
     decision belongs to the audio, not to how the client cut its buffers.
     A turn shorter than ``min_speech_ms`` is a cough, not a sentence.
+
+    The threshold follows the input level rather than sitting at a fixed number:
+    a microphone at a low gain is a hundred times quieter than one at a high gain,
+    and a fixed cutoff calls the quiet one silence for the whole session.
     """
 
     def __init__(
@@ -30,6 +36,9 @@ class TurnDetector:
         self._silence_samples = 0
         self._preroll: list[int] = []
         self._window = int(SAMPLE_RATE * 0.02)
+        # Windows arrive fifty a second, so the recent maximum decays faster than it
+        # would for the two-and-a-half-second chunks the transcriber works on.
+        self._gate = LevelGate(absolute_min=threshold * 0.2, ratio=0.25, decay=0.98)
 
     def feed(self, pcm: bytes) -> list[str]:
         if len(pcm) % 2:
@@ -43,6 +52,7 @@ class TurnDetector:
             if piece.size == 0:
                 break
             loud = float(np.sqrt(np.mean(np.square(piece))))
+            self._gate.update(loud)
             event = self._step(piece.size, loud)
             if event:
                 events.append(event)
@@ -55,7 +65,7 @@ class TurnDetector:
 
     def _step(self, count: int, loud: float) -> str | None:
         if not self.speaking:
-            if loud >= self.threshold:
+            if self._gate.admits(loud):
                 self.speaking = True
                 self._speech_samples = count
                 self._silence_samples = 0
@@ -65,7 +75,7 @@ class TurnDetector:
             if sum(self._preroll) > keep:
                 self._preroll.pop(0)
             return None
-        if loud >= self.threshold:
+        if self._gate.admits(loud):
             self._speech_samples += count
             self._silence_samples = 0
             return None
