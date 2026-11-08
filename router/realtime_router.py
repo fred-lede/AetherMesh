@@ -59,6 +59,27 @@ def _chunk_text(text: str, size: int = 40) -> list[str]:
     return chunks or [""]
 
 
+def _loaded_asr_info() -> dict[str, Any] | None:
+    """The ASR model this server is actually transcribing with, for the client to show.
+
+    One model is loaded at a time and the client cannot choose it, so the session reports
+    it rather than asking for it. None when no ASR is loaded.
+    """
+    try:
+        snapshot = asr_manager.snapshot()
+    except Exception:
+        return None
+    active = snapshot.get("active") if isinstance(snapshot, dict) else None
+    if not isinstance(active, dict):
+        return None
+    info = {
+        "provider": str(active.get("provider") or ""),
+        "model": str(active.get("model") or ""),
+        "target_id": str(active.get("target_id") or ""),
+    }
+    return info if info["model"] else None
+
+
 def translation_model_refusal(service, model: str) -> str | None:
     """Why this session model may not translate, when it may not.
 
@@ -248,7 +269,10 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
         await websocket.close(code=4001)
         return
 
-    session = RealtimeSession(model=websocket.query_params.get("model", ""))
+    session = RealtimeSession(
+        model=websocket.query_params.get("model", ""),
+        asr=_loaded_asr_info(),
+    )
     await websocket.send_json({"type": "session.created", "event_id": new_event_id(), "session": dict(session.session)})
     _t0 = time.monotonic()
     audio_pipeline: RealtimeAudioPipeline | None = None

@@ -724,3 +724,32 @@ async def test_unknown_session_model_is_left_to_normal_routing(realtime_dependen
     await realtime_router.realtime_websocket(ws)
     assert not any(event["type"] == "error" for event in ws.sent)
     assert any(event["type"] == "session.output_transcript.delta" for event in ws.sent)
+
+
+@pytest.mark.asyncio
+async def test_session_created_reports_the_loaded_asr_model(realtime_dependencies, monkeypatch):
+    manager = realtime_router.asr_manager
+    monkeypatch.setattr(
+        manager,
+        "snapshot",
+        lambda: {"state": "ready", "active": {"provider": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B", "target_id": "local:cuda:1"}},
+        raising=False,
+    )
+    ws = FakeWebSocket([{"type": "session.close"}])
+    await realtime_router.realtime_websocket(ws)
+    created = next(event for event in ws.sent if event["type"] == "session.created")
+    assert created["session"]["asr"] == {
+        "provider": "qwen_asr",
+        "model": "Qwen/Qwen3-ASR-1.7B",
+        "target_id": "local:cuda:1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_session_created_reports_no_asr_when_none_is_loaded(realtime_dependencies, monkeypatch):
+    manager = realtime_router.asr_manager
+    monkeypatch.setattr(manager, "snapshot", lambda: {"state": "disabled", "active": None}, raising=False)
+    ws = FakeWebSocket([{"type": "session.close"}])
+    await realtime_router.realtime_websocket(ws)
+    created = next(event for event in ws.sent if event["type"] == "session.created")
+    assert created["session"]["asr"] is None

@@ -244,3 +244,19 @@ def test_session_terms_ignore_a_malformed_value():
     session = RealtimeSession()
     session.handle_event({"type": "session.update", "session": {"terms": "not a mapping"}})
     assert session.session["terms"] == {}
+
+
+def test_session_reports_the_asr_model_that_is_actually_loaded():
+    session = RealtimeSession(model="m1", asr={"model": "Qwen/Qwen3-ASR-1.7B", "provider": "qwen_asr"})
+    assert session.session["asr"] == {"model": "Qwen/Qwen3-ASR-1.7B", "provider": "qwen_asr"}
+
+
+def test_session_reports_no_asr_when_none_is_loaded():
+    session = RealtimeSession(model="m1")
+    assert session.session["asr"] is None
+
+
+def test_session_update_carries_the_asr_along():
+    session = RealtimeSession(model="m1", asr={"model": "Qwen/Qwen3-ASR-1.7B"})
+    events = session.handle_event({"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}})
+    assert events[0]["session"]["asr"] == {"model": "Qwen/Qwen3-ASR-1.7B"}

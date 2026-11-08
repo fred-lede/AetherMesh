@@ -56,7 +56,7 @@ def _normalise_terms(value: Any) -> dict[str, str]:
 
 
 class RealtimeSession:
-    def __init__(self, model: str = "") -> None:
+    def __init__(self, model: str = "", asr: dict[str, Any] | None = None) -> None:
         self.session = {
             "id": f"realtime_{uuid.uuid4().hex[:24]}",
             "model": model or "",
@@ -69,6 +69,9 @@ class RealtimeSession:
             "target_language": "",
             "transcription_model": "",
             "terms": {},
+            # The ASR model this session will actually transcribe with. The client cannot
+            # choose it — one model is loaded on the server — so it is reported, not asked.
+            "asr": dict(asr) if asr else None,
         }
         self.items: list[dict[str, Any]] = []
         self.audio_buffer = bytearray()
