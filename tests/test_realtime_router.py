@@ -662,3 +662,65 @@ async def test_response_create_echoes_metadata_request_and_emits_output_text_del
     assert delta["delta"] == "你好"
     assert delta.get("event_id")
     assert any(e["type"] == "response.text.delta" for e in ws.sent), "legacy dialect deltas must be kept"
+
+
+# --- an ASR-only session model must not be silently replaced by an unrelated one ---
+
+
+@pytest.mark.asyncio
+async def test_asr_only_session_model_is_refused_instead_of_being_silently_replaced(realtime_dependencies):
+    service = realtime_dependencies
+    service.model_supports_chat = lambda model: False if model == "Qwen/Qwen3-ASR-1.7B" else None
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket(
+        [
+            {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+            {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+            {"type": "session.close"},
+        ],
+        model="Qwen/Qwen3-ASR-1.7B",
+    )
+    await realtime_router.realtime_websocket(ws)
+    errors = [event for event in ws.sent if event["type"] == "error"]
+    assert errors, "an ASR-only model must be refused, not quietly answered by another model"
+    message = errors[0]["error"]["message"]
+    assert "Qwen/Qwen3-ASR-1.7B" in message, f"the error must name the offending model: {message}"
+    assert "translation model" in message, f"the error must say what the parameter is for: {message}"
+    service.handle_chat.assert_not_called(), "no translation may run on a model that cannot chat"
+
+
+@pytest.mark.asyncio
+async def test_chat_capable_session_model_still_translates(realtime_dependencies):
+    service = realtime_dependencies
+    service.model_supports_chat = lambda model: True
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket(
+        [
+            {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+            {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+            {"type": "session.close"},
+        ],
+        model="translategemma:12b",
+    )
+    await realtime_router.realtime_websocket(ws)
+    assert not any(event["type"] == "error" for event in ws.sent)
+    assert any(event["type"] == "session.output_transcript.delta" for event in ws.sent)
+    service.handle_chat.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_unknown_session_model_is_left_to_normal_routing(realtime_dependencies):
+    service = realtime_dependencies
+    service.model_supports_chat = lambda model: None
+    pcm = np.full(24_000, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket(
+        [
+            {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+            {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+            {"type": "session.close"},
+        ],
+        model="some-model-not-in-the-registry",
+    )
+    await realtime_router.realtime_websocket(ws)
+    assert not any(event["type"] == "error" for event in ws.sent)
+    assert any(event["type"] == "session.output_transcript.delta" for event in ws.sent)

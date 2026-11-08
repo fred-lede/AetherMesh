@@ -28,6 +28,33 @@ def _extract_item_text(item: dict[str, Any]) -> str | None:
     return " ".join(parts).strip() if parts else None
 
 
+def _normalise_terms(value: Any) -> dict[str, str]:
+    """Terminology pairs, whatever shape the client sent them in.
+
+    A mapping of source to translation is the natural one; a list of pairs or of
+    ``{"source": ..., "target": ...}`` objects is accepted too, because clients spell
+    this differently. Anything else is ignored rather than guessed at.
+    """
+    if isinstance(value, dict):
+        pairs = value.items()
+    elif isinstance(value, list):
+        pairs = []
+        for entry in value:
+            if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                pairs.append((entry[0], entry[1]))
+            elif isinstance(entry, dict) and "source" in entry and "target" in entry:
+                pairs.append((entry["source"], entry["target"]))
+    else:
+        return {}
+    terms: dict[str, str] = {}
+    for source, target in pairs:
+        source = str(source or "").strip()
+        target = str(target or "").strip()
+        if source and target:
+            terms[source] = target
+    return terms
+
+
 class RealtimeSession:
     def __init__(self, model: str = "") -> None:
         self.session = {
@@ -41,6 +68,7 @@ class RealtimeSession:
             "max_output_tokens": 1024,
             "target_language": "",
             "transcription_model": "",
+            "terms": {},
         }
         self.items: list[dict[str, Any]] = []
         self.audio_buffer = bytearray()
@@ -94,6 +122,8 @@ class RealtimeSession:
         for key in ("model", "instructions", "temperature", "max_output_tokens"):
             if key in updates:
                 self.session[key] = updates[key]
+        if "terms" in updates:
+            self.session["terms"] = _normalise_terms(updates.get("terms"))
         audio = updates.get("audio")
         if audio is not None:
             if not isinstance(audio, dict):

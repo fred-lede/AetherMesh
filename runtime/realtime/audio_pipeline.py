@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from typing import Any, Awaitable, Callable
 
 import numpy as np
@@ -12,6 +13,89 @@ from runtime.realtime.openai_events import (
     speech_stopped_event,
 )
 from runtime.realtime.turn_detector import TurnDetector
+
+# How many earlier segments the translator may look at. Two is what the local pipeline
+# uses, and it is enough to resolve a pronoun without dragging the whole talk in.
+CONTEXT_SEGMENTS = 2
+
+# How many terminology pairs one segment may carry. The service asks for at most 1000
+# overall; a single segment needs far fewer to be useful.
+MAX_TERMS_PER_SEGMENT = 8
+
+# The languages the realtime endpoint names by code. A model asked to translate "into zh"
+# does worse than one told "into Chinese", so the code is turned into words here.
+LANGUAGE_NAMES = {
+    "zh": "Chinese",
+    "yue": "Cantonese",
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "tr": "Turkish",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "cs": "Czech",
+    "ro": "Romanian",
+    "uk": "Ukrainian",
+    "sv": "Swedish",
+    "da": "Danish",
+    "fi": "Finnish",
+    "nb": "Norwegian",
+    "he": "Hebrew",
+    "el": "Greek",
+    "hu": "Hungarian",
+}
+
+
+def language_label(code: str) -> str:
+    """The target language in words, with the code kept for the ones it helps with."""
+    code = str(code or "").strip()
+    if not code:
+        return "the target language"
+    name = LANGUAGE_NAMES.get(code.lower())
+    if not name:
+        return code
+    return name if name.lower() == code.lower() else f"{name} ({code})"
+
+
+def translation_instruction(target_language: str) -> str:
+    """The default system prompt: one segment, natural wording, nothing but the translation."""
+    return (
+        f"Translate the following speech into {language_label(target_language)}. "
+        "The input may be a fragment from a live conversation. Translate only the current "
+        "segment; use the recent context only to understand it. Preserve its meaning and "
+        "tone, and use natural wording. Output only the translation, with no explanation "
+        "or quotation marks."
+    )
+
+
+def translation_user_text(source: str, context: list[str], terms: dict[str, str]) -> str:
+    """The per-segment text: terminology, then the context, then the segment itself."""
+    parts: list[str] = []
+    usable = [
+        (str(s).strip(), str(t).strip())
+        for s, t in list(terms.items())[:MAX_TERMS_PER_SEGMENT]
+        if str(s).strip() and str(t).strip()
+    ]
+    if usable:
+        lines = "\n".join(f"{source} => {target}" for source, target in usable)
+        parts.append(f"Terminology for current segment:\n{lines}\n")
+    if context:
+        joined = "\n".join(context)
+        parts.append(f"Recent context (for meaning only; do not translate it):\n{joined}\n")
+    parts.append(f"Current segment to translate:\n{source}")
+    return "\n".join(parts)
 
 
 def resample_pcm16_24k_to_16k(pcm: bytes) -> bytes:
@@ -38,11 +122,15 @@ class RealtimeAudioPipeline:
         window_seconds: float = 2.5,
         instructions: str = "",
         idle_timeout: float = 0.8,
+        terms: dict[str, str] | None = None,
     ) -> None:
         self._service = service
         self._model = model
         self._target_language = target_language
         self._instructions = str(instructions or "").strip()
+        self._terms = {str(k): str(v) for k, v in (terms or {}).items()}
+        # The segments before this one, so a fragment can be read in context.
+        self._context: deque[str] = deque(maxlen=CONTEXT_SEGMENTS)
         self._stream = StreamingASR(
             model=asr_model,
             interim=False,
@@ -153,7 +241,7 @@ class RealtimeAudioPipeline:
             if self._instructions:
                 system_prompt = self._instructions
             else:
-                system_prompt = f"Translate the following speech into {self._target_language}. Return only the translation."
+                system_prompt = translation_instruction(self._target_language)
             payload = {
                 "model": self._model,
                 "messages": [
@@ -161,7 +249,7 @@ class RealtimeAudioPipeline:
                         "role": "system",
                         "content": system_prompt,
                     },
-                    {"role": "user", "content": source},
+                    {"role": "user", "content": translation_user_text(source, list(self._context), self._terms)},
                 ],
                 "stream": False,
                 "temperature": 0,
@@ -191,4 +279,7 @@ class RealtimeAudioPipeline:
                     "seg": seg,
                     "is_final": is_final,
                 })
+            # The segment joins the context whether or not it translated: the next one is
+            # read against what was actually said, not against what the model made of it.
+            self._context.append(source)
         return events

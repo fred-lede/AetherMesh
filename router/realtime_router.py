@@ -59,6 +59,31 @@ def _chunk_text(text: str, size: int = 40) -> list[str]:
     return chunks or [""]
 
 
+def translation_model_refusal(service, model: str) -> str | None:
+    """Why this session model may not translate, when it may not.
+
+    The `?model=` parameter names the translation model. A model that cannot chat — an ASR
+    model, say — would otherwise be answered by whatever the router falls back to, which is
+    a different model entirely and silently so. Say it instead of swapping it.
+    """
+    if not model:
+        return None
+    supports = getattr(service, "model_supports_chat", None)
+    if not callable(supports):
+        return None
+    try:
+        answer = supports(model)
+    except Exception:
+        return None
+    if answer is not False:
+        return None
+    return (
+        f"session model {model!r} is registered as an ASR model and cannot translate. "
+        "The ?model= parameter names the translation model — use a chat model such as "
+        "'translategemma:12b'. The ASR model is chosen server-side; see /api/asr/config."
+    )
+
+
 AUDIO_APPEND_TYPES = {"session.input_audio_buffer.append", "input_audio_buffer.append"}
 
 
@@ -286,6 +311,7 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                         model=session.session.get("model") or "",
                         target_language=session.session["target_language"],
                         instructions=str(session.session.get("instructions") or ""),
+                        terms=dict(session.session.get("terms") or {}),
                     )
                     manager_version = asr_manager.version()
                 await audio_pipeline.add_audio(pcm, emit=emit)
@@ -404,6 +430,10 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
             if event_type in AUDIO_APPEND_TYPES:
                 pcm = session.take_audio()
                 if any(event.get("type") == "error" for event in outbound_events):
+                    continue
+                refusal = translation_model_refusal(service, str(session.session.get("model") or ""))
+                if refusal:
+                    await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": refusal}})
                     continue
                 if not (session.session.get("target_language") or str(session.session.get("instructions") or "").strip()):
                     await send_json({"type": "error", "event_id": data.get("event_id"), "error": {"type": "invalid_request_error", "message": "session.update must set session.audio.output.language or instructions before audio input"}})

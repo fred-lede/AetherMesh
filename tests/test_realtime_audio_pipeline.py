@@ -306,7 +306,10 @@ async def test_instructions_override_translation_prompt():
         "role": "system",
         "content": "Translate the speech into English. Return only the translation.",
     }
-    assert payload["messages"][1] == {"role": "user", "content": "hello world"}
+    # The segment is labelled, the same shape the local pipeline uses, so the model always
+    # knows which part is the segment and which part is context.
+    assert payload["messages"][1]["role"] == "user"
+    assert payload["messages"][1]["content"].strip().endswith("hello world")
 
 
 @pytest.mark.asyncio
@@ -326,3 +329,102 @@ async def test_transcript_events_do_not_append_trailing_whitespace():
         if event["type"] in ("session.input_transcript.delta", "session.output_transcript.delta"):
             assert not event["delta"].endswith(" "), f"delta must not end with space: {event['delta']!r}"
             assert not event["text"].endswith(" "), f"text must not end with space: {event['text']!r}"
+
+
+# --- the translation prompt: a language name, the current segment, context, terminology ---
+
+
+@pytest.mark.asyncio
+async def test_translation_prompt_names_the_target_language_in_words():
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    prompt = service.handle_chat.call_args.args[0]["messages"][0]["content"]
+    assert "Chinese" in prompt, f"the model must be told the language in words: {prompt}"
+    assert "into zh." not in prompt, f"a bare code is too thin a target: {prompt}"
+
+
+@pytest.mark.asyncio
+async def test_translation_prompt_asks_for_the_current_segment_only():
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    prompt = service.handle_chat.call_args.args[0]["messages"][0]["content"]
+    assert "current segment" in prompt, f"the prompt must scope the work: {prompt}"
+
+
+@pytest.mark.asyncio
+async def test_recent_source_segments_reach_the_next_translation_as_context():
+    model = MagicMock()
+    model.transcribe.side_effect = [
+        ([SimpleNamespace(text="first thought")], SimpleNamespace(language="en")),
+        ([SimpleNamespace(text="second thought")], SimpleNamespace(language="en")),
+    ]
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    await pipeline.add_audio(_pcm24())
+    user_text = service.handle_chat.call_args_list[1].args[0]["messages"][1]["content"]
+    assert "first thought" in user_text, f"the previous segment is context: {user_text}"
+    assert "second thought" in user_text, f"the current segment must be there too: {user_text}"
+    assert user_text.index("first thought") < user_text.index("second thought")
+
+
+@pytest.mark.asyncio
+async def test_terminology_terms_reach_the_translation_prompt():
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        terms={"MIT": "麻省理工學院"},
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    user_text = service.handle_chat.call_args.args[0]["messages"][1]["content"]
+    assert "MIT => 麻省理工學院" in user_text, f"terminology must reach the model: {user_text}"
+
+
+@pytest.mark.asyncio
+async def test_terminology_and_context_survive_client_instructions():
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        instructions="Translate the speech into English. Return only the translation.",
+        terms={"MIT": "麻省理工學院"},
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    messages = service.handle_chat.call_args.args[0]["messages"]
+    assert messages[0] == {
+        "role": "system",
+        "content": "Translate the speech into English. Return only the translation.",
+    }
+    assert "MIT => 麻省理工學院" in messages[1]["content"]

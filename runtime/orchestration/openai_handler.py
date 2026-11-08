@@ -1507,6 +1507,19 @@ class RouterService:
         capabilities = set(model.get("capabilities", []))
         return required.issubset(capabilities)
 
+    def model_supports_chat(self, model: str) -> bool | None:
+        """Whether a registry model can answer a chat request.
+
+        ``None`` when the model is not in the registry at all: routing decides those, and
+        they may still resolve through a provider that is not listed locally. A registered
+        model that cannot chat is a different matter — it is a category error by the caller
+        (an ASR model asked to translate), not a capacity problem to paper over.
+        """
+        entry = self._find_registry_model(str(model or ""))
+        if entry is None:
+            return None
+        return "chat" in set(entry.get("capabilities", []))
+
     def _apply_generation_defaults(self, payload: dict[str, Any]) -> dict[str, Any]:
         model = str(payload.get("model", ""))
         if payload.get("max_tokens") is not None or payload.get("max_completion_tokens") is not None:

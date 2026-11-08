@@ -209,3 +209,38 @@ def test_build_messages_empty():
 def test_chunk_text():
     assert _chunk_text("one two three four", 2) == ["one two", "three four"]
     assert _chunk_text("", 2) == [""]
+
+
+def test_session_terms_accept_a_mapping():
+    session = RealtimeSession()
+    session.handle_event(
+        {"type": "session.update", "session": {"terms": {"MIT": "麻省理工學院"}}}
+    )
+    assert session.session["terms"] == {"MIT": "麻省理工學院"}
+
+
+def test_session_terms_accept_pairs_and_objects():
+    session = RealtimeSession()
+    session.handle_event(
+        {
+            "type": "session.update",
+            "session": {
+                "terms": [
+                    ["MIT", "麻省理工學院"],
+                    {"source": "LoRA", "target": "低秩适配"},
+                    {"source": "", "target": "ignored"},
+                    {"source": "no-target"},
+                ]
+            },
+        }
+    )
+    assert session.session["terms"] == {
+        "MIT": "麻省理工學院",
+        "LoRA": "低秩适配",
+    }
+
+
+def test_session_terms_ignore_a_malformed_value():
+    session = RealtimeSession()
+    session.handle_event({"type": "session.update", "session": {"terms": "not a mapping"}})
+    assert session.session["terms"] == {}
