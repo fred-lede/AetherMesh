@@ -118,6 +118,15 @@ class StreamingASR:
             return (list(segments) if segments is not None else []), info
 
         seg_list, info = await loop.run_in_executor(None, transcribe)
+        if not seg_list:
+            # The model was asked and answered with nothing. Silence below the gate never
+            # reaches this point, so this is a real failure and must leave a trace: the
+            # client sees no transcript either way, and without this line the reason is
+            # nowhere.
+            seconds = len(audio_bytes) / 2 / 16000
+            logger.warning(
+                "ASR returned no segments for %.2fs of audio (rms=%.4f)", seconds, rms
+            )
         results: list[dict[str, Any]] = []
         for seg in seg_list:
             self._seg_counter += 1

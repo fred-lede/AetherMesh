@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 from typing import Any, Awaitable, Callable
 
@@ -13,6 +14,8 @@ from runtime.realtime.openai_events import (
     speech_stopped_event,
 )
 from runtime.realtime.turn_detector import TurnDetector
+
+logger = logging.getLogger("runtime.realtime.audio_pipeline")
 
 # How many earlier segments the translator may look at. Two is what the local pipeline
 # uses, and it is enough to resolve a pronoun without dragging the whole talk in.
@@ -260,6 +263,11 @@ class RealtimeAudioPipeline:
         for transcript in transcripts:
             source = str(transcript.get("text") or "").strip()
             if not source:
+                # The ASR answered with an empty segment. Nothing reaches the client, so
+                # the log is the only place this can be seen.
+                logger.warning(
+                    "ASR transcript was empty (seg=%s); nothing to translate", transcript.get("seg")
+                )
                 continue
             seg = int(transcript.get("seg", 0))
             await publish({

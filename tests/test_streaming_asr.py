@@ -174,3 +174,34 @@ class TestStreamingASR:
 
         await asyncio.gather(adder(), transcriber())
         assert len(stream._buffer) > 0
+
+
+class TestSilentFailures:
+    """A transcription that yields nothing must say so, not vanish."""
+
+    async def test_no_segments_is_logged(self, caplog) -> None:
+        import logging
+
+        caplog.set_level(logging.WARNING)
+        model = MagicMock()
+        model.transcribe.return_value = ([], MagicMock(language="en"))
+        stream = StreamingASR(model=model, language="", interim=False, window_seconds=0.1)
+        await stream.add_audio(np.full(3200, 3000, dtype=np.int16).tobytes())
+        results = await stream.transcribe_if_ready()
+        assert results == []
+        warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert warnings, "a transcription that returned nothing must leave a trace in the log"
+        assert "no segments" in warnings[-1].lower()
+
+    async def test_silence_below_the_gate_is_not_warned_about(self, caplog) -> None:
+        import logging
+
+        caplog.set_level(logging.WARNING)
+        model = MagicMock()
+        model.transcribe.return_value = ([], MagicMock(language="en"))
+        stream = StreamingASR(model=model, language="", interim=False, window_seconds=0.1)
+        await stream.add_audio(np.zeros(3200, dtype=np.int16).tobytes())
+        await stream.transcribe_if_ready()
+        model.transcribe.assert_not_called()
+        warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not warnings, f"silence is ordinary and must stay quiet, got: {warnings}"

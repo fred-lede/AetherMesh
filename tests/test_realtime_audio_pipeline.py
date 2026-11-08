@@ -447,3 +447,27 @@ def test_every_language_a_client_offers_is_named_in_words():
         label = language_label(code)
         assert label != code, f"{code} has no name of its own: {label}"
         assert "Chinese" not in label or code == "zh", f"{code} must not borrow another language's name"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_transcript_is_logged(caplog):
+    """The client sees no text either way; the log must say the ASR answered with nothing."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    model = MagicMock()
+    model.transcribe.return_value = ([SimpleNamespace(text="   ")], SimpleNamespace(language="en"))
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings, "an empty transcript must leave a trace in the log"
+    assert "empty" in warnings[-1].lower()
+    service.handle_chat.assert_not_called(), "an empty transcript must not be translated"
