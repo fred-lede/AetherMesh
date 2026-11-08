@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from runtime.realtime.audio_pipeline import RealtimeAudioPipeline, resample_pcm16_24k_to_16k
+from runtime.realtime.audio_pipeline import (
+    RealtimeAudioPipeline,
+    language_label,
+    resample_pcm16_24k_to_16k,
+)
 
 
 def _pcm24(samples: int = 2400) -> bytes:
@@ -428,3 +432,18 @@ async def test_terminology_and_context_survive_client_instructions():
         "content": "Translate the speech into English. Return only the translation.",
     }
     assert "MIT => 麻省理工學院" in messages[1]["content"]
+
+
+def test_every_language_a_client_offers_is_named_in_words():
+    """A client may ask for any of the languages it lists; each needs a name, not a code."""
+    codes = [
+        "zh", "en", "ja", "ko", "fr", "de", "es", "pt", "ru", "it", "ar", "id", "th", "vi", "tr",
+        "hi", "ms", "nl", "ur", "nb", "sv", "da", "he", "fi", "pl", "is", "cs", "fil", "fa",
+        "yue", "el", "af", "ast", "az", "be", "bg", "bn", "bs", "ca", "ceb", "et", "gl", "gu",
+        "hr", "hu", "jv", "kk", "kn", "ky", "lv", "mk", "ml", "mr", "pa", "ro", "sk", "sl",
+        "sw", "tg", "uk",
+    ]
+    for code in codes:
+        label = language_label(code)
+        assert label != code, f"{code} has no name of its own: {label}"
+        assert "Chinese" not in label or code == "zh", f"{code} must not borrow another language's name"
