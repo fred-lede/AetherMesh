@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from typing import Any, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 import numpy as np
 
@@ -17,9 +17,9 @@ from runtime.realtime.turn_detector import TurnDetector
 
 logger = logging.getLogger("runtime.realtime.audio_pipeline")
 
-# How many earlier segments the translator may look at. Two is what the local pipeline
-# uses, and it is enough to resolve a pronoun without dragging the whole talk in.
-CONTEXT_SEGMENTS = 2
+# How many earlier segments the translator may look at. Four resolves a pronoun or a
+# repeated term without dragging the whole talk in.
+CONTEXT_SEGMENTS = 4
 
 # How many terminology pairs one segment may carry. The service asks for at most 1000
 # overall; a single segment needs far fewer to be useful.
@@ -132,6 +132,41 @@ def translation_user_text(source: str, context: list[str], terms: dict[str, str]
     return "\n".join(parts)
 
 
+# What a stream that has run out returns from the executor thread: a StopIteration cannot
+# cross that boundary to say so.
+_STREAM_END = object()
+
+
+def _next_chunk(iterator: Any) -> Any:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return _STREAM_END
+
+
+def translation_token(chunk: Any) -> str:
+    """One streamed chat chunk's text: `choices[0].delta.content`, else its message content.
+
+    Anything of another shape — a bare string (`[DONE]` and the like), a dict with no
+    choices — carries no text of its own and is skipped.
+    """
+    if not isinstance(chunk, dict):
+        return ""
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return ""
+    for key in ("delta", "message"):
+        part = choice.get(key)
+        if isinstance(part, dict):
+            content = part.get("content")
+            if isinstance(content, str) and content:
+                return content
+    return ""
+
+
 def resample_pcm16_24k_to_16k(pcm: bytes) -> bytes:
     if len(pcm) % 2:
         raise ValueError("PCM16 audio must contain complete samples")
@@ -153,7 +188,7 @@ class RealtimeAudioPipeline:
         service: Any,
         model: str,
         target_language: str,
-        window_seconds: float = 2.5,
+        window_seconds: float = 5.0,
         instructions: str = "",
         idle_timeout: float = 0.8,
         terms: dict[str, str] | None = None,
@@ -180,10 +215,13 @@ class RealtimeAudioPipeline:
         pcm_24k: bytes,
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
-        events = await self._feed_detector(pcm_24k, emit)
         pcm_16k = resample_pcm16_24k_to_16k(pcm_24k)
         await self._stream.add_audio(pcm_16k)
-        transcripts = await self._stream.transcribe_if_ready()
+        events, turn_ended = await self._feed_detector(pcm_24k, emit)
+        # The turn's end is the cut that matters: the segment is the utterance the
+        # speaker just finished, not whatever a fixed window happened to slice. The
+        # window is left as the cap for speech that never pauses.
+        transcripts = await self._stream.cut() if turn_ended else await self._stream.transcribe_if_ready()
         events.extend(await self._translate_transcripts(transcripts, emit, is_final=False))
         return events
 
@@ -217,8 +255,10 @@ class RealtimeAudioPipeline:
         self,
         pcm_24k: bytes,
         emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """The detector's frames, and whether a spoken turn just ended on this audio."""
         events: list[dict[str, Any]] = []
+        turn_ended = False
         for speech_event in self._detector.feed(pcm_24k):
             if speech_event == "start":
                 self._turn += 1
@@ -227,10 +267,11 @@ class RealtimeAudioPipeline:
             else:
                 item_id = self._turn_item_id or f"item_in_{self._turn + 1}"
                 self._turn_item_id = ""
+                turn_ended = True
                 events.append(speech_stopped_event(item_id))
                 events.append(input_buffer_committed_event(item_id))
         await self._publish_all(events, emit)
-        return events
+        return events, turn_ended
 
     async def _end_speaking_turn(
         self,
@@ -290,31 +331,54 @@ class RealtimeAudioPipeline:
                     },
                     {"role": "user", "content": translation_user_text(source, list(self._context), self._terms)},
                 ],
-                "stream": False,
+                "stream": True,
                 "temperature": 0,
                 "max_output_tokens": 512,
             }
+            tokens: list[str] = []
+            stream_error: Exception | None = None
             try:
-                result = await asyncio.to_thread(self._service.handle_chat, payload)
-                choices = result.get("choices") or []
-                if not choices:
-                    raise RuntimeError("translation returned no choices")
-                translated = (choices[0].get("message") or {}).get("content")
-                if not isinstance(translated, str):
-                    raise RuntimeError("translation returned no text")
-            except Exception as exc:
+                async for token in self._streamed_translation(payload):
+                    tokens.append(token)
+                    await publish({
+                        "type": "session.output_transcript.delta",
+                        "delta": token,
+                        "text": token,
+                        "seg": seg,
+                        "is_final": False,
+                    })
+            except Exception as exc:  # an endpoint that cannot stream is not an error
+                stream_error = exc
+            if not tokens:
+                # Nothing streamed: either the endpoint cannot, or the model answered with
+                # nothing at all. The whole call is the answer either way.
+                payload["stream"] = False
+                try:
+                    translated = await self._whole_translation(payload)
+                except Exception as exc:
+                    await publish({
+                        "type": "error",
+                        "error": {"type": "server_error", "message": str(exc)},
+                        "seg": seg,
+                        "is_final": is_final,
+                    })
+                    continue
+                if translated:
+                    tokens.append(translated)
+                    await publish({
+                        "type": "session.output_transcript.delta",
+                        "delta": translated,
+                        "text": translated,
+                        "seg": seg,
+                        "is_final": False,
+                    })
+            elif stream_error is not None:
+                # The client already has what was shown; the segment closes with it.
+                logger.warning("streaming translation ended early (seg=%s): %s", seg, stream_error)
+            if tokens:
                 await publish({
-                    "type": "error",
-                    "error": {"type": "server_error", "message": str(exc)},
-                    "seg": seg,
-                    "is_final": is_final,
-                })
-                continue
-            if translated:
-                await publish({
-                    "type": "session.output_transcript.delta",
-                    "delta": translated,
-                    "text": translated,
+                    "type": "session.output_transcript.done",
+                    "text": "".join(tokens),
                     "seg": seg,
                     "is_final": is_final,
                 })
@@ -322,3 +386,34 @@ class RealtimeAudioPipeline:
             # read against what was actually said, not against what the model made of it.
             self._context.append(source)
         return events
+
+    async def _streamed_translation(self, payload: dict[str, Any]) -> AsyncIterator[str]:
+        """The translation's tokens as the endpoint makes them.
+
+        Raises when the service cannot stream at all, which the caller reads as "answer
+        whole instead". A generator is iterated one step at a time in the executor, so
+        blocking on the endpoint's socket never blocks the audio loop.
+        """
+        streaming = getattr(self._service, "handle_streaming_chat", None)
+        if not callable(streaming):
+            raise RuntimeError("the translation service cannot stream")
+        result = await asyncio.to_thread(streaming, payload)
+        iterator = iter(getattr(result, "iterator", None) or [])
+        while True:
+            chunk = await asyncio.to_thread(_next_chunk, iterator)
+            if chunk is _STREAM_END:
+                return
+            token = translation_token(chunk)
+            if token:
+                yield token
+
+    async def _whole_translation(self, payload: dict[str, Any]) -> str:
+        """The translation in one piece, for an endpoint that does not stream."""
+        result = await asyncio.to_thread(self._service.handle_chat, payload)
+        choices = result.get("choices") or []
+        if not choices:
+            raise RuntimeError("translation returned no choices")
+        translated = (choices[0].get("message") or {}).get("content")
+        if not isinstance(translated, str):
+            raise RuntimeError("translation returned no text")
+        return translated

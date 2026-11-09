@@ -52,9 +52,11 @@ async def test_audio_chunk_emits_source_and_translated_text_deltas():
         "input_audio_buffer.speech_started",
         "session.input_transcript.delta",
         "session.output_transcript.delta",
+        "session.output_transcript.done",
     ]
     assert events[1]["delta"] == "hello world" and events[1]["text"] == "hello world"
     assert events[2]["delta"] == "你好世界" and events[2]["text"] == "你好世界"
+    assert events[3]["text"] == "你好世界" and events[3]["seg"] == events[2]["seg"]
     assert service.handle_chat.call_args.args[0]["model"] == "local-chat-model"
     assert "zh" in service.handle_chat.call_args.args[0]["messages"][0]["content"]
 
@@ -78,9 +80,11 @@ async def test_close_flushes_audio_below_the_streaming_window():
         "input_audio_buffer.committed",
         "session.input_transcript.delta",
         "session.output_transcript.delta",
+        "session.output_transcript.done",
     ]
     assert events[2]["delta"] == "last words" and events[2]["text"] == "last words"
     assert events[3]["delta"] == "最後一句" and events[3]["text"] == "最後一句"
+    assert events[4]["text"] == "最後一句"
 
 
 @pytest.mark.asyncio
@@ -96,7 +100,8 @@ async def test_vad_turn_frames_carry_item_ids_in_order():
         window_seconds=2.5,
     )
     events = await pipeline.add_audio(_pcm24(4800) + _silence24(24_000))
-    assert [e["type"] for e in events] == [
+    vad_frames = [e for e in events if e["type"].startswith("input_audio_buffer.")]
+    assert [e["type"] for e in vad_frames] == [
         "input_audio_buffer.speech_started",
         "input_audio_buffer.speech_stopped",
         "input_audio_buffer.committed",
@@ -162,9 +167,11 @@ async def test_flush_idle_emits_transcripts_when_audio_stops():
     assert [e["type"] for e in events] == [
         "session.input_transcript.delta",
         "session.output_transcript.delta",
+        "session.output_transcript.done",
     ]
     assert events[0]["text"] == "turn ended"
     assert events[0]["is_final"] is True
+    assert events[2]["text"] == "結束了"
 
 
 @pytest.mark.asyncio
@@ -273,7 +280,7 @@ async def test_transcript_delta_events_carry_text_and_seg_fields():
 
 
 @pytest.mark.asyncio
-async def test_close_emits_is_final_true_on_transcript_deltas():
+async def test_close_marks_the_last_segment_final():
     model = _model("last words")
     service = MagicMock()
     service.handle_chat.return_value = {"choices": [{"message": {"content": "最後一句"}}]}
@@ -286,10 +293,11 @@ async def test_close_emits_is_final_true_on_transcript_deltas():
     )
     await pipeline.add_audio(_pcm24(4800))
     events = await pipeline.close()
-    delta_events = [e for e in events if e["type"] in ("session.input_transcript.delta", "session.output_transcript.delta")]
-    assert delta_events, "expected transcript delta events from close"
-    for event in delta_events:
-        assert event["is_final"] is True, f"expected is_final=True on close batch, got {event}"
+    input_deltas = [e for e in events if e["type"] == "session.input_transcript.delta"]
+    assert input_deltas, "expected the source transcript from close"
+    assert all(e["is_final"] is True for e in input_deltas)
+    done = [e for e in events if e["type"] == "session.output_transcript.done"]
+    assert len(done) == 1 and done[0]["text"] == "最後一句"
 
 
 @pytest.mark.asyncio
@@ -432,6 +440,173 @@ async def test_terminology_and_context_survive_client_instructions():
         "content": "Translate the speech into English. Return only the translation.",
     }
     assert "MIT => 麻省理工學院" in messages[1]["content"]
+
+
+def _streaming_service(tokens: tuple[str, ...] = ("你", "好", "。")):
+    """A service whose translation streams `tokens`, one chunk each, and can also answer whole."""
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "".join(tokens)}}]}
+    service.handle_streaming_chat.side_effect = lambda _payload: SimpleNamespace(
+        iterator=iter([
+            {"choices": [{"delta": {"content": token}, "finish_reason": None}]} for token in tokens
+        ])
+    )
+    return service
+
+
+# --- segmentation: a spoken turn's end cuts, the window is only a cap ---
+
+
+@pytest.mark.asyncio
+async def test_a_pause_cuts_the_segment_without_waiting_for_the_window():
+    """One utterance followed by a pause is one segment, far below the window."""
+    model = _model("first sentence")
+    service = _streaming_service(("你好。",))
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+    )
+    events = await pipeline.add_audio(_pcm24(24_000) + _silence24(24_000))
+    types = [e["type"] for e in events]
+    assert types.count("session.input_transcript.delta") == 1, types
+    source = next(e for e in events if e["type"] == "session.input_transcript.delta")
+    assert source["text"] == "first sentence"
+    assert types.count("session.output_transcript.done") == 1, types
+    assert len(model.transcribe.call_args_list) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_window_cap_holds_a_monologue_to_five_seconds():
+    """Continuous speech is cut by the window, and the window is five seconds, not two and a half."""
+    model = _model("monologue")
+    service = _streaming_service(("繼續",))
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+    )
+    events = []
+    for _ in range(12):  # 6 s, no pause long enough to end the turn
+        events += await pipeline.add_audio(_pcm24(12_000))
+    sources = [e for e in events if e["type"] == "session.input_transcript.delta"]
+    assert len(sources) == 1, f"6 s of speech must be one capped segment, got {len(sources)}"
+
+
+# --- streaming translation: every token as it comes, one close per segment ---
+
+
+@pytest.mark.asyncio
+async def test_streaming_emits_every_token_and_closes_the_segment():
+    model = _model("hello")
+    service = _streaming_service(("你", "好", "。"))
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    events = await pipeline.add_audio(_pcm24())
+    tokens = [e for e in events if e["type"] == "session.output_transcript.delta"]
+    assert [e["delta"] for e in tokens] == ["你", "好", "。"]
+    assert [e["text"] for e in tokens] == ["你", "好", "。"]
+    assert all(e["is_final"] is False for e in tokens)
+    done = [e for e in events if e["type"] == "session.output_transcript.done"]
+    assert len(done) == 1
+    assert done[0]["text"] == "你好。"
+    assert done[0]["seg"] == tokens[0]["seg"]
+    service.handle_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_service_that_cannot_stream_still_translates_in_one_piece():
+    model = _model("hello")
+    service = MagicMock(spec=["handle_chat"])
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    events = await pipeline.add_audio(_pcm24())
+    tokens = [e for e in events if e["type"] == "session.output_transcript.delta"]
+    assert [e["delta"] for e in tokens] == ["你好"]
+    done = [e for e in events if e["type"] == "session.output_transcript.done"]
+    assert len(done) == 1 and done[0]["text"] == "你好"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_stream_falls_back_to_the_whole_translation():
+    model = _model("hello")
+    service = MagicMock()
+    service.handle_streaming_chat.side_effect = RuntimeError("no streaming here")
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    events = await pipeline.add_audio(_pcm24())
+    tokens = [e for e in events if e["type"] == "session.output_transcript.delta"]
+    assert [e["delta"] for e in tokens] == ["你好"]
+    done = [e for e in events if e["type"] == "session.output_transcript.done"]
+    assert len(done) == 1 and done[0]["text"] == "你好"
+    assert not any(e["type"] == "error" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_a_stream_that_dies_midway_keeps_what_it_showed():
+    model = _model("hello")
+
+    def chunks(_payload):
+        yield {"choices": [{"delta": {"content": "你"}}]}
+        raise RuntimeError("connection dropped")
+
+    service = MagicMock()
+    service.handle_streaming_chat.return_value = SimpleNamespace(iterator=chunks(None))
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "不該用到"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    events = await pipeline.add_audio(_pcm24())
+    tokens = [e for e in events if e["type"] == "session.output_transcript.delta"]
+    assert [e["delta"] for e in tokens] == ["你"]
+    done = [e for e in events if e["type"] == "session.output_transcript.done"]
+    assert len(done) == 1 and done[0]["text"] == "你"
+    service.handle_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_four_previous_segments_reach_the_next_translation_as_context():
+    texts = ["one", "two", "three", "four", "five"]
+    model = MagicMock()
+    model.transcribe.side_effect = [
+        ([SimpleNamespace(text=text)], SimpleNamespace(language="en")) for text in texts
+    ]
+    service = _streaming_service(("好",))
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    for _ in texts:
+        await pipeline.add_audio(_pcm24())
+    user_text = service.handle_streaming_chat.call_args_list[-1].args[0]["messages"][1]["content"]
+    assert "one" in user_text, f"the fourth-back segment is still context: {user_text}"
+    assert user_text.index("one") < user_text.index("four") < user_text.index("five")
 
 
 def test_every_language_a_client_offers_is_named_in_words():

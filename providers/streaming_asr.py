@@ -103,6 +103,21 @@ class StreamingASR:
             return []
         return await self._transcribe(remaining, is_final=is_final)
 
+    async def cut(self) -> list[dict[str, Any]]:
+        """Transcribe what is buffered now and start a new buffer.
+
+        A spoken turn's end cuts here, so a segment is the utterance the speaker
+        finished rather than whatever a fixed window happened to slice. Unlike
+        `flush`, the stream stays open: the next turn keeps using it.
+        """
+        async with self._lock:
+            if self._closed:
+                return []
+            chunk = bytes(self._buffer)
+            self._buffer.clear()
+            self._processed_up_to = 0
+        return await self._transcribe(chunk, is_final=True)
+
     async def _transcribe(self, audio_bytes: bytes, *, is_final: bool = True) -> list[dict[str, Any]]:
         if len(audio_bytes) < 320:
             return []

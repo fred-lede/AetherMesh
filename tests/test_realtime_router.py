@@ -243,7 +243,8 @@ async def test_cancelled_translation_does_not_overlap_new_work(realtime_dependen
         return {"choices": [{"message": {"content": "你好"}}]}
 
     service.handle_chat.side_effect = slow_translation
-    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    # Six seconds crosses the pipeline's window cap, so one append is one segment.
+    pcm = np.full(24_000 * 6, 1000, dtype=np.int16).tobytes()
     ws = FakeWebSocket([
         {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
         {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
@@ -482,7 +483,8 @@ async def test_pipeline_built_once_from_manager_adapter(realtime_dependencies, m
 
 @pytest.mark.asyncio
 async def test_asr_version_change_rebuilds_pipeline_with_new_model(realtime_dependencies, monkeypatch):
-    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    # Six seconds crosses the pipeline's window cap, so one append is one segment.
+    pcm = np.full(24_000 * 6, 1000, dtype=np.int16).tobytes()
     manager = realtime_router.asr_manager
     calls: list[int] = []
     orig_get_adapter = manager.get_adapter
@@ -620,6 +622,45 @@ async def test_audio_stream_also_emits_openai_transcription_and_response_events(
     assert out_delta["item_id"] == "msg_1"
     out_done = next(e for e in ws.sent if e["type"] == "response.output_text.done")
     assert out_done["text"] == "你好"
+
+
+@pytest.mark.asyncio
+async def test_streamed_tokens_open_one_response_and_close_it_once(realtime_dependencies):
+    """Every token of a segment rides its own output_text.delta inside ONE response."""
+    service = realtime_dependencies
+    tokens = ("你", "好", "。")
+    service.handle_streaming_chat.side_effect = lambda _payload: SimpleNamespace(
+        iterator=iter([
+            {"choices": [{"delta": {"content": token}, "finish_reason": None}]} for token in tokens
+        ])
+    )
+    pcm = np.full(24_000 * 3, 1000, dtype=np.int16).tobytes()
+    ws = FakeWebSocket([
+        {"type": "session.update", "session": {"audio": {"output": {"language": "zh"}}}},
+        {"type": "session.input_audio_buffer.append", "audio": base64.b64encode(pcm).decode()},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    types = [event["type"] for event in ws.sent]
+    assert types.count("response.created") == 1, types
+    assert types.count("response.output_item.added") == 1, types
+    assert types.count("response.done") == 1, types
+    deltas = [e["delta"] for e in ws.sent if e["type"] == "response.output_text.delta"]
+    assert deltas == list(tokens)
+    done = next(e for e in ws.sent if e["type"] == "response.output_text.done")
+    assert done["text"] == "你好。"
+    assert done["item_id"] == next(e for e in ws.sent if e["type"] == "response.output_item.added")["item"]["id"]
+    order = [
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.output_item.done",
+        "response.done",
+    ]
+    indices = [types.index(t) for t in order]
+    assert indices == sorted(indices), f"canonical event order broken: {[t for t in types if t in order]}"
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -19,7 +20,9 @@ from runtime.realtime.openai_events import (
     input_item_created_event,
     is_anchor_request,
     new_event_id,
-    response_sequence_for_text,
+    response_closing_events,
+    response_opening_events,
+    response_text_delta_event,
     transcription_completed_event,
 )
 from runtime.realtime.realtime_session import RealtimeSession
@@ -108,9 +111,42 @@ def translation_model_refusal(service, model: str) -> str | None:
 AUDIO_APPEND_TYPES = {"session.input_audio_buffer.append", "input_audio_buffer.append"}
 
 
-def openai_realtime_extras(event: dict, *, audio_transcripts: bool = False) -> list[dict]:
-    event_type = event.get("type")
-    if event_type == "session.input_transcript.delta":
+@dataclass
+class _OpenResponse:
+    """A response this connection has opened for one audio segment."""
+
+    response_id: str
+    item_id: str
+    text: str = ""
+
+
+class RealtimeExtras:
+    """The pipeline's own transcript events, expanded into the standard OpenAI Realtime ones.
+
+    One response per audio segment: the segment's first token opens it, every token is one
+    output-text (or audio-transcript) delta inside it, and the segment's `done` closes it.
+    A one-shot delta — one carrying `is_final` itself — opens and closes in the same call,
+    so a producer that does not stream still yields a complete response.
+
+    Stateful on purpose: a response's opening must not be repeated per token, and its ids
+    must be the same at its close. One instance per connection.
+    """
+
+    def __init__(self, *, conversation_id: str = "conv_local") -> None:
+        self._conversation_id = conversation_id
+        self._open: dict[int, _OpenResponse] = {}
+
+    def feed(self, event: dict, *, audio_transcripts: bool = False) -> list[dict]:
+        event_type = event.get("type")
+        if event_type == "session.input_transcript.delta":
+            return self._input_transcript(event)
+        if event_type == "session.output_transcript.delta":
+            return self._output_delta(event, audio_transcripts=audio_transcripts)
+        if event_type == "session.output_transcript.done":
+            return self._output_done(event, audio_transcripts=audio_transcripts)
+        return []
+
+    def _input_transcript(self, event: dict) -> list[dict]:
         text = str(event.get("text") or event.get("delta") or "").strip()
         if not text:
             return []
@@ -120,20 +156,71 @@ def openai_realtime_extras(event: dict, *, audio_transcripts: bool = False) -> l
             input_item_added_event(item_id),
             transcription_completed_event(item_id, text),
         ]
-    if event_type == "session.output_transcript.delta":
-        text = str(event.get("text") or event.get("delta") or "").strip()
+
+    def _output_delta(self, event: dict, *, audio_transcripts: bool) -> list[dict]:
+        text = str(event.get("delta") or event.get("text") or "")
         if not text:
             return []
-        seg = event.get("seg", 0)
-        return response_sequence_for_text(
+        seg = int(event.get("seg", 0))
+        response, events = self._opened(seg)
+        response.text += text
+        events.append(response_text_delta_event(
             text,
-            response_id=f"resp_{seg}",
-            item_id=f"msg_{seg}",
-            conversation_id="conv_local",
-            previous_item_id=f"item_{seg}",
+            response_id=response.response_id,
+            item_id=response.item_id,
+            audio_transcripts=audio_transcripts,
+        ))
+        if event.get("is_final") is True:
+            events.extend(self._closed(seg, text=None, audio_transcripts=audio_transcripts))
+        return events
+
+    def _output_done(self, event: dict, *, audio_transcripts: bool) -> list[dict]:
+        seg = int(event.get("seg", 0))
+        text = str(event.get("text") or "")
+        if seg not in self._open:
+            # A segment that never streamed a token still gets its one complete response.
+            if not text:
+                return []
+            response, events = self._opened(seg)
+            response.text = text
+            events.append(response_text_delta_event(
+                text,
+                response_id=response.response_id,
+                item_id=response.item_id,
+                audio_transcripts=audio_transcripts,
+            ))
+            events.extend(self._closed(seg, text=text, audio_transcripts=audio_transcripts))
+            return events
+        return self._closed(seg, text=text or None, audio_transcripts=audio_transcripts)
+
+    def _opened(self, seg: int) -> tuple[_OpenResponse, list[dict]]:
+        """The segment's response, opened now if this is its first token."""
+        known = self._open.get(seg)
+        if known is not None:
+            return known, []
+        response = _OpenResponse(response_id=f"resp_{seg}", item_id=f"msg_{seg}")
+        self._open[seg] = response
+        return response, response_opening_events(
+            response.response_id,
+            response.item_id,
+            self._conversation_id,
+            f"item_{seg}",
+        )
+
+    def _closed(self, seg: int, *, text: str | None, audio_transcripts: bool) -> list[dict]:
+        response = self._open.pop(seg, None)
+        if response is None:
+            return []
+        final = response.text if text is None else text
+        if not final:
+            return []
+        return response_closing_events(
+            response.response_id,
+            response.item_id,
+            final,
+            self._conversation_id,
             audio_transcripts=audio_transcripts,
         )
-    return []
 
 
 async def _run_completion(session: RealtimeSession, service) -> dict:
@@ -288,9 +375,10 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
         async with send_lock:
             await websocket.send_json(event)
 
+    extras = RealtimeExtras()
     async def emit_with_extras(outbound: dict) -> None:
         await send_json(outbound)
-        for extra in openai_realtime_extras(outbound, audio_transcripts=session.wants_audio_transcripts()):
+        for extra in extras.feed(outbound, audio_transcripts=session.wants_audio_transcripts()):
             await send_json(extra)
 
     AUDIO_IDLE_POLL_SECONDS = 1.0

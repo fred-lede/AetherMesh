@@ -103,6 +103,29 @@ class TestStreamingASR:
         assert len(results) == 1
         assert len(mock_model.transcribe.call_args.args[0]) == 1600
 
+    async def test_cut_transcribes_the_buffer_and_stays_open(
+        self, stream: StreamingASR, mock_model: MagicMock,
+    ) -> None:
+        """A spoken turn's end cuts the buffer without closing the stream: the next turn reuses it."""
+        await stream.add_audio(_pcm(0.1))
+        results = await stream.cut()
+        assert [r["text"] for r in results] == ["hello world"]
+        assert stream._buffer == bytearray()
+        assert stream._processed_up_to == 0
+        assert stream._closed is False
+        await stream.add_audio(_pcm(0.3))
+        results = await stream.transcribe_if_ready()
+        assert len(results) == 1
+        assert results[0]["seg"] == 2
+
+    async def test_cut_returns_empty_for_no_audio(self, stream: StreamingASR) -> None:
+        assert await stream.cut() == []
+
+    async def test_cut_returns_empty_when_closed(self, stream: StreamingASR) -> None:
+        stream._closed = True
+        await stream.add_audio(_pcm(0.3))
+        assert await stream.cut() == []
+
     async def test_lazy_segments_are_materialized_off_event_loop(self) -> None:
         event_loop_thread = threading.get_ident()
         iteration_threads = []

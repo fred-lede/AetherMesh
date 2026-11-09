@@ -122,37 +122,51 @@ def audio_transcript_done_event(text: str, *, response_id: str, item_id: str) ->
     }
 
 
-def response_sequence_for_text(
-    text: str,
-    *,
+def response_text_delta_event(
+    text: str, *, response_id: str, item_id: str, audio_transcripts: bool = False
+) -> dict[str, Any]:
+    """One chunk of a response's text, in whichever form this session speaks."""
+    if audio_transcripts:
+        return audio_transcript_delta_event(text, response_id=response_id, item_id=item_id)
+    return {
+        "type": "response.output_text.delta",
+        "event_id": _event_id(),
+        "response_id": response_id,
+        "item_id": item_id,
+        "output_index": 0,
+        "content_index": 0,
+        "delta": text,
+    }
+
+
+def response_text_done_event(
+    text: str, *, response_id: str, item_id: str, audio_transcripts: bool = False
+) -> dict[str, Any]:
+    """The response's whole text, in whichever form this session speaks."""
+    if audio_transcripts:
+        return audio_transcript_done_event(text, response_id=response_id, item_id=item_id)
+    return {
+        "type": "response.output_text.done",
+        "event_id": _event_id(),
+        "response_id": response_id,
+        "item_id": item_id,
+        "output_index": 0,
+        "content_index": 0,
+        "text": text,
+    }
+
+
+def response_opening_events(
     response_id: str,
     item_id: str,
     conversation_id: str,
     previous_item_id: str | None = None,
-    audio_transcripts: bool = False,
 ) -> list[dict[str, Any]]:
-    if audio_transcripts:
-        delta: dict[str, Any] = audio_transcript_delta_event(text, response_id=response_id, item_id=item_id)
-        done: dict[str, Any] = audio_transcript_done_event(text, response_id=response_id, item_id=item_id)
-    else:
-        delta = {
-            "type": "response.output_text.delta",
-            "event_id": _event_id(),
-            "response_id": response_id,
-            "item_id": item_id,
-            "output_index": 0,
-            "content_index": 0,
-            "delta": text,
-        }
-        done = {
-            "type": "response.output_text.done",
-            "event_id": _event_id(),
-            "response_id": response_id,
-            "item_id": item_id,
-            "output_index": 0,
-            "content_index": 0,
-            "text": text,
-        }
+    """A response's opening, up to the empty text part: its deltas come next.
+
+    Split out of `response_sequence_for_text` so a streaming producer can open the
+    response on its first token and let the rest arrive as they are made.
+    """
     return [
         {
             "type": "response.created",
@@ -194,8 +208,22 @@ def response_sequence_for_text(
             "content_index": 0,
             "part": {"type": "text", "text": ""},
         },
-        delta,
-        done,
+    ]
+
+
+def response_closing_events(
+    response_id: str,
+    item_id: str,
+    text: str,
+    conversation_id: str,
+    *,
+    audio_transcripts: bool = False,
+) -> list[dict[str, Any]]:
+    """A response's close: its final text, its item, and the response itself."""
+    return [
+        response_text_done_event(
+            text, response_id=response_id, item_id=item_id, audio_transcripts=audio_transcripts
+        ),
         {
             "type": "response.output_item.done",
             "event_id": _event_id(),
@@ -220,6 +248,27 @@ def response_sequence_for_text(
                 "status": "completed",
             },
         },
+    ]
+
+
+def response_sequence_for_text(
+    text: str,
+    *,
+    response_id: str,
+    item_id: str,
+    conversation_id: str,
+    previous_item_id: str | None = None,
+    audio_transcripts: bool = False,
+) -> list[dict[str, Any]]:
+    """A whole response at once: its opening, its one text, and its close."""
+    return [
+        *response_opening_events(response_id, item_id, conversation_id, previous_item_id),
+        response_text_delta_event(
+            text, response_id=response_id, item_id=item_id, audio_transcripts=audio_transcripts
+        ),
+        *response_closing_events(
+            response_id, item_id, text, conversation_id, audio_transcripts=audio_transcripts
+        ),
     ]
 
 
