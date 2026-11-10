@@ -224,3 +224,38 @@ def test_router_list_models_survives_null_models(monkeypatch: pytest.MonkeyPatch
 def test_capabilities_endpoint_includes_decision(client: TestClient):
     values = {c["value"] for c in client.get("/api/models/capabilities").json()["capabilities"]}
     assert "decision" in values
+
+
+def test_router_list_models_exposes_max_output_tokens(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from runtime.orchestration import openai_handler
+
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        "models:\n- name: ok\n  provider: openai\n  worker_ports: []\n  max_output_tokens: 8192\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(store, "models_path", lambda: path)
+    data = openai_handler.RouterService().list_models()["data"]
+    meta = next(m for m in data if m["id"] == "ok")["metadata"]
+    assert meta["max_output_tokens"] == 8192
+    assert meta["max_completion_tokens"] == 8192
+
+
+def test_create_model_persists_max_output_tokens(client: TestClient, models_file: Path):
+    resp = client.post(
+        "/api/models",
+        json={"name": "mo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": 4096},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model"]["max_output_tokens"] == 4096
+    assert any(m["max_output_tokens"] == 4096 for m in store.get_models())
+
+
+def test_update_model_max_output_tokens(client: TestClient, models_file: Path):
+    store.save_models([{"name": "mo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"]}])
+    resp = client.put(
+        "/api/models/mo",
+        json={"name": "mo", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": 2048},
+    )
+    assert resp.status_code == 200
+    assert store.get_models()[0]["max_output_tokens"] == 2048

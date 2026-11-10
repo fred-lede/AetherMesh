@@ -1903,11 +1903,12 @@
       await loadModelMeta();
       mmEditingName = name;
       mmEditingProvider = provider;
-      const model = preset || mmModels.find(m => m.name === name && (!provider || m.provider === provider)) || { capabilities: [], context_length: null };
+      const model = preset || mmModels.find(m => m.name === name && (!provider || m.provider === provider)) || { capabilities: [], context_length: null, max_output_tokens: null };
       document.getElementById('mm-drawer-title').textContent = name ? `Edit: ${name}` : 'New Model';
       document.getElementById('mm-name').value = model.name || '';
       document.getElementById('mm-category').value = model.category || 'local';
       document.getElementById('mm-context').value = model.context_length ?? '';
+      document.getElementById('mm-max-output').value = model.max_output_tokens ?? '';
       document.getElementById('mm-errors').textContent = '';
       renderModelProviderOptions(model.provider);
       renderModelCapabilities(model.capabilities || []);
@@ -1964,6 +1965,7 @@
         provider: document.getElementById('mm-provider').value,
         capabilities: Array.from(document.querySelectorAll('#mm-capabilities input:checked')).map(i => i.value),
         context_length: document.getElementById('mm-context').value ? Number(document.getElementById('mm-context').value) : null,
+        max_output_tokens: document.getElementById('mm-max-output').value ? Number(document.getElementById('mm-max-output').value) : null,
       };
       if (category === 'local') {
         const nodes = document.querySelectorAll('[data-mm-node]');
@@ -2050,13 +2052,14 @@
           <td>${escapeHtml(m.provider)}</td>
           <td>${(m.capabilities || []).map(c => `<span class="badge">${escapeHtml(c)}</span>`).join(' ')}</td>
           <td>${m.context_length ?? '—'}</td>
+          <td>${m.max_output_tokens ?? '—'}</td>
           <td>${escapeHtml((m.workers || []).join(', ')) || '—'}</td>
           <td>
             <button class="btn" onclick="openModelDrawer('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Edit</button>
             <button class="btn" onclick="duplicateModel('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Copy</button>
             <button class="btn danger" onclick="deleteModel('${escapeHtml(m.name)}','${escapeHtml(m.provider)}')">Delete</button>
           </td>
-        </tr>`).join('') || '<tr><td colspan="7">No models.</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="8">No models.</td></tr>';
       document.getElementById('mm-summary').textContent =
         `Total ${mmModels.length} · Local ${mmModels.filter(m => m.category === 'local').length} · Cloud ${mmModels.filter(m => m.category === 'cloud').length} · loaded ${new Date().toLocaleTimeString()}`;
     }

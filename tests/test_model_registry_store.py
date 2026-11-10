@@ -201,3 +201,41 @@ def test_validate_accepts_decision_capability():
     assert errors == []
 
 
+def test_normalize_persists_max_output_tokens():
+    out = store.normalize_model({"name": "m", "provider": "ollama", "max_output_tokens": 4096})
+    assert out["max_output_tokens"] == 4096
+
+
+def test_normalize_max_output_tokens_defaults_to_none():
+    out = store.normalize_model({"name": "m", "provider": "ollama"})
+    assert out["max_output_tokens"] is None
+
+
+def test_validate_rejects_zero_max_output_tokens():
+    _, errors = store.validate_model(
+        {"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": 0}
+    )
+    assert any("max_output_tokens" in e for e in errors)
+
+
+def test_validate_rejects_negative_max_output_tokens():
+    _, errors = store.validate_model(
+        {"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": -5}
+    )
+    assert any("max_output_tokens" in e for e in errors)
+
+
+def test_validate_non_numeric_max_output_tokens_does_not_raise():
+    _, errors = store.validate_model(
+        {"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": "abc"}
+    )
+    assert any("max_output_tokens" in e for e in errors)
+
+
+def test_validate_accepts_max_output_tokens():
+    entry = {"name": "a", "provider": "openai", "worker_ports": [], "capabilities": ["chat"], "max_output_tokens": 8192}
+    clean, errors = store.validate_model(entry)
+    assert errors == []
+    assert clean["max_output_tokens"] == 8192
+
+

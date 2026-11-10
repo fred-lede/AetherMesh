@@ -966,7 +966,7 @@
         <div id="mm-status" class="muted" style="margin-bottom:8px;"></div>
         <div id="mm-summary" class="muted" style="margin-bottom:8px;"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th>Category</th><th>Provider</th><th>Capabilities</th><th>Context</th><th>Workers</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Category</th><th>Provider</th><th>Capabilities</th><th>Context</th><th>Max Output</th><th>Workers</th><th>Actions</th></tr></thead>
           <tbody id="mm-table"></tbody>
         </table></div>
       </section>
@@ -1004,6 +1004,7 @@
       <div id="mm-capabilities" style="margin-top:8px;"></div>
       <div style="margin-top:8px;">
         <label>Context window <input id="mm-context" type="number"></label>
+        <label>Max output tokens <input id="mm-max-output" type="number"></label>
         <button class="btn" onclick="fetchModelContext()">Auto-fetch</button>
       </div>
       <div id="mm-errors" style="color:#e66; margin-top:8px;"></div>

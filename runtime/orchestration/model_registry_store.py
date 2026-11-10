@@ -154,6 +154,8 @@ def normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     out["estimated_vram_mb"] = int(vram) if vram is not None else None
     ctx = entry.get("context_length")
     out["context_length"] = int(ctx) if ctx is not None else None
+    mot = entry.get("max_output_tokens")
+    out["max_output_tokens"] = int(mot) if mot is not None else None
     return out
 
 
@@ -220,6 +222,14 @@ def validate_model(
                 errors.append("context_length must be a positive integer")
         except (TypeError, ValueError):
             errors.append(f"invalid context_length: {ctx!r}")
+
+    mot = entry.get("max_output_tokens")
+    if mot is not None:
+        try:
+            if int(mot) <= 0:
+                errors.append("max_output_tokens must be a positive integer")
+        except (TypeError, ValueError):
+            errors.append(f"invalid max_output_tokens: {mot!r}")
 
     if errors:
         return entry, errors

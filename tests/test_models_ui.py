@@ -27,3 +27,8 @@ def test_drawer_is_outside_the_model_card():
     html = (ROOT / "dashboard" / "templates" / "index.html").read_text(encoding="utf-8")
     assert html.index('id="mm-drawer"') > html.index('id="traces-panel"')
     assert html.index('id="mm-backdrop"') > html.index('id="traces-panel"')
+
+
+def test_models_drawer_has_max_output_field():
+    html = (ROOT / "dashboard" / "templates" / "index.html").read_text(encoding="utf-8")
+    assert 'id="mm-max-output"' in html

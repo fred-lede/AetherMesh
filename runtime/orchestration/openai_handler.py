@@ -121,6 +121,8 @@ class RouterService:
                         "capabilities": model.get("capabilities", []),
                         "context_length": model.get("context_length"),
                         "context_window": model.get("context_length"),
+                        "max_output_tokens": model.get("max_output_tokens"),
+                        "max_completion_tokens": model.get("max_output_tokens"),
                     },
                 }
             )
