@@ -143,6 +143,23 @@ def test_build_adapter_qwen_mps_passthrough(monkeypatch):
     assert captured["device"] == "mps"
 
 
+def test_build_adapter_mlx_whisper(monkeypatch):
+    import providers.mlx_whisper_adapter as mlx_module
+
+    captured: dict = {}
+
+    class FakeMLXAdapter:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(mlx_module, "MLXWhisperAdapter", FakeMLXAdapter)
+    monkeypatch.setattr(asr_worker.settings, "asr_provider", "mlx_whisper")
+    monkeypatch.setattr(asr_worker.settings, "asr_model", "large-v3-turbo")
+    monkeypatch.setattr(asr_worker.settings, "asr_compute_type", "float16")
+    asr_worker._build_adapter()
+    assert captured == {"model_name": "large-v3-turbo", "compute_type": "float16"}
+
+
 def test_probe_asr_worker_healthy(monkeypatch):
     import node.node_agent as node_agent_module
 

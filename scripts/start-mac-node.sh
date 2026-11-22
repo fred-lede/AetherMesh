@@ -54,4 +54,4 @@ export AIIH_CONTROL_URL="$CONTROL_URL"
 
 echo "Starting macOS node agents..."
 echo "  control plane: $CONTROL_URL  (from $CONTROL_URL_SOURCE)"
-python -m runtime.launcher start node_agent worker_agent
+python -m runtime.launcher start node_agent worker_agent asr_worker

@@ -18,11 +18,13 @@ logger = logging.getLogger("runtime.asr.asr_manager")
 
 LOCAL_ENGINES: dict[str, list[str]] = {
     "faster_whisper": ["large-v3", "medium", "small"],
+    "mlx_whisper": ["large-v3", "large-v3-turbo", "medium", "small", "base", "tiny"],
     "qwen_asr": ["Qwen/Qwen3-ASR-1.7B", "Qwen/Qwen3-ASR-0.6B"],
 }
 
 _DEFAULT_MODELS: dict[str, str] = {
     "faster_whisper": "large-v3",
+    "mlx_whisper": "large-v3",
     "qwen_asr": "Qwen/Qwen3-ASR-1.7B",
 }
 
@@ -62,6 +64,10 @@ def _build_local(target: ASRTarget, provider: str, model: str) -> Any:
             device_index=device_index,
             download_dir=settings.asr_models_dir,
         )
+    if provider == "mlx_whisper":
+        from providers.mlx_whisper_adapter import MLXWhisperAdapter
+
+        return MLXWhisperAdapter(model_name=model, compute_type=settings.asr_compute_type)
     from providers.faster_whisper_adapter import FasterWhisperAdapter
 
     return FasterWhisperAdapter(

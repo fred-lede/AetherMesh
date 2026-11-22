@@ -28,6 +28,13 @@ def _build_adapter() -> Any:
             device_index=settings.asr_device_index,
             download_dir=settings.asr_models_dir,
         )
+    if settings.asr_provider == "mlx_whisper":
+        from providers.mlx_whisper_adapter import MLXWhisperAdapter
+
+        return MLXWhisperAdapter(
+            model_name=settings.asr_model,
+            compute_type=settings.asr_compute_type,
+        )
     from providers.faster_whisper_adapter import FasterWhisperAdapter
 
     device = settings.asr_device

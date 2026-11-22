@@ -712,6 +712,29 @@ AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
   (809M, good balance). Models are downloaded to `AIIH_ASR_MODELS_DIR` on first use.
 </details>
 
+#### ASR on Apple Silicon (mlx-whisper)
+
+`faster-whisper`'s ctranslate2 backend supports only `cpu` and `cuda`. On an Apple
+Silicon Mac there is no CUDA, so use the `mlx_whisper` engine, which runs Whisper on the
+MPS GPU via [mlx-whisper](https://github.com/ml-explore/mlx-whisper). It needs `ffmpeg`
+(`brew install ffmpeg`) and downloads models from `mlx-community` on Hugging Face:
+
+```bash
+pip install mlx-whisper
+```
+
+```bash
+AIIH_ASR_ENABLED=true
+AIIH_ASR_PROVIDER=mlx_whisper
+AIIH_ASR_MODEL=large-v3          # tiny/base/small/medium/large-v3/large-v3-turbo, or an HF repo id
+AIIH_ASR_DEVICE=mps              # mlx-whisper always runs on MPS; the value is unused
+AIIH_ASR_COMPUTE_TYPE=float16    # float16 (default) or float32
+AIIH_ASR_PRELOAD=1               # warm the model at worker startup instead of on first request
+```
+
+`AIIH_ASR_MODELS_DIR` does not apply to `mlx_whisper`; mlx-whisper uses the Hugging Face
+cache (`~/.cache/huggingface`).
+
 #### Qwen3-ASR on Pascal GPUs (Tesla P40 / sm_61)
 
 The `qwen_asr` engine loads its model through PyTorch, so the interpreter running it

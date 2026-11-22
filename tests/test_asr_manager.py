@@ -393,6 +393,31 @@ def test_get_adapter_during_loading_returns_previous(env):
     _wait_state(manager, "ready")
 
 
+def test_mlx_whisper_builds_mlx_adapter(env, monkeypatch):
+    from providers import mlx_whisper_adapter
+
+    built: list[tuple[str, str]] = []
+
+    class FakeMLXAdapter:
+        def __init__(self, model_name: str, compute_type: str) -> None:
+            built.append((model_name, compute_type))
+
+    monkeypatch.setattr(mlx_whisper_adapter, "MLXWhisperAdapter", FakeMLXAdapter)
+    manager = ASRManager(builders=_both_builders(asr_manager_module._build_local), dispose=MagicMock(), persist=lambda d: None)
+    manager.reload("local:cuda:0", provider="mlx_whisper", model="large-v3-turbo")
+    assert built == [("large-v3-turbo", asr_manager_module.settings.asr_compute_type)]
+    _wait_state(manager, "ready")
+    assert manager.snapshot()["active"]["provider"] == "mlx_whisper"
+
+
+def test_mlx_whisper_unknown_model_400(env):
+    manager = ASRManager(builders=_both_builders(lambda t, p, m: _fake_adapter()), dispose=MagicMock(), persist=lambda d: None)
+    with pytest.raises(ASRConfigError) as excinfo:
+        manager.reload("local:cpu", provider="mlx_whisper", model="huge-v4")
+    assert excinfo.value.status_code == 400
+    assert "large-v3-turbo" in excinfo.value.details["valid_models"]
+
+
 def test_qwen_asr_models_listed_in_model_registry():
     from runtime.orchestration import model_registry_store as store
 
