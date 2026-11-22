@@ -2,10 +2,16 @@
 set -euo pipefail
 
 # AetherMesh macOS Node Starter
-# Starts node_agent + worker_agent and registers with Windows control plane
+# Starts node_agent + worker_agent + asr_worker and registers with the control plane
 
 AETHERMESH_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$AETHERMESH_DIR/.env"
+
+# launchd starts the daemon with a minimal PATH that has no Homebrew, and decoding
+# audio files needs ffmpeg, which Homebrew installs on Apple Silicon.
+if [ -d /opt/homebrew/bin ]; then
+  export PATH="/opt/homebrew/bin:$PATH"
+fi
 
 # Read one KEY=value pair from .env (first match, ignores CR and surrounding quotes).
 env_value() {

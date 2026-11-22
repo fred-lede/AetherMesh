@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import shutil
 import tempfile
 import threading
 from typing import Any
@@ -168,6 +169,13 @@ class MLXWhisperAdapter(ASRProviderAdapter):
         temperature: float = 0.0,
         response_format: str = "json",
     ) -> dict[str, Any]:
+        if not shutil.which("ffmpeg"):
+            raise ASRProviderError(
+                "mlx-whisper decodes audio files with ffmpeg; install it (brew install ffmpeg) "
+                "and make sure it is on PATH",
+                status_code=503,
+            )
+
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         try:
             tmp.write(audio)

@@ -135,6 +135,19 @@ def test_transcribe_errors_map_to_provider_status(monkeypatch, tmp_path, error, 
     assert not audio_path.exists()
 
 
+def test_transcribe_without_ffmpeg_reports_an_actionable_error(monkeypatch, tmp_path):
+    _stub_mlx(monkeypatch)
+    _stub_tempfile(monkeypatch, tmp_path)
+    monkeypatch.setattr(mlx_module.shutil, "which", lambda name: None)
+
+    adapter = MLXWhisperAdapter(model_name="tiny")
+    with pytest.raises(ASRProviderError) as excinfo:
+        adapter.transcribe(audio=b"RIFFfake")
+    assert excinfo.value.status_code == 503
+    assert "ffmpeg" in str(excinfo.value)
+    assert not (tmp_path / "a.wav").exists()
+
+
 def test_streaming_model_returns_segments_and_info(monkeypatch, tmp_path):
     mlx_whisper, _, _ = _stub_mlx(
         monkeypatch,
