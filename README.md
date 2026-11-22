@@ -322,6 +322,8 @@ ollama pull nomic-embed-text
 ```bash
 # Starts only node_agent + worker_agent on this machine
 python -m runtime.launcher start node_agent worker_agent
+
+# Windows: scripts\start-worker.bat also starts asr_worker (GPU ASR on this node)
 ```
 
 The control plane target comes from `.env` (`AIIH_CONTROL_URL`), which
@@ -332,7 +334,9 @@ plists do not carry an `AIIH_CONTROL_IP`.
 
 Worker-node service files are in `systemd/aiih-worker.service` and
 `launchd/com.aiih.worker.plist.example`. Replace `__ROOT_DIR__` with the actual path,
-and **replace `fred` in `User=fred`/`Group=fred` with your Linux username**:
+and **replace `fred` in `User=fred`/`Group=fred` with your Linux username**. On Windows,
+`scripts/start-worker.bat` runs `node_agent + worker_agent + asr_worker` and
+`scripts/register-worker-task.bat` installs the ONSTART scheduled task.
 
 ```bash
 # Ubuntu
@@ -344,8 +348,10 @@ sudo systemctl start aiih-worker
 cp launchd/com.aiih.worker.plist.example ~/Library/LaunchAgents/com.aiih.worker.plist
 launchctl load ~/Library/LaunchAgents/com.aiih.worker.plist
 
-# Windows (Task Scheduler) — run only node_agent + worker_agent
-schtasks /Create /SC ONSTART /TN "AetherMesh-Worker" /TR "C:\path\to\.venv\Scripts\python.exe -m runtime.launcher start node_agent worker_agent" /RU SYSTEM /RL HIGHEST
+# Windows (Task Scheduler) — node_agent + worker_agent + asr_worker
+# Right-click scripts\register-worker-task.bat → "Run as administrator":
+# disables the old "AetherMesh" host task and creates "AetherMesh-Worker".
+scripts\register-worker-task.bat
 ```
 
 **Step 5: Register models on the control plane**
