@@ -60,6 +60,7 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+config/asr_config.json
 dump.rdb
 appendonly.aof
 config/routing_audit.jsonl
