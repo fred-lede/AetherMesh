@@ -229,6 +229,28 @@ async def test_translation_provider_failure_preserves_source_and_emits_error():
 
 
 @pytest.mark.asyncio
+async def test_a_translation_that_returns_empty_text_reports_why():
+    service = MagicMock()
+    service.handle_chat.return_value = {
+        "choices": [{"message": {"content": ""}, "finish_reason": "length"}]
+    }
+    pipeline = RealtimeAudioPipeline(
+        asr_model=_model(),
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    events = await pipeline.add_audio(_pcm24())
+    types = [e["type"] for e in events]
+    assert "session.output_transcript.delta" not in types
+    assert types[2] == "error"
+    message = events[2]["error"]["message"]
+    assert "no text" in message
+    assert "length" in message
+
+
+@pytest.mark.asyncio
 async def test_source_delta_is_emitted_before_translation_and_survives_failure():
     emitted = []
 

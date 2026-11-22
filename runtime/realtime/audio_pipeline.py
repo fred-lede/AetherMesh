@@ -414,6 +414,9 @@ class RealtimeAudioPipeline:
         if not choices:
             raise RuntimeError("translation returned no choices")
         translated = (choices[0].get("message") or {}).get("content")
-        if not isinstance(translated, str):
-            raise RuntimeError("translation returned no text")
+        if not isinstance(translated, str) or not translated.strip():
+            reason = choices[0].get("finish_reason")
+            raise RuntimeError(
+                f"translation returned no text ({reason})" if reason else "translation returned no text"
+            )
         return translated
