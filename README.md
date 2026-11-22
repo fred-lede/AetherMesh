@@ -708,6 +708,43 @@ AIIH_ASR_MODELS_DIR=data/asr_models      # model cache directory
   (809M, good balance). Models are downloaded to `AIIH_ASR_MODELS_DIR` on first use.
 </details>
 
+#### Qwen3-ASR on Pascal GPUs (Tesla P40 / sm_61)
+
+The `qwen_asr` engine loads its model through PyTorch, so the interpreter running it
+must have CUDA kernels for the GPU's compute capability. Tesla P40 is Pascal (`sm_61`).
+
+PyTorch CUDA 13.x wheels dropped Pascal entirely, and cu128 builds dropped it from
+PyTorch 2.8 onward. The project venvs use `torch==2.15.0+cu132`, whose architecture
+list starts at `sm_75`. Loading the model succeeds, but the first inference fails with
+`CUDA error: no kernel image is available for execution on the device`.
+
+Check an interpreter before using it for `qwen_asr`:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.get_arch_list())"
+# sm_60 (or sm_61) must be in the list for a Tesla P40.
+```
+
+If the launcher's interpreter is incompatible, point the adapter at one that is:
+
+```bash
+AIIH_QWEN_ASR_PYTHON=/home/fred/miniconda3/bin/python
+```
+
+The adapter then loads the model in `runtime/asr/qwen_asr_worker.py` under that
+interpreter and streams audio to it over a JSON pipe. Without this setting the model
+runs in-process, which requires a Pascal-compatible `torch`.
+
+Notes:
+
+- Do not install both `nvidia-nccl-cu12` and `nvidia-nccl-cu13` in the same venv. Both
+  provide `libnccl.so.2`, and the older one can shadow the `ncclCommResume` symbol
+  required by `torch 2.15+cu132`. The resulting `ImportError` was previously reported
+  as `qwen-asr is not installed` even though the package was present.
+- `faster_whisper` does not depend on PyTorch, but its `av` 19 wheel is incompatible
+  with the Python 3.14 venv (`av.open()` no longer accepts `metadata_errors`). Use a
+  compatible `av` version or a Python 3.12 environment for that engine.
+
 **Transcription API:**
 ```bash
 curl -X POST http://localhost:8001/v1/audio/transcriptions \

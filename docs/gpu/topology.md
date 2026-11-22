@@ -9,6 +9,12 @@
 | NVIDIA Tesla P40 | 24 GB | B | High-capacity batch |
 | Apple Silicon M4 | 64 GB (unified) | C | Large memory models |
 
+> **Framework note:** Tesla P40 is Pascal (`sm_61`). PyTorch CUDA 13.x wheels and cu128
+> builds from PyTorch 2.8 onward do not include Pascal kernels, so `torch`-based engines
+> such as `qwen_asr` need an interpreter whose `torch.cuda.get_arch_list()` contains
+> `sm_60`. See [Qwen3-ASR on Pascal GPUs](../README.md#qwen3-asr-on-pascal-gpus-tesla-p40--sm_61)
+> for the `AIIH_QWEN_ASR_PYTHON` workaround.
+
 ## Scheduling Dimensions
 The GPU runtime (`runtime/gpu/`) schedules models based on:
 
