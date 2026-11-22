@@ -733,7 +733,16 @@ AIIH_ASR_PRELOAD=1               # warm the model at worker startup instead of o
 ```
 
 `AIIH_ASR_MODELS_DIR` does not apply to `mlx_whisper`; mlx-whisper uses the Hugging Face
-cache (`~/.cache/huggingface`).
+cache (`~/.cache/huggingface`). Short model names map to the mlx-community repos
+(`large-v3` → `mlx-community/whisper-large-v3-mlx`); anything containing a `/` is
+passed to Hugging Face as-is.
+
+Every MLX call is serialised on one thread inside the adapter: MLX arrays belong to the
+thread that created them, so a model loaded by the preload thread cannot be used from a
+request thread. The realtime WebSocket pipeline keeps working because the adapter's
+`_model` is a faster-whisper shaped shim (`transcribe(samples, ...) -> (segments, info)`)
+that routes through that thread, exactly like `faster_whisper` and a remote node's
+`RemoteASRAdapter` do.
 
 #### Qwen3-ASR on Pascal GPUs (Tesla P40 / sm_61)
 

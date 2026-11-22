@@ -135,6 +135,29 @@ def test_transcribe_errors_map_to_provider_status(monkeypatch, tmp_path, error, 
     assert not audio_path.exists()
 
 
+def test_streaming_model_returns_segments_and_info(monkeypatch, tmp_path):
+    mlx_whisper, _, _ = _stub_mlx(
+        monkeypatch,
+        result={"text": "hello there", "segments": [{"text": " hello", "start": 0.0, "end": 1.25}], "language": "th"},
+    )
+
+    adapter = MLXWhisperAdapter(model_name="tiny")
+    segments, info = adapter._model.transcribe([1.0, 2.0, 3.0], language="th", task="transcribe")
+
+    assert [(seg.text, seg.start, seg.end) for seg in segments] == [(" hello", 0.0, 1.25)]
+    assert info.language == "th"
+    assert mlx_whisper.transcribe.call_args.args[0] == [1.0, 2.0, 3.0]
+    assert mlx_whisper.transcribe.call_args.kwargs["path_or_hf_repo"] == "mlx-community/whisper-tiny"
+
+
+def test_streaming_model_language_defaults_to_requested_one(monkeypatch, tmp_path):
+    _stub_mlx(monkeypatch, result={"text": "ok", "segments": [{"text": " ok", "start": 0.0, "end": 0.5}]})
+
+    adapter = MLXWhisperAdapter(model_name="tiny")
+    _, info = adapter._model.transcribe([1.0, 2.0], language="ja")
+    assert info.language == "ja"
+
+
 def test_all_mlx_calls_run_on_the_worker_thread(monkeypatch, tmp_path):
     mlx_whisper, _, _ = _stub_mlx(monkeypatch)
     _stub_tempfile(monkeypatch, tmp_path)
@@ -151,6 +174,7 @@ def test_all_mlx_calls_run_on_the_worker_thread(monkeypatch, tmp_path):
     second = MLXWhisperAdapter(model_name="tiny")
     first.transcribe(audio=b"RIFFfake")
     second.transcribe(audio=b"RIFFfake")
+    first._model.transcribe([1.0, 2.0], language="en")
 
     assert threads == {"mlx-whisper"}
     assert mlx_module._worker is not None

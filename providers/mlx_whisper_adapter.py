@@ -33,6 +33,48 @@ def _resolve_repo(model_name: str) -> str:
     return _MLX_REPOS.get(name.lower(), name)
 
 
+class _MlxSegment:
+    def __init__(self, text: str, start: float, end: float) -> None:
+        self.text = text
+        self.start = start
+        self.end = end
+
+
+class _MlxInfo:
+    def __init__(self, language: str) -> None:
+        self.language = language
+
+
+class _MlxTranscriber:
+    """faster-whisper shaped entry point the realtime pipeline can stream with.
+
+    `transcribe(samples, ...)` returns `(segments, info)` and runs on the worker
+    thread, so MLX never touches an array created elsewhere.
+    """
+
+    def __init__(self, repo: str, fp16: bool) -> None:
+        self._repo = repo
+        self._fp16 = fp16
+
+    def transcribe(self, samples: Any, language: str = "", **kwargs: Any) -> tuple[list[Any], Any]:
+        result = _get_worker().run(
+            {
+                "repo": self._repo,
+                "fp16": self._fp16,
+                "audio": samples,
+                "task": kwargs.get("task", "transcribe"),
+                "temperature": kwargs.get("temperature", 0.0),
+                "language": language,
+                "prompt": kwargs.get("prompt", ""),
+            }
+        )
+        segments = [
+            _MlxSegment(str(seg.get("text") or ""), float(seg.get("start", 0.0)), float(seg.get("end", 0.0)))
+            for seg in result.get("segments") or []
+        ]
+        return segments, _MlxInfo(result.get("language") or language)
+
+
 class _MlxWorker:
     """Runs every MLX call on one thread.
 
@@ -86,8 +128,12 @@ class _MlxWorker:
         if job.get("prompt"):
             kwargs["initial_prompt"] = job["prompt"]
 
-        result = transcribe(job["audio_path"], **kwargs)
-        return {"text": str(result.get("text") or "").strip()}
+        result = transcribe(job["audio"], **kwargs)
+        return {
+            "text": str(result.get("text") or "").strip(),
+            "segments": list(result.get("segments") or []),
+            "language": str(result.get("language") or ""),
+        }
 
 
 _worker: _MlxWorker | None = None
@@ -110,6 +156,7 @@ class MLXWhisperAdapter(ASRProviderAdapter):
         self._repo = _resolve_repo(model_name)
         self._fp16 = str(compute_type or "").strip().lower() in _FP16_VALUES
         logger.info("MLX Whisper loading repo=%s dtype=%s", self._repo, "float16" if self._fp16 else "float32")
+        self._model = _MlxTranscriber(self._repo, self._fp16)
         self._model_loaded = bool(_get_worker().run({"repo": self._repo, "fp16": self._fp16, "load_only": True}).get("model_loaded"))
 
     def transcribe(
@@ -127,17 +174,18 @@ class MLXWhisperAdapter(ASRProviderAdapter):
             tmp.flush()
             tmp.close()
 
-            return _get_worker().run(
+            result = _get_worker().run(
                 {
                     "repo": self._repo,
                     "fp16": self._fp16,
-                    "audio_path": tmp.name,
+                    "audio": tmp.name,
                     "task": task,
                     "temperature": temperature,
                     "language": language,
                     "prompt": prompt,
                 }
             )
+            return {"text": result["text"]}
         except ValueError as exc:
             raise ASRProviderError(str(exc), status_code=400) from exc
         except Exception as exc:
