@@ -5,8 +5,35 @@ set -euo pipefail
 # Starts node_agent + worker_agent and registers with Windows control plane
 
 AETHERMESH_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CLUSTER_YAML="$AETHERMESH_DIR/config/cluster.yaml"
-CONTROL_PLANE_IP="${AIIH_CONTROL_IP:-192.168.1.200}"
+ENV_FILE="$AETHERMESH_DIR/.env"
+
+# Read one KEY=value pair from .env (first match, ignores CR and surrounding quotes).
+env_value() {
+  if [ ! -f "$ENV_FILE" ]; then
+    return
+  fi
+  awk -v key="$1" '
+    substr($0, 1, length(key) + 1) == key "=" {
+      value = substr($0, length(key) + 2)
+      sub(/\r$/, "", value)
+      gsub(/^["'"'"']|["'"'"']$/, "", value)
+      print value
+      exit
+    }' "$ENV_FILE"
+}
+
+# Control plane target: explicit env, then .env, then the legacy AIIH_CONTROL_IP override.
+CONTROL_URL="${AIIH_CONTROL_URL:-}"
+CONTROL_URL_SOURCE="environment"
+if [ -z "$CONTROL_URL" ]; then
+  CONTROL_URL="$(env_value AIIH_CONTROL_URL)"
+  CONTROL_URL_SOURCE=".env"
+fi
+if [ -z "$CONTROL_URL" ] && [ -n "${AIIH_CONTROL_IP:-}" ]; then
+  CONTROL_PORT="${AIIH_CONTROL_PORT:-$(env_value AIIH_CONTROL_PORT)}"
+  CONTROL_URL="http://${AIIH_CONTROL_IP}:${CONTROL_PORT:-9200}"
+  CONTROL_URL_SOURCE="AIIH_CONTROL_IP"
+fi
 
 cd "$AETHERMESH_DIR"
 
@@ -18,8 +45,13 @@ else
   exit 1
 fi
 
-# Ensure control_plane_url points to Windows host
-sed -i '' "s|control_plane_url: http://127.0.0.1:9200|control_plane_url: http://${CONTROL_PLANE_IP}:9200|" "$CLUSTER_YAML" 2>/dev/null || true
+if [ -z "$CONTROL_URL" ]; then
+  echo "ERROR: no control plane target found. Set AIIH_CONTROL_URL in $ENV_FILE (or AIIH_CONTROL_IP)." >&2
+  exit 1
+fi
+
+export AIIH_CONTROL_URL="$CONTROL_URL"
 
 echo "Starting macOS node agents..."
+echo "  control plane: $CONTROL_URL  (from $CONTROL_URL_SOURCE)"
 python -m runtime.launcher start node_agent worker_agent

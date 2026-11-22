@@ -324,6 +324,10 @@ ollama pull nomic-embed-text
 python -m runtime.launcher start node_agent worker_agent
 ```
 
+The control plane target comes from `.env` (`AIIH_CONTROL_URL`), which
+`scripts/start-mac-node.sh` resolves before starting the agents — the launchd
+plists do not carry an `AIIH_CONTROL_IP`.
+
 **Boot startup** (so agents start automatically when the worker reboots):
 
 Worker-node service files are in `systemd/aiih-worker.service` and
