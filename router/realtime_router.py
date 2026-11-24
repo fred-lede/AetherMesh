@@ -109,6 +109,11 @@ def translation_model_refusal(service, model: str) -> str | None:
 
 
 AUDIO_APPEND_TYPES = {"session.input_audio_buffer.append", "input_audio_buffer.append"}
+# How far behind the ASR the router may fall before it stops reading the client's frames.
+# A full queue is deliberate backpressure — no frame is ever dropped — so it only has to be
+# deep enough that a client streaming at realtime rate is not left waiting on a single slow
+# transcription. One entry is one append, about a second of speech.
+AUDIO_BACKLOG_CHUNKS = 64
 
 
 @dataclass
@@ -559,7 +564,7 @@ async def realtime_websocket(websocket: WebSocket, service=None) -> None:
                         continue
                     await stop_audio_processing()
                 if audio_queue is None:
-                    audio_queue = asyncio.Queue(maxsize=8)
+                    audio_queue = asyncio.Queue(maxsize=AUDIO_BACKLOG_CHUNKS)
                     audio_task = asyncio.create_task(process_audio(audio_queue))
                 await audio_queue.put((audio_generation, pcm))
                 audio_started = True
