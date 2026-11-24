@@ -1653,9 +1653,10 @@ class RouterService:
         worker: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         normalized = dict(payload)
-        if "think" in normalized and provider != "ollama":
-            # `think` is an ollama control; other endpoints reject unknown fields.
-            normalized.pop("think")
+        for ollama_control in ("think", "keep_alive"):
+            if ollama_control in normalized and provider != "ollama":
+                # These are ollama controls; other endpoints reject unknown fields.
+                normalized.pop(ollama_control)
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
         if provider == "openai" or is_custom_provider(provider):

@@ -337,6 +337,9 @@ class RealtimeAudioPipeline:
                 # A thinking model spends its first seconds on reasoning before any
                 # translation reaches the client; this asks for the answer directly.
                 "think": False,
+                # A worker holds one model at a time, so an idle unload costs a full
+                # reload on the next session. -1 keeps the model in memory.
+                "keep_alive": -1,
             }
             tokens: list[str] = []
             stream_error: Exception | None = None

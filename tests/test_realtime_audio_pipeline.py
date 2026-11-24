@@ -80,6 +80,23 @@ async def test_translation_is_asked_for_the_answer_without_reasoning():
 
 
 @pytest.mark.asyncio
+async def test_translation_keeps_the_model_resident_on_the_worker():
+    model = _model()
+    service = MagicMock()
+    service.handle_chat.return_value = {"choices": [{"message": {"content": "你好世界"}}]}
+    pipeline = RealtimeAudioPipeline(
+        asr_model=model,
+        service=service,
+        model="local-chat-model",
+        target_language="zh",
+        window_seconds=0.1,
+    )
+    await pipeline.add_audio(_pcm24())
+    payload = service.handle_chat.call_args.args[0]
+    assert payload["keep_alive"] == -1
+
+
+@pytest.mark.asyncio
 async def test_close_flushes_audio_below_the_streaming_window():
     model = _model("last words")
     service = MagicMock()

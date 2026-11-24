@@ -70,6 +70,8 @@ def test_explicit_max_tokens_beats_max_output_tokens() -> None:
 
 def test_think_flag_reaches_ollama_and_is_dropped_elsewhere() -> None:
     service = RouterService()
-    payload = {"model": "muse-glimmer:30b", "messages": [], "think": False}
-    assert service._normalize_payload_for_provider(payload, "ollama")["think"] is False
-    assert "think" not in service._normalize_payload_for_provider(payload, "openai")
+    payload = {"model": "muse-glimmer:30b", "messages": [], "think": False, "keep_alive": -1}
+    ollama = service._normalize_payload_for_provider(payload, "ollama")
+    assert ollama["think"] is False
+    assert ollama["keep_alive"] == -1
+    assert "keep_alive" not in service._normalize_payload_for_provider(payload, "openai")
