@@ -334,6 +334,9 @@ class RealtimeAudioPipeline:
                 "stream": True,
                 "temperature": 0,
                 "max_output_tokens": 512,
+                # A thinking model spends its first seconds on reasoning before any
+                # translation reaches the client; this asks for the answer directly.
+                "think": False,
             }
             tokens: list[str] = []
             stream_error: Exception | None = None

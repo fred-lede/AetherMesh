@@ -52,3 +52,24 @@ def test_disabled_default_no_injection(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"model": "muse-glimmer:30b", "messages": []}
     out = service._apply_generation_defaults(payload)
     assert "max_tokens" not in out
+
+
+def test_max_output_tokens_is_read_as_max_tokens() -> None:
+    service = RouterService()
+    payload = {"model": "hermes:8b", "messages": [], "max_output_tokens": 512}
+    out = service._apply_generation_defaults(payload)
+    assert out["max_tokens"] == 512
+
+
+def test_explicit_max_tokens_beats_max_output_tokens() -> None:
+    service = RouterService()
+    payload = {"model": "hermes:8b", "messages": [], "max_tokens": 64, "max_output_tokens": 512}
+    out = service._apply_generation_defaults(payload)
+    assert out["max_tokens"] == 64
+
+
+def test_think_flag_reaches_ollama_and_is_dropped_elsewhere() -> None:
+    service = RouterService()
+    payload = {"model": "muse-glimmer:30b", "messages": [], "think": False}
+    assert service._normalize_payload_for_provider(payload, "ollama")["think"] is False
+    assert "think" not in service._normalize_payload_for_provider(payload, "openai")

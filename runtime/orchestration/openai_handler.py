@@ -1524,6 +1524,15 @@ class RouterService:
 
     def _apply_generation_defaults(self, payload: dict[str, Any]) -> dict[str, Any]:
         model = str(payload.get("model", ""))
+        if (
+            payload.get("max_output_tokens") is not None
+            and payload.get("max_tokens") is None
+            and payload.get("max_completion_tokens") is None
+        ):
+            try:
+                payload["max_tokens"] = int(payload["max_output_tokens"])
+            except (TypeError, ValueError):
+                pass
         if payload.get("max_tokens") is not None or payload.get("max_completion_tokens") is not None:
             return payload
         if settings.default_max_tokens <= 0 or not self._model_is_thinking(model):
@@ -1644,6 +1653,9 @@ class RouterService:
         worker: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         normalized = dict(payload)
+        if "think" in normalized and provider != "ollama":
+            # `think` is an ollama control; other endpoints reject unknown fields.
+            normalized.pop("think")
         if "tools" in normalized:
             normalized["tools"] = self._ensure_openai_tools(normalized["tools"])
         if provider == "openai" or is_custom_provider(provider):
