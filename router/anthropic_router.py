@@ -38,6 +38,7 @@ from runtime.gpu_os.routes import gpu_router
 from runtime.multi_agent.routes import agent_router
 from runtime.tools.builtin.web_search import stream_web_server_tool_response
 from router.anthropic.messages_adapter import create_messages_routes
+from router.providers_admin_router import router as providers_admin_router
 from router.skills_router import skills_router
 from runtime.skills.skill_registry import skill_registry
 
@@ -74,6 +75,7 @@ add_security_middleware(app)
 app.include_router(gpu_router)
 app.include_router(agent_router)
 app.include_router(skills_router)
+app.include_router(providers_admin_router)
 
 
 @app.get("/api/metrics/requests")

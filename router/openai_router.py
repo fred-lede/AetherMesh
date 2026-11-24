@@ -29,6 +29,7 @@ from router.openai.embeddings_adapter import create_embeddings_route
 from router.openai.rerank_adapter import create_rerank_route
 from router.openai.batches_adapter import create_batches_router
 from router.files_router import router as files_router
+from router.providers_admin_router import router as providers_admin_router
 from runtime.tools.file_cleanup import ensure_cleanup_dir, get_file_cleanup_manager
 from router.skills_router import skills_router
 from router.audit_router import router as audit_router
@@ -127,6 +128,7 @@ app.include_router(traces_router)
 app.include_router(decision_router)
 app.include_router(document_router)
 app.include_router(asr_admin_router)
+app.include_router(providers_admin_router)
 
 if settings.tts_enabled or settings.asr_enabled:
     from router.audio_router import router as audio_router

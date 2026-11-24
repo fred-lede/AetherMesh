@@ -1301,6 +1301,7 @@ def custom_providers_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     }
     settings.save_custom_providers(data)
     reload_custom_providers()
+    _notify_routers_custom_providers_reload()
     return {"ok": True, "name": name}
 
 
@@ -1323,6 +1324,7 @@ def custom_providers_update(name: str, body: dict[str, Any] = Body(...)) -> dict
     data[name] = cfg
     settings.save_custom_providers(data)
     reload_custom_providers()
+    _notify_routers_custom_providers_reload()
     return {"ok": True, "name": name}
 
 
@@ -1334,6 +1336,7 @@ def custom_providers_delete(name: str) -> dict[str, Any]:
     del data[name]
     settings.save_custom_providers(data)
     reload_custom_providers()
+    _notify_routers_custom_providers_reload()
     return {"ok": True, "name": name}
 
 
@@ -1348,6 +1351,7 @@ def custom_providers_probe(name: str) -> dict[str, Any]:
 @api.post("/custom-providers/reload")
 def custom_providers_reload() -> dict[str, Any]:
     reloaded = reload_custom_providers()
+    _notify_routers_custom_providers_reload()
     return {"ok": True, "providers": list(reloaded.keys())}
 
 
@@ -2287,6 +2291,24 @@ def _router_api_key() -> str:
     if hasattr(settings, "api_key") and settings.api_key:
         return str(settings.api_key)
     return ""
+
+
+def _notify_routers_custom_providers_reload() -> list[str]:
+    notified: list[str] = []
+    for base_url in (settings.router_url, settings.anthropic_router_url):
+        try:
+            response = get_session().post(
+                f"{base_url}/api/providers/reload",
+                headers={"x-api-key": _router_api_key()},
+                timeout=3,
+            )
+            if response.ok:
+                notified.append(base_url)
+            else:
+                LOGGER.warning("custom providers reload notify failed on %s: status %s", base_url, response.status_code)
+        except requests.RequestException:
+            LOGGER.debug("custom providers reload notify unavailable: %s", base_url, exc_info=True)
+    return notified
 
 
 async def _asr_config_proxy(method: str, body: bytes | None = None):

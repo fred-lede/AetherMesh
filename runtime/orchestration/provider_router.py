@@ -114,6 +114,8 @@ def reload_custom_providers() -> dict[str, dict[str, Any]]:
     new_data = _load_custom_providers()
     _CUSTOM_PROVIDERS.clear()
     _CUSTOM_PROVIDERS.update(new_data)
+    for name in new_data:
+        _credential_pools.pop(name, None)
     new_names = set(new_data.keys())
     to_remove = old_names - new_names
     if to_remove:
