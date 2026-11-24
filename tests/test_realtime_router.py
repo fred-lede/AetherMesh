@@ -303,6 +303,21 @@ async def test_response_cancel_marks_active_text_response_cancelled(realtime_dep
 
 
 @pytest.mark.asyncio
+async def test_response_create_is_asked_for_the_answer_without_reasoning(realtime_dependencies):
+    service = realtime_dependencies
+    service.handle_chat.side_effect = lambda payload: {"choices": [{"message": {"content": "สวัสดี"}}]}
+    ws = FakeWebSocket([
+        {"type": "conversation.item.create", "item": {"type": "message", "role": "user", "content": [{"type": "text", "text": "hello"}]}},
+        {"type": "response.create"},
+        {"type": "session.close"},
+    ])
+    await realtime_router.realtime_websocket(ws)
+    payload = service.handle_chat.call_args.args[0]
+    assert payload["think"] is False
+    assert payload["keep_alive"] == -1
+
+
+@pytest.mark.asyncio
 async def test_second_response_create_is_rejected_while_one_is_active(realtime_dependencies):
     service = realtime_dependencies
     service.handle_chat.side_effect = lambda _payload: __import__("time").sleep(0.1) or {"choices": []}

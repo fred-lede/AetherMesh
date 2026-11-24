@@ -238,6 +238,10 @@ async def _run_completion(session: RealtimeSession, service) -> dict:
         "stream": False,
         "max_output_tokens": session.session.get("max_output_tokens", 1024),
         "temperature": session.session.get("temperature", 0.8),
+        # Same reasoning as the translation path: reasoning delays the first token,
+        # and a worker holds one model, so an idle unload costs a full reload.
+        "think": False,
+        "keep_alive": -1,
     }
     if not payload["model"]:
         raise ValueError("no model configured; send a session.update with a 'model'")

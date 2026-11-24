@@ -109,6 +109,56 @@ def test_preload_failure_marks_failed(env):
     assert snapshot["version"] == 0
 
 
+def test_preload_retries_a_node_target_that_registers_late(env):
+    attempts = {"count": 0}
+
+    def fetch_nodes():
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            return []
+        return [{"node_id": "node-mac-01", "ip": "127.0.0.1", "metadata": {"asr_worker": {"port": 9450, "healthy": True}}}]
+
+    env.setattr(asr_manager_module, "_fetch_cluster_nodes", fetch_nodes)
+    env.setattr(asr_manager_module, "NODE_PRELOAD_RETRY_DELAY_SECONDS", 0.0)
+    env.setattr(type(asr_manager_module.settings), "load_asr_config", lambda self: {"target_id": "node:node-mac-01"})
+    adapter = _fake_adapter("remote_asr")
+    manager, _ = _make_manager({"node": lambda t, p, m: adapter})
+
+    manager.preload()
+    _wait_state(manager, "ready", timeout=10)
+    snapshot = manager.snapshot()
+    assert snapshot["active"]["target_id"] == "node:node-mac-01"
+    assert manager.get_adapter() is adapter
+    assert attempts["count"] == 3
+
+
+def test_preload_gives_up_on_a_node_that_never_registers(env):
+    attempts = {"count": 0}
+
+    def fetch_nodes():
+        attempts["count"] += 1
+        return []
+
+    env.setattr(asr_manager_module, "_fetch_cluster_nodes", fetch_nodes)
+    env.setattr(asr_manager_module, "NODE_PRELOAD_RETRY_DELAY_SECONDS", 0.0)
+    env.setattr(asr_manager_module, "NODE_PRELOAD_RETRY_ATTEMPTS", 3)
+    env.setattr(type(asr_manager_module.settings), "load_asr_config", lambda self: {"target_id": "node:node-mac-01"})
+    manager, _ = _make_manager({})
+
+    manager.preload()
+    _wait_state(manager, "failed", timeout=10)
+    assert attempts["count"] == 3
+    assert "unknown node" in manager.snapshot()["error"]
+
+
+def test_preload_does_not_retry_a_config_that_is_simply_wrong(env):
+    env.setattr(type(asr_manager_module.settings), "load_asr_config", lambda self: {"target_id": "local:cuda:0", "provider": "not_an_engine"})
+    manager, _ = _make_manager({})
+    manager.preload()
+    _wait_state(manager, "failed", timeout=10)
+    assert "not_an_engine" in manager.snapshot()["error"]
+
+
 def test_reload_success_swaps_and_disposes_old(env):
     adapter_a, adapter_b = _fake_adapter("a"), _fake_adapter("b")
     builders = {"local_cuda": lambda t, p, m: adapter_a, "local_cpu": lambda t, p, m: adapter_b}

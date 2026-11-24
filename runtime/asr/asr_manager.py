@@ -30,6 +30,11 @@ _DEFAULT_MODELS: dict[str, str] = {
 
 _GPU_CACHE_TTL_S = 5.0
 
+# A node target is only resolvable once that node has registered with the control
+# plane, which can be later than this process starts.
+NODE_PRELOAD_RETRY_ATTEMPTS = 6
+NODE_PRELOAD_RETRY_DELAY_SECONDS = 5.0
+
 
 class ASRConfigError(Exception):
     def __init__(self, message: str, status_code: int = 400, details: Any = None) -> None:
@@ -114,6 +119,12 @@ def _fetch_cluster_nodes() -> list[dict[str, Any]]:
     payload = response.json()
     nodes = payload.get("nodes", []) if isinstance(payload, dict) else []
     return [node for node in nodes if isinstance(node, dict)]
+
+
+def _is_unregistered_node(exc: ASRConfigError) -> bool:
+    """Whether a preload failure is a startup race rather than a bad config."""
+    details = exc.details if isinstance(exc.details, dict) else {}
+    return "known_nodes" in details or "node_id" in details
 
 
 class ASRManager:
@@ -267,22 +278,35 @@ class ASRManager:
         return f"local:cuda:{settings.asr_device_index}"
 
     def _preload_worker(self, target_id: str, provider: str, model: str) -> None:
-        try:
-            target = self.resolve_target(target_id)
-            provider, model = self._validate(target, provider, model)
-        except ASRConfigError as exc:
-            with self._lock:
-                self._state = "failed"
-                self._error = exc.message
-            logger.error("ASR preload failed: %s", exc.message)
+        for attempt in range(1, NODE_PRELOAD_RETRY_ATTEMPTS + 1):
+            try:
+                target = self.resolve_target(target_id)
+                provider, model = self._validate(target, provider, model)
+            except ASRConfigError as exc:
+                if _is_unregistered_node(exc) and attempt < NODE_PRELOAD_RETRY_ATTEMPTS:
+                    logger.warning(
+                        "ASR target '%s' not resolvable yet (%s); retry %s/%s in %ss",
+                        target_id,
+                        exc.message,
+                        attempt + 1,
+                        NODE_PRELOAD_RETRY_ATTEMPTS,
+                        NODE_PRELOAD_RETRY_DELAY_SECONDS,
+                    )
+                    time.sleep(NODE_PRELOAD_RETRY_DELAY_SECONDS)
+                    continue
+                with self._lock:
+                    self._state = "failed"
+                    self._error = exc.message
+                logger.error("ASR preload failed: %s", exc.message)
+                return
+            except Exception as exc:
+                with self._lock:
+                    self._state = "failed"
+                    self._error = str(exc)
+                logger.exception("ASR preload failed")
+                return
+            self._load_worker(target, provider, model)
             return
-        except Exception as exc:
-            with self._lock:
-                self._state = "failed"
-                self._error = str(exc)
-            logger.exception("ASR preload failed")
-            return
-        self._load_worker(target, provider, model)
 
     def reload(self, target_id: str, provider: str | None = None, model: str | None = None) -> dict[str, Any]:
         resolved_provider = (provider or settings.asr_provider).strip().lower()
