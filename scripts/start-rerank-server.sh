@@ -42,15 +42,17 @@ if [[ ! -x "$LLAMA_SERVER" ]]; then
   exit 1
 fi
 
-# Map model name -> GGUF blob sha256 (inside the Ollama model store).
+# Map model name -> pinned GGUF blob sha256 (last-resort fallback; the
+# preferred path resolves the digest from the Ollama manifest below, because
+# re-pulling a model changes its sha256).
 BLOB_DIR="${OLLAMA_MODELS:-$HOME/.ollama/models}/blobs"
 
 case "${1:-bge-reranker-v2-m3}" in
   bge-reranker-v2-m3)
-    BLOB="sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3"
+    FALLBACK_BLOB="sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3"
     ;;
   qwen3-reranker-0.6b)
-    BLOB="sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48"
+    FALLBACK_BLOB="sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48"
     ;;
   *)
     echo "ERROR: unknown model '${1}'. Known: bge-reranker-v2-m3, qwen3-reranker-0.6b" >&2
@@ -58,8 +60,44 @@ case "${1:-bge-reranker-v2-m3}" in
     ;;
 esac
 
-if [[ ! -f "$BLOB_DIR/$BLOB" ]]; then
-  echo "ERROR: GGUF blob not found at '$BLOB_DIR/$BLOB'." >&2
+resolve_blob() {
+  local model="$1" fallback="$2"
+  local store manifest digest blob
+  local -a stores=()
+  if [[ -n "${OLLAMA_MODELS:-}" ]]; then
+    stores+=("$OLLAMA_MODELS")
+  fi
+  stores+=("$HOME/.ollama/models" "/usr/share/ollama/.ollama/models")
+  for store in "${stores[@]}"; do
+    [[ -d "$store/manifests" || -d "$store/manifests-v2" ]] || continue
+    while IFS= read -r manifest; do
+      digest="$(python3 - "$manifest" 2>/dev/null <<'PY'
+import json, sys
+try:
+    manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+for layer in manifest.get("layers", []):
+    if str(layer.get("mediaType", "")).endswith("image.model"):
+        print(layer.get("digest", ""))
+        break
+PY
+)" || digest=""
+      [[ "$digest" == sha256:* ]] || continue
+      blob="sha256-${digest#sha256:}"
+      if [[ -f "$store/blobs/$blob" ]]; then
+        printf '%s\n' "$store/blobs/$blob"
+        return 0
+      fi
+    done < <(find "$store/manifests" "$store/manifests-v2" -type f -path "*/$model/latest" 2>/dev/null)
+  done
+  printf '%s\n' "$BLOB_DIR/$fallback"
+}
+
+BLOB_PATH="$(resolve_blob "${1:-bge-reranker-v2-m3}" "$FALLBACK_BLOB")"
+
+if [[ ! -f "$BLOB_PATH" ]]; then
+  echo "ERROR: GGUF blob not found at '$BLOB_PATH'." >&2
   exit 1
 fi
 
@@ -80,7 +118,7 @@ export CUDA_VISIBLE_DEVICES="$GPU"
 
 echo "Starting reranker on $HOST:$PORT (ctx=$CTX_SIZE, gpu=$GPU, CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES)..."
 exec "$LLAMA_SERVER" \
-  --model "$BLOB_DIR/$BLOB" \
+  --model "$BLOB_PATH" \
   --rerank \
   --host "$HOST" \
   --port "$PORT" \
