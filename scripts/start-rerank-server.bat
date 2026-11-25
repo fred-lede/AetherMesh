@@ -44,6 +44,12 @@ if /i "%MODEL%"=="bge-reranker-v2-m3" (
   exit /b 1
 )
 
+REM Prefer the digest recorded in the Ollama manifest: re-pulling a model
+REM changes its sha256, which would silently break the pinned blob above.
+set "RESOLVED_BLOB="
+for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-rerank-blob.ps1" "%MODEL%"`) do set "RESOLVED_BLOB=%%D"
+if defined RESOLVED_BLOB set "BLOB=%RESOLVED_BLOB%"
+
 if not exist "%BLOB_DIR%\%BLOB%" (
   echo ERROR: GGUF blob not found at "%BLOB_DIR%\%BLOB%". 1>&2
   exit /b 1

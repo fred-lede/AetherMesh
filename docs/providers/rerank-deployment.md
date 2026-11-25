@@ -174,10 +174,11 @@ print(resp.data[0].relevance_score)
    - **Linux (NVIDIA)**：Ollama 附帶的是 CPU-only，需下載 llama.cpp CUDA 版（或安裝 llama.cpp 的 CUDA 版至 `/usr/local/bin/llama-server`）
    - 亦可 `AIIH_LLAMA_SERVER=<path>` 指定。
 2. GGUF blob 位於 Ollama model store：
-   - **Windows**：`%USERPROFILE%\.ollama\models\blobs`
+   - **Windows**：`%USERPROFILE%\.ollama\models\blobs`（或 `%LOCALAPPDATA%\Ollama\models`）
    - **macOS/Linux**：`$HOME/.ollama/models/blobs`（可用 `OLLAMA_MODELS` 覆寫）
    - BGE：`sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3`
    - Qwen3：`sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48`
+   - 上面是**pinned fallback**：`ollama pull` 會改變 blob sha，重新 pull 後 pinned 值就會過期。啟動腳本會先從 Ollama manifest（`manifests/*/…/<model>/latest`）解析目前真正的 GGUF digest（`.sh` 用 python3、`.bat` 用 `scripts/resolve-rerank-blob.ps1`），解析不到才退回 pinned 值；因此重新 pull 後不需要手動改腳本。
 
 ## 手動啟動（所有平台）
 
