@@ -176,7 +176,8 @@ print(resp.data[0].relevance_score)
    ```bash
    AIIH_RERANK_POOL=http://127.0.0.1:11436,http://192.168.1.100:11436,http://192.168.1.200:11436
    ```
-2. 若沒設定，讀 `config/models.yaml` 中 `rerank/bge-reranker-v2-m3` 的 `worker_bindings`（本機 node 自動映射為 loopback，远端 node 用 `cluster.yaml` 的 `node_hosts` IP）。
+2. **自動發現**：`node_agent` 每次 heartbeat 會 probe 本機 `cluster.yaml` 的 `local_workers` 中 `role: rerank` 的端口（`GET http://127.0.0.1:<port>/health`），健康者以 `metadata.rerank_workers` 回報，控制平面把它注册成 provider `llama-server`、`metadata.kind = "rerank"` 的 worker。adapter 讀 `/cluster/workers`（30 秒 TTL 快取）拿到端点列表：本機 node 映射為 loopback，远端 node 用註冊的 `base_url`，排序为「本機優先、VRAM 大的优先」。
+3. 若 registry 沒有 rerank worker，讀 `config/models.yaml` 中 `rerank/bge-reranker-v2-m3` 的 `worker_bindings`（本機 node 自動映射為 loopback，远端 node 用 `cluster.yaml` 的 `node_hosts` IP）。
 
 這是**冗余（redundancy）**不是 load balancing：请求永远先打第一台，只有它挂了才 failover，所以多台机器各自加载模型不会互相抢负载。
 
@@ -195,7 +196,7 @@ AIIH_RERANK_HOST=0.0.0.0 AIIH_RERANK_DEVICE=<gpu index> \
   ```
 - 每台 rerank 端点需要 ~1.2 GB VRAM 空闲；如果某台 GPU 已被其他模型占满，就把它从池里移除（或不要绑它）。
 
-> 目前池由 `config/models.yaml` 的绑定的静态定义；`node_agent` 尚未探测 `/health` 并把 rerank 注册进 worker registry（控制平面尚看不到 rerank worker 的 VRAM/queue 状态）。
+> `workers` 字段仍是 `list[int]`（Ollama 端口），rerank worker 走 `metadata.rerank_workers`，所以舊的 node agent 不受影響。控制平面 dashboard 可以看到 rerank worker 的 GPU/狀態；`/cluster/workers` 中它的 provider 是 `llama-server`。
 
 ## 前置需求
 

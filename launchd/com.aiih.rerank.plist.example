@@ -19,7 +19,7 @@
     <key>EnvironmentVariables</key>
     <dict>
       <key>AIIH_RERANK_HOST</key>
-      <string>127.0.0.1</string>
+      <string>0.0.0.0</string>
       <key>AIIH_RERANK_DEVICE</key>
       <string>0</string>
       <key>PATH</key>

@@ -167,6 +167,30 @@ class NodeAgent:
 
             return list(self._cached_gpus), dict(self._cached_worker_runtime)
 
+    def discover_rerank_workers(self, ollama_ports: list[int]) -> list[dict[str, Any]]:
+        """Probe the rerank servers this machine is configured to run."""
+        entries: list[dict[str, Any]] = []
+        for worker in settings.local_rerank_workers():
+            try:
+                port = int(worker.get("port", 0))
+            except (TypeError, ValueError):
+                continue
+            if not port or port in ollama_ports:
+                continue
+            entry = self._probe_rerank_worker(port, worker.get("gpu_id", 0))
+            if entry:
+                entries.append(entry)
+        return entries
+
+    def _probe_rerank_worker(self, port: int, gpu_id: Any) -> dict[str, Any] | None:
+        try:
+            response = requests.get(f"http://127.0.0.1:{port}/health", timeout=2)
+            if response.ok:
+                return {"port": port, "healthy": True, "engine": "llama-server", "gpu_id": int(gpu_id or 0)}
+        except (requests.RequestException, ValueError):
+            pass
+        return None
+
     def payload(self) -> dict[str, Any]:
         workers = self.discover_workers()
         gpus, worker_runtime = self._get_heavy_telemetry(workers)
@@ -183,6 +207,7 @@ class NodeAgent:
                 "detail_refresh_s": self._detail_refresh_s,
                 "detail_cached_at": self._last_detail_refresh,
                 "asr_worker": _probe_asr_worker(),
+                "rerank_workers": self.discover_rerank_workers(workers),
             },
         }
 

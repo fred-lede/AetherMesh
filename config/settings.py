@@ -394,6 +394,26 @@ class Settings:
         configured = os.getenv("AIIH_NODE_IP", "").strip()
         return configured or None
 
+    def local_rerank_workers(self) -> list[dict[str, Any]]:
+        """``local_workers`` entries on this machine that run a rerank server."""
+        entries = [
+            worker
+            for worker in self.cluster_config().get("local_workers", []) or []
+            if isinstance(worker, dict) and str(worker.get("role", "")).strip().lower() == "rerank"
+        ]
+        if entries:
+            return entries
+        return [{"port": int(str(self.rerank_default_base_url).rsplit(":", 1)[-1]), "gpu_id": 0}]
+
+    def rerank_pool_from_env(self) -> list[str]:
+        """Endpoints from ``AIIH_RERANK_POOL``, in the given priority order."""
+        endpoints: list[str] = []
+        for item in os.getenv("AIIH_RERANK_POOL", "").split(","):
+            url = item.strip().rstrip("/")
+            if url and url not in endpoints:
+                endpoints.append(url)
+        return endpoints
+
     def rerank_pool(self) -> list[str]:
         """Ordered rerank endpoints, first entry is preferred.
 
@@ -402,15 +422,9 @@ class Settings:
         mapped to the loopback default because every rerank server binds to its
         own machine (``AIIH_RERANK_HOST`` defaults to ``127.0.0.1``).
         """
-        explicit = os.getenv("AIIH_RERANK_POOL", "").strip()
-        endpoints: list[str] = []
-        if explicit:
-            for item in explicit.split(","):
-                url = item.strip().rstrip("/")
-                if url and url not in endpoints:
-                    endpoints.append(url)
-            if endpoints:
-                return endpoints
+        endpoints = self.rerank_pool_from_env()
+        if endpoints:
+            return endpoints
 
         local_node = self.local_node_id()
         for entry in self.model_registry().get("models", []) or []:

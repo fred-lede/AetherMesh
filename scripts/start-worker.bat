@@ -17,14 +17,20 @@ powershell -NoProfile -Command ^
   "$ps=Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python(.exe)?$' -and $_.CommandLine };" ^
   "foreach($p in $ps){ foreach($m in $mods){ if($p.CommandLine -like ('*'+$m+'*')){ try{ Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }catch{}; break } } }" >nul 2>&1
 powershell -NoProfile -Command ^
-  "$ports=@(9300,9400,9450);" ^
+  "$ports=@(9300,9400,9450,11436);" ^
   "foreach($port in $ports){ try{ $procs=Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach($pid in $procs){ if($pid){ Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } } }catch{} }" >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-echo Starting node_agent + worker_agent + asr_worker...
+:: rerank needs a CUDA llama-server. Only start it when one is configured, otherwise the
+:: watchdog would restart a service that can never load the rerank model.
+set "WORKER_SERVICES=node_agent worker_agent asr_worker"
+findstr /i /c:"AIIH_LLAMA_SERVER" ".env" >nul 2>&1
+if not errorlevel 1 set "WORKER_SERVICES=%WORKER_SERVICES% rerank"
+
+echo Starting %WORKER_SERVICES%...
 echo.
 echo   Ctrl+C to stop all services
 echo.
-call .venv\Scripts\python.exe -m runtime.launcher start node_agent worker_agent asr_worker
+call .venv\Scripts\python.exe -m runtime.launcher start %WORKER_SERVICES%
 
 endlocal

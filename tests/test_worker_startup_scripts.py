@@ -14,7 +14,15 @@ def _launcher_services(script: str) -> list[str]:
 
 def test_start_worker_bat_starts_only_worker_services() -> None:
     script = (_SCRIPTS / "start-worker.bat").read_text(encoding="utf-8")
-    assert _launcher_services(script) == ["node_agent", "worker_agent", "asr_worker"]
+    assert _launcher_services(script) == ["%WORKER_SERVICES%"]
+    assert 'set "WORKER_SERVICES=node_agent worker_agent asr_worker"' in script
+
+
+def test_start_worker_bat_adds_rerank_only_when_llama_server_is_configured() -> None:
+    script = (_SCRIPTS / "start-worker.bat").read_text(encoding="utf-8")
+    assert 'set "WORKER_SERVICES=node_agent worker_agent asr_worker"' in script
+    assert 'set "WORKER_SERVICES=%WORKER_SERVICES% rerank"' in script
+    assert 'findstr /i /c:"AIIH_LLAMA_SERVER" ".env"' in script
 
 
 def test_register_worker_task_bat_disables_host_and_installs_worker() -> None:

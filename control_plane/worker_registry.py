@@ -141,6 +141,52 @@ class WorkerRegistry:
                     record.metadata.update(runtime)
 
                 registered.append(record.to_dict())
+
+            rerank_entries = node_metadata.get("rerank_workers", []) if isinstance(node_metadata, dict) else []
+            for entry in rerank_entries:
+                if not isinstance(entry, dict) or not entry.get("healthy"):
+                    continue
+                try:
+                    port = int(entry.get("port", 0))
+                except (TypeError, ValueError):
+                    continue
+                if not port or port in workers:
+                    continue
+
+                worker_id = f"{node_id}:{port}"
+                gpu_id = int(entry.get("gpu_id", -1) or -1)
+                gpu = gpu_lookup.get(gpu_id) or (gpus[-1] if gpus else {})
+                record = self._workers.get(worker_id)
+                if record is None:
+                    record = WorkerRecord(
+                        worker_id=worker_id,
+                        node_id=node_id,
+                        host=host,
+                        port=port,
+                        provider="llama-server",
+                        gpu_id=int(gpu.get("id", gpu_id if gpu_id >= 0 else 0)),
+                        gpu_name=str(gpu.get("name", "unknown")),
+                        gpu_memory=int(gpu.get("memory", 0)),
+                    )
+                    self._workers[worker_id] = record
+
+                self._refresh_state(record, now)
+                record.provider = "llama-server"
+                record.host = host
+                record.port = port
+                record.gpu_id = int(gpu.get("id", record.gpu_id))
+                record.gpu_name = str(gpu.get("name", record.gpu_name))
+                record.gpu_memory = int(gpu.get("memory", record.gpu_memory))
+                record.gpu_utilization = float(gpu.get("utilization", 0.0))
+                record.temperature = float(gpu.get("temperature", 0.0))
+                record.metadata["kind"] = "rerank"
+                record.metadata["engine"] = str(entry.get("engine", "llama-server"))
+                if record.status == "dead":
+                    record.status = "healthy"
+                    record.consecutive_errors = 0
+                    record.degraded_until = 0.0
+                record.last_heartbeat = now
+                registered.append(record.to_dict())
         return registered
 
     def update_worker_runtime(

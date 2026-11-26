@@ -17,6 +17,53 @@ COOLDOWN_S = 30.0
 MAX_COOLDOWN_S = 120.0
 CONNECT_TIMEOUT_S = 3.0
 
+_REGISTRY_CACHE: dict[str, Any] = {"endpoints": [], "fetched_at": 0.0}
+REGISTRY_TTL_S = 30.0
+
+
+def _registry_endpoints() -> list[str]:
+    """Rerank endpoints discovered from the cluster registry, local first."""
+    now = time.monotonic()
+    if now - float(_REGISTRY_CACHE.get("fetched_at", 0.0)) < REGISTRY_TTL_S:
+        return list(_REGISTRY_CACHE.get("endpoints", []))
+
+    endpoints: list[str] = []
+    try:
+        response = requests.get(f"{settings.control_plane_url}/cluster/workers", timeout=3)
+        if response.ok:
+            payload = response.json()
+            workers = payload.get("workers", []) if isinstance(payload, dict) else []
+            local_node = settings.local_node_id()
+            rerank_workers = [
+                worker
+                for worker in workers
+                if isinstance(worker, dict)
+                and (worker.get("provider") == "llama-server" or (worker.get("metadata") or {}).get("kind") == "rerank")
+                and worker.get("status") != "dead"
+            ]
+            rerank_workers.sort(
+                key=lambda worker: (str(worker.get("node_id")) != local_node, -int(worker.get("gpu_memory", 0) or 0))
+            )
+            for worker in rerank_workers:
+                try:
+                    port = int(worker.get("port", 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+                if not port:
+                    continue
+                if str(worker.get("node_id")) == local_node:
+                    url = f"http://127.0.0.1:{port}"
+                else:
+                    url = str(worker.get("base_url") or "").strip()
+                if url and url not in endpoints:
+                    endpoints.append(url.rstrip("/"))
+    except (requests.RequestException, ValueError):
+        logger.debug("rerank registry lookup failed, falling back to configured pool")
+
+    _REGISTRY_CACHE["endpoints"] = endpoints
+    _REGISTRY_CACHE["fetched_at"] = now
+    return list(endpoints)
+
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -48,7 +95,7 @@ class RerankAdapter(ProviderAdapter):
         elif base_url:
             pool = [base_url.rstrip("/")]
         else:
-            pool = settings.rerank_pool()
+            pool = settings.rerank_pool_from_env() or _registry_endpoints() or settings.rerank_pool()
         if not pool:
             pool = [settings.rerank_default_base_url.rstrip("/")]
         self.endpoints = pool
