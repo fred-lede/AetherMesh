@@ -394,6 +394,41 @@ class Settings:
         configured = os.getenv("AIIH_NODE_IP", "").strip()
         return configured or None
 
+    def rerank_pool(self) -> list[str]:
+        """Ordered rerank endpoints, first entry is preferred.
+
+        ``AIIH_RERANK_POOL`` (comma separated) wins outright. Otherwise the
+        ``rerank`` model's ``worker_bindings`` are resolved, with the local node
+        mapped to the loopback default because every rerank server binds to its
+        own machine (``AIIH_RERANK_HOST`` defaults to ``127.0.0.1``).
+        """
+        explicit = os.getenv("AIIH_RERANK_POOL", "").strip()
+        endpoints: list[str] = []
+        if explicit:
+            for item in explicit.split(","):
+                url = item.strip().rstrip("/")
+                if url and url not in endpoints:
+                    endpoints.append(url)
+            if endpoints:
+                return endpoints
+
+        local_node = self.local_node_id()
+        for entry in self.model_registry().get("models", []) or []:
+            if not isinstance(entry, dict):
+                continue
+            if "rerank" not in set(entry.get("capabilities", []) or []):
+                continue
+            for binding in entry.get("worker_bindings", []) or []:
+                node_id = str(binding.get("node_id", "") or "").strip()
+                if node_id and node_id == local_node:
+                    url = self.rerank_default_base_url
+                else:
+                    url = self.worker_base_url(binding)
+                if url and url not in endpoints:
+                    endpoints.append(url)
+
+        return endpoints or [self.rerank_default_base_url]
+
     def cloud_credentials_for(self, provider: str) -> list[dict[str, Any]]:
         """Return list of credential dicts for *provider* from ``config/credentials.json``.
 

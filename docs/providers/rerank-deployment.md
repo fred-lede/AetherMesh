@@ -166,6 +166,37 @@ print(resp.data[0].relevance_score)
 
 > 若你的 SDK 沒有內建 `rerank`，可改用 `client.post("/rerank", json=payload)`。
 
+## 多機 rerank 池（自動 failover）
+
+`RerankAdapter` 不只連一台，它維護一個**端點池**：第一個健康端點優先使用，連不上時自動換下一台，失敗的端點會進入 cooldown（30 秒起，每次失敗加倍，上限 120 秒），之後自動重试。全部端點都失效才報錯（`provider_unreachable`）。
+
+池的来源（优先级由左到右）：
+
+1. `AIIH_RERANK_POOL` 環境變數（逗號分隔，順序即優先序）
+   ```bash
+   AIIH_RERANK_POOL=http://127.0.0.1:11436,http://192.168.1.100:11436,http://192.168.1.200:11436
+   ```
+2. 若沒設定，讀 `config/models.yaml` 中 `rerank/bge-reranker-v2-m3` 的 `worker_bindings`（本機 node 自動映射為 loopback，远端 node 用 `cluster.yaml` 的 `node_hosts` IP）。
+
+這是**冗余（redundancy）**不是 load balancing：请求永远先打第一台，只有它挂了才 failover，所以多台机器各自加载模型不会互相抢负载。
+
+要让其他机器成为 rerank 端点：
+
+```bash
+# 该机器上的 rerank server 必须对外绑定（预设只绑 127.0.0.1）
+AIIH_RERANK_HOST=0.0.0.0 AIIH_RERANK_DEVICE=<gpu index> \
+  bash scripts/start-rerank-server.sh bge-reranker-v2-m3 11436 <gpu>
+```
+
+- macOS：`launchd/com.aiih.rerank.plist.example` 内加入 `AIIH_RERANK_HOST=0.0.0.0`
+- Windows：`scripts/start-worker.bat` 加 `rerank`，并在防火墙放行 11436
+  ```bat
+  netsh advfirewall firewall add rule name="AetherMesh rerank 11436" dir=in action=allow protocol=TCP localport=11436
+  ```
+- 每台 rerank 端点需要 ~1.2 GB VRAM 空闲；如果某台 GPU 已被其他模型占满，就把它从池里移除（或不要绑它）。
+
+> 目前池由 `config/models.yaml` 的绑定的静态定义；`node_agent` 尚未探测 `/health` 并把 rerank 注册进 worker registry（控制平面尚看不到 rerank worker 的 VRAM/queue 状态）。
+
 ## 前置需求
 
 1. 取得有 GPU offload 的 `llama-server` binary：

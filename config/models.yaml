@@ -297,6 +297,10 @@ models:
   worker_bindings:
   - node_id: node-01
     port: 11436
+  - node_id: node-mac-01
+    port: 11436
+  - node_id: node-um890-01
+    port: 11436
   capabilities:
   - chat
   - rerank
