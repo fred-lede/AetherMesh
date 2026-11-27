@@ -65,6 +65,20 @@ def _registry_endpoints() -> list[str]:
     return list(endpoints)
 
 
+def _merged_pool() -> list[str]:
+    """Registry-discovered endpoints first, then configured bindings.
+
+    A node whose `node_agent` predates rerank discovery still contributes its
+    `models.yaml` binding, so the pool never loses a machine that the registry
+    simply does not know about yet.
+    """
+    endpoints = _registry_endpoints()
+    for url in settings.rerank_pool():
+        if url not in endpoints:
+            endpoints.append(url)
+    return endpoints
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -95,7 +109,7 @@ class RerankAdapter(ProviderAdapter):
         elif base_url:
             pool = [base_url.rstrip("/")]
         else:
-            pool = settings.rerank_pool_from_env() or _registry_endpoints() or settings.rerank_pool()
+            pool = settings.rerank_pool_from_env() or _merged_pool()
         if not pool:
             pool = [settings.rerank_default_base_url.rstrip("/")]
         self.endpoints = pool

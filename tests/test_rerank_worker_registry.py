@@ -203,6 +203,20 @@ def test_rerank_adapter_falls_back_to_config_pool(monkeypatch: MonkeyPatch) -> N
     assert adapter.endpoints == ["http://127.0.0.1:11436"]
 
 
+def test_registry_and_config_pool_are_merged(monkeypatch: MonkeyPatch) -> None:
+    """A node the registry does not know about still keeps its configured binding."""
+    monkeypatch.setattr(rerank_adapter, "_registry_endpoints", lambda: ["http://127.0.0.1:11436"])
+    monkeypatch.setattr(
+        type(rerank_adapter.settings),
+        "rerank_pool",
+        lambda self: ["http://127.0.0.1:11436", "http://192.168.1.100:11436"],
+    )
+
+    adapter = RerankAdapter()
+
+    assert adapter.endpoints == ["http://127.0.0.1:11436", "http://192.168.1.100:11436"]
+
+
 def test_explicit_env_pool_beats_registry(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("AIIH_RERANK_POOL", "http://manual:11436")
     monkeypatch.setattr(rerank_adapter, "_registry_endpoints", lambda: ["http://registry:11436"])
