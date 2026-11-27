@@ -43,11 +43,17 @@ fi
 
 cd "$AETHERMESH_DIR"
 
-# Activate virtual environment
+# Activate virtual environment; fall back to the interpreter already on PATH
+# (conda users often have no .venv and run the agents from their base env).
 if [ -f .venv/bin/activate ]; then
   source .venv/bin/activate
 else
-  echo "ERROR: .venv not found at $AETHERMESH_DIR/.venv"
+  echo "NOTE: no .venv at $AETHERMESH_DIR/.venv - using the python on PATH" >&2
+fi
+
+if ! python -c "import fastapi, uvicorn" >/dev/null 2>&1; then
+  echo "ERROR: the current python cannot import fastapi/uvicorn." >&2
+  echo "        Create a venv: python -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
   exit 1
 fi
 

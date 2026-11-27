@@ -38,3 +38,10 @@ def test_start_mac_node_adds_rerank_only_when_llama_server_exists() -> None:
     assert 'if find_llama_server; then' in script
     assert 'SERVICES="$SERVICES rerank"' in script
     assert "python -m runtime.launcher start $SERVICES" in script
+
+
+def test_start_mac_node_falls_back_to_python_on_path_without_venv() -> None:
+    script = (_SCRIPTS / "start-mac-node.sh").read_text(encoding="utf-8")
+    assert 'if [ -f .venv/bin/activate ]; then' in script
+    assert "no .venv at $AETHERMESH_DIR/.venv" in script
+    assert 'python -c "import fastapi, uvicorn"' in script
