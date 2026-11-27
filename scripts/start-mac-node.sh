@@ -58,6 +58,32 @@ fi
 
 export AIIH_CONTROL_URL="$CONTROL_URL"
 
+# Rerank needs a llama.cpp binary: Ollama itself has no /api/rerank endpoint.
+# Only add the rerank service when a usable llama-server is actually present.
+find_llama_server() {
+  if [[ -n "${AIIH_LLAMA_SERVER:-}" && -x "${AIIH_LLAMA_SERVER}" ]]; then
+    return 0
+  fi
+  for candidate in /opt/homebrew/bin/llama-server /usr/local/bin/llama-server \
+    "/Applications/Ollama.app/Contents/Resources/llama-server"; do
+    if [[ -x "$candidate" ]]; then
+      export AIIH_LLAMA_SERVER="$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+SERVICES="node_agent worker_agent asr_worker"
+if find_llama_server; then
+  # Bind on all interfaces so other nodes' rerank pools can reach this machine.
+  export AIIH_RERANK_HOST="${AIIH_RERANK_HOST:-0.0.0.0}"
+  SERVICES="$SERVICES rerank"
+else
+  echo "NOTE: no llama-server found - rerank service not started (brew install llama.cpp)" >&2
+fi
+
 echo "Starting macOS node agents..."
 echo "  control plane: $CONTROL_URL  (from $CONTROL_URL_SOURCE)"
-python -m runtime.launcher start node_agent worker_agent asr_worker
+echo "  services:      $SERVICES"
+python -m runtime.launcher start $SERVICES

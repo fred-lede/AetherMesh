@@ -30,3 +30,11 @@ def test_register_worker_task_bat_disables_host_and_installs_worker() -> None:
     assert 'schtasks /Change /TN "%TASK_HOST%" /DISABLE' in script
     assert '/TN "%TASK_WORKER%"' in script
     assert "start-worker.bat" in script
+
+
+def test_start_mac_node_adds_rerank_only_when_llama_server_exists() -> None:
+    script = (_SCRIPTS / "start-mac-node.sh").read_text(encoding="utf-8")
+    assert 'SERVICES="node_agent worker_agent asr_worker"' in script
+    assert 'if find_llama_server; then' in script
+    assert 'SERVICES="$SERVICES rerank"' in script
+    assert "python -m runtime.launcher start $SERVICES" in script
