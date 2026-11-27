@@ -26,19 +26,28 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # AIIH_LLAMA_SERVER if you installed llama.cpp elsewhere.
 LLAMA_SERVER="${AIIH_LLAMA_SERVER:-}"
 if [[ -z "$LLAMA_SERVER" ]]; then
-  case "$(uname -s)" in
-    Darwin)
-      LLAMA_SERVER="$HOME/Library/Application Support/Ollama/bin/llama-server"
-      ;;
-    Linux)
-      LLAMA_SERVER="/usr/local/bin/llama-server"
-      ;;
-  esac
+  candidates=()
+  if command -v llama-server >/dev/null 2>&1; then
+    candidates+=("$(command -v llama-server)")
+  fi
+  candidates+=("/opt/homebrew/bin/llama-server" "/usr/local/bin/llama-server")
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    candidates+=(
+      "/Applications/Ollama.app/Contents/Resources/llama-server"
+      "$HOME/Library/Application Support/Ollama/bin/llama-server"
+    )
+  fi
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      LLAMA_SERVER="$candidate"
+      break
+    fi
+  done
 fi
 
-if [[ ! -x "$LLAMA_SERVER" ]]; then
-  echo "ERROR: llama-server not found at '$LLAMA_SERVER'." >&2
-  echo "Set AIIH_LLAMA_SERVER to the llama-server binary path." >&2
+if [[ -z "$LLAMA_SERVER" || ! -x "$LLAMA_SERVER" ]]; then
+  echo "ERROR: llama-server binary not found." >&2
+  echo "Install llama.cpp (macOS: brew install llama.cpp) or set AIIH_LLAMA_SERVER to the binary path." >&2
   exit 1
 fi
 

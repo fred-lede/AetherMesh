@@ -26,7 +26,7 @@ reranker 模型很小（~600MB），單一 GPU 即可。llama.cpp 的 GPU backen
 | 平台 | Backend | 說明 |
 |------|---------|------|
 | **Windows / Linux (NVIDIA)** | CUDA | 需下載 llama.cpp **CUDA 版** binary（Ollama 附帶的是 CPU-only）|
-| **macOS (Apple Silicon)** | Metal | Ollama 附帶的 macOS `llama-server` 即 Metal 版，原生支援 GPU，**不需額外下載** |
+| **macOS (Apple Silicon)** | Metal | `brew install llama.cpp` 的 `llama-server` 即 Metal 版；官方 Ollama app 也附帶 `llama-server`（Homebrew 的 `ollama` formula 不附帶） |
 | Linux (AMD) | ROCm / Vulkan | 需對應 build |
 
 > **注意**：llama.cpp **沒有 MPS backend**（MPS 是 PyTorch 的 API）。macOS 用的是 **Metal**。
@@ -108,12 +108,18 @@ cmd /c scripts\start-rerank-server.bat bge-reranker-v2-m3 11436 0
 
 ### macOS (Metal)
 
-Ollama 附帶的 macOS `llama-server` 已是 Metal 版，直接用即可，無需 `AIIH_LLAMA_SERVER`。Apple Silicon 只有單一 GPU，`CUDA_VISIBLE_DEVICES` 對 Metal 無效，腳本仍使用 `-mg 0`。
+Apple Silicon 只有單一 GPU，`CUDA_VISIBLE_DEVICES` 對 Metal 無效，腳本仍使用 `-mg 0`。
+
+啟動腳本依序搜尋 `llama-server`：`AIIH_LLAMA_SERVER` → PATH 中的 `llama-server` → `/opt/homebrew/bin` → `/usr/local/bin` → `/Applications/Ollama.app/Contents/Resources/llama-server` → `~/Library/Application Support/Ollama/bin/llama-server`。找不到就報 `ERROR: llama-server binary not found.`
+
+Homebrew 的 `ollama` formula **不附帶** `llama-server`（只有 `ollama` 主程式），所以 Mac 上最可靠的做法是：
 
 ```bash
-# 直接使用 Ollama 附帶的 Metal 版
+brew install llama.cpp          # Metal 版 llama-server
 ./scripts/start-rerank-server.sh
 ```
+
+官方 Ollama macOS app 則附帶 `llama-server`，腳本會自動找到。
 
 ## 模型註冊
 
@@ -201,7 +207,7 @@ AIIH_RERANK_HOST=0.0.0.0 AIIH_RERANK_DEVICE=<gpu index> \
 ## 前置需求
 
 1. 取得有 GPU offload 的 `llama-server` binary：
-   - **macOS**：用 Ollama 附帶的 Metal 版 `~/Library/Application Support/Ollama/bin/llama-server`（原生 GPU）
+   - **macOS**：`brew install llama.cpp`（Metal 版）；官方 Ollama app 的 `llama-server` 也可，Homebrew `ollama` formula 不附帶 `llama-server`
    - **Windows**：Ollama 附帶的 `%LOCALAPPDATA%\Programs\Ollama\lib\ollama\llama-server.exe` 是 **CPU-only**，需下載 llama.cpp CUDA 版
    - **Linux (NVIDIA)**：Ollama 附帶的是 CPU-only，需下載 llama.cpp CUDA 版（或安裝 llama.cpp 的 CUDA 版至 `/usr/local/bin/llama-server`）
    - 亦可 `AIIH_LLAMA_SERVER=<path>` 指定。
