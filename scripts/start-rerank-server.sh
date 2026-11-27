@@ -56,19 +56,6 @@ fi
 # re-pulling a model changes its sha256).
 BLOB_DIR="${OLLAMA_MODELS:-$HOME/.ollama/models}/blobs"
 
-case "${1:-bge-reranker-v2-m3}" in
-  bge-reranker-v2-m3)
-    FALLBACK_BLOB="sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3"
-    ;;
-  qwen3-reranker-0.6b)
-    FALLBACK_BLOB="sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48"
-    ;;
-  *)
-    echo "ERROR: unknown model '${1}'. Known: bge-reranker-v2-m3, qwen3-reranker-0.6b" >&2
-    exit 1
-    ;;
-esac
-
 resolve_blob() {
   local model="$1" fallback="$2"
   local store manifest digest blob
@@ -98,12 +85,35 @@ PY
         printf '%s\n' "$store/blobs/$blob"
         return 0
       fi
-    done < <(find "$store/manifests" "$store/manifests-v2" -type f -path "*/$model/latest" 2>/dev/null)
+    done < <(find "$store/manifests" "$store/manifests-v2" -type f -path "*/$model/*" 2>/dev/null | sort)
   done
   printf '%s\n' "$BLOB_DIR/$fallback"
 }
 
-BLOB_PATH="$(resolve_blob "${1:-bge-reranker-v2-m3}" "$FALLBACK_BLOB")"
+MODEL="${1:-bge-reranker-v2-m3}"
+
+# A direct GGUF path is accepted too: either the first argument is a file, or
+# AIIH_RERANK_MODEL_PATH points at one. Useful when the model is not in the
+# Ollama store (e.g. a GGUF downloaded from Hugging Face).
+if [[ -f "$MODEL" ]]; then
+  BLOB_PATH="$MODEL"
+elif [[ -n "${AIIH_RERANK_MODEL_PATH:-}" && -f "${AIIH_RERANK_MODEL_PATH}" ]]; then
+  BLOB_PATH="${AIIH_RERANK_MODEL_PATH}"
+else
+  case "$MODEL" in
+    bge-reranker-v2-m3)
+      FALLBACK_BLOB="sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3"
+      ;;
+    qwen3-reranker-0.6b)
+      FALLBACK_BLOB="sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48"
+      ;;
+    *)
+      echo "ERROR: unknown model '${MODEL}'. Known: bge-reranker-v2-m3, qwen3-reranker-0.6b" >&2
+      exit 1
+      ;;
+  esac
+  BLOB_PATH="$(resolve_blob "$MODEL" "$FALLBACK_BLOB")"
+fi
 
 if [[ ! -f "$BLOB_PATH" ]]; then
   echo "ERROR: GGUF blob not found at '$BLOB_PATH'." >&2
