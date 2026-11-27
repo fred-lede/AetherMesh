@@ -84,18 +84,31 @@
   }
 
   var ASR_STATE_PILL = { ready: 'ok', loading: 'warn', failed: 'bad', disabled: 'disabled', idle: 'disabled' };
+  var ASR_RETRY_DELAYS = [2000, 5000, 10000];
 
-  async function loadAsrSettings() {
+  async function loadAsrSettings(attempt) {
     var panel = document.getElementById('asr-settings-panel');
     if (!panel) return;
+    attempt = attempt || 0;
     try {
       var resp = await fetch('/api/asr/config');
       if (resp.status === 401 || resp.status === 403) { redirectLogin(); return; }
-      if (resp.status === 503) { panel.innerHTML = '<span class="pill warn">Router unreachable</span>'; return; }
+      if (resp.status === 503) {
+        // The router may still be starting. Retry a few times before giving up.
+        if (attempt < ASR_RETRY_DELAYS.length) {
+          panel.innerHTML = '<span class="pill warn">Router unreachable — retrying</span>';
+          setTimeout(function() { loadAsrSettings(attempt + 1); }, ASR_RETRY_DELAYS[attempt]);
+          return;
+        }
+        panel.innerHTML = '<span class="pill warn">Router unreachable</span> ' +
+          '<button type="button" class="btn ghost" onclick="loadAsrSettings(0)">Retry</button>';
+        return;
+      }
       if (!resp.ok) { panel.innerHTML = '<span class="pill warn">Failed to load</span>'; return; }
       renderAsrSettings(panel, await resp.json());
     } catch(e) {
-      panel.innerHTML = '<span class="pill warn">Error</span>';
+      panel.innerHTML = '<span class="pill warn">Error</span> ' +
+        '<button type="button" class="btn ghost" onclick="loadAsrSettings(0)">Retry</button>';
     }
   }
 
