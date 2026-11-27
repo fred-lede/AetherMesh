@@ -196,7 +196,13 @@ def test_probe_asr_worker_bad_port_env_degrades(monkeypatch):
 
     monkeypatch.setattr(node_agent_module.requests, "get", _fail)
     monkeypatch.setenv("AIIH_ASR_PORT", "not-a-number")
-    assert node_agent_module._probe_asr_worker() == {"port": 9450, "healthy": False, "engine": None, "model": None}
+    assert node_agent_module._probe_asr_worker() == {
+        "port": 9450,
+        "healthy": False,
+        "engine": None,
+        "model": None,
+        "loaded": False,
+    }
 
 
 def test_node_agent_payload_includes_asr_worker(monkeypatch):
