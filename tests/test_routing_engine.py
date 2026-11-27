@@ -571,6 +571,39 @@ def test_save_state_raises_after_all_retries(monkeypatch) -> None:
         engine.set_provider_enabled("ollama", True)
 
 
+def test_save_state_retries_when_tmp_is_consumed_by_another_process(monkeypatch) -> None:
+    engine = ModelRoutingEngine()
+    real_replace = __import__("os").replace
+    calls = {"n": 0}
+
+    def race_replace(src: str, dst: str) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FileNotFoundError(2, "No such file or directory")
+        real_replace(src, dst)
+
+    monkeypatch.setattr("os.replace", race_replace)
+    engine.set_provider_enabled("ollama", True)
+    assert calls["n"] == 2
+    assert engine._state_path.exists()
+
+
+def test_save_state_uses_a_unique_tmp_name_per_save(monkeypatch) -> None:
+    engine = ModelRoutingEngine()
+    real_replace = __import__("os").replace
+    sources: list[str] = []
+
+    def recording_replace(src: str, dst: str) -> None:
+        sources.append(src)
+        real_replace(src, dst)
+
+    monkeypatch.setattr("os.replace", recording_replace)
+    engine.set_provider_enabled("ollama", True)
+    engine.set_provider_enabled("openai", True)
+    assert len(sources) == 2
+    assert sources[0] != sources[1]
+
+
 # ── alias prefix stripping ─────────────────────────────────────────
 
 def test_strip_model_route_prefix_strips_alias_prefix(monkeypatch) -> None:

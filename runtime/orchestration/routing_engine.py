@@ -160,16 +160,22 @@ class ModelRoutingEngine:
             "model_overrides": dict(self._model_overrides),
             "updated_at": time.time(),
         }
-        tmp_path = self._state_path.with_name(f"{self._state_path.name}.tmp")
-        last_error: PermissionError | None = None
+        last_error: OSError | None = None
         for attempt in range(5):
+            tmp_path = self._state_path.with_name(
+                f"{self._state_path.name}.tmp.{os.getpid()}.{time.monotonic_ns()}"
+            )
             try:
                 with tmp_path.open("w", encoding="utf-8") as f:
                     yaml.safe_dump(state, f, sort_keys=True, allow_unicode=False)
                 os.replace(tmp_path, self._state_path)
                 return
-            except PermissionError as exc:
+            except OSError as exc:
                 last_error = exc
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
                 time.sleep(0.1 * (attempt + 1))
         assert last_error is not None
         raise last_error
