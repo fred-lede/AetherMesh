@@ -18,12 +18,18 @@ _adapter: Any = None
 _adapter_lock = threading.Lock()
 
 
+def _effective_model() -> str:
+    if settings.asr_provider == "qwen_asr" and "/" not in settings.asr_model:
+        return "Qwen/Qwen3-ASR-1.7B"
+    return settings.asr_model
+
+
 def _build_adapter() -> Any:
     if settings.asr_provider == "qwen_asr":
         from providers.qwen_asr_adapter import QwenASRAdapter
 
         return QwenASRAdapter(
-            model_name=settings.asr_model if "/" in settings.asr_model else "Qwen/Qwen3-ASR-1.7B",
+            model_name=_effective_model(),
             device=settings.asr_device,
             device_index=settings.asr_device_index,
             download_dir=settings.asr_models_dir,
@@ -74,7 +80,7 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "service": "asr-worker",
         "engine": settings.asr_provider,
-        "model": settings.asr_model,
+        "model": _effective_model(),
         "model_loaded": _adapter is not None,
     }
 

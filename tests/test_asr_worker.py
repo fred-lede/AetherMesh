@@ -164,11 +164,16 @@ def test_probe_asr_worker_healthy(monkeypatch):
     import node.node_agent as node_agent_module
 
     resp = MagicMock(ok=True)
-    resp.json.return_value = {"engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B"}
+    resp.json.return_value = {
+        "engine": "qwen_asr",
+        "model": "Qwen/Qwen3-ASR-1.7B",
+        "model_loaded": True,
+    }
     monkeypatch.setattr(node_agent_module.requests, "get", lambda *a, **k: resp)
     monkeypatch.setenv("AIIH_ASR_PORT", "9450")
     assert node_agent_module._probe_asr_worker() == {
         "port": 9450, "healthy": True, "engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B",
+        "loaded": True,
     }
 
 
@@ -180,7 +185,7 @@ def test_probe_asr_worker_down(monkeypatch):
 
     monkeypatch.setattr(node_agent_module.requests, "get", boom)
     probe = node_agent_module._probe_asr_worker()
-    assert probe == {"port": 9450, "healthy": False, "engine": None, "model": None}
+    assert probe == {"port": 9450, "healthy": False, "engine": None, "model": None, "loaded": False}
 
 
 def test_probe_asr_worker_bad_port_env_degrades(monkeypatch):

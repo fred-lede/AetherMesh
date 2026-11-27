@@ -26,7 +26,7 @@ def _probe_asr_worker() -> dict[str, Any]:
             return {"port": port, "healthy": True, "engine": data.get("engine"), "model": data.get("model"), "loaded": bool(data.get("model_loaded", False))}
     except (requests.RequestException, ValueError):
         pass
-    return {"port": port, "healthy": False, "engine": None, "model": None}
+    return {"port": port, "healthy": False, "engine": None, "model": None, "loaded": False}
 
 
 class NodeAgent:
