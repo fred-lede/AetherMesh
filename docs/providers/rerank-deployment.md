@@ -199,6 +199,14 @@ print(resp.data[0].relevance_score)
 
 這是**冗余（redundancy）**不是 load balancing：请求永远先打第一台，只有它挂了才 failover，所以多台机器各自加载模型不会互相抢负载。
 
+## 在 Dashboard 检视 rerank 池
+
+Dashboard → **Cluster** 页（需 admin 登入）：
+
+- **Cluster Nodes** 表格新增 `Rerank` 与 `ASR` 两栏：该节点是否有可用的 rerank 端点（含端口）与 ASR worker（engine + model）。
+- **Rerank Pool** 表格列出池内每个端点的优先序、所属节点与 GPU、健康状态（`online` / `cooldown` / `down`）、连续失败次数、剩余冷却时间、最后一次被使用的时间。
+- 数据来自 `providers/rerank_adapter.RerankAdapter.pool_status()`（`GET <endpoint>/health` + 内部 `_POOL_STATUS` 冷却状态），端点顺序与 adapter 实际使用的顺序一致，因此面板可以直接判断 failover 会走向哪一台。
+
 要让其他机器成为 rerank 端点：
 
 ```bash

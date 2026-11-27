@@ -848,7 +848,15 @@
       <div class="section-head">
         <h2>Cluster Nodes</h2>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Node</th><th>IP</th><th>GPUs</th><th>Workers</th><th>Status</th></tr></thead><tbody id="nodes-table"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Node</th><th>IP</th><th>GPUs</th><th>Workers</th><th>Rerank</th><th>ASR</th><th>Status</th></tr></thead><tbody id="nodes-table"></tbody></table></div>
+    </section>
+
+    <section class="section card">
+      <div class="section-head">
+        <h2>Rerank Pool</h2>
+        <span class="mono" style="color: var(--muted);">Failover order: local endpoint first, then largest GPU</span>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Endpoint</th><th>Node</th><th>GPU</th><th>Health</th><th>Failures</th><th>Cooldown</th><th>Last used</th></tr></thead><tbody id="rerank-table"></tbody></table></div>
     </section>
 
     <section class="section card">

@@ -3,6 +3,7 @@
     const cloudProviders = document.getElementById('cloud-providers');
     const alerts = document.getElementById('alerts');
     const nodesTable = document.getElementById('nodes-table');
+    const rerankTable = document.getElementById('rerank-table');
     const gpusTable = document.getElementById('gpus-table');
     const workersTable = document.getElementById('workers-table');
     const modelsTable = document.getElementById('models-table');
@@ -635,15 +636,48 @@
       }
 
       if (_isAdmin) {
-        nodesTable.innerHTML = (data.nodes || []).map(node => `
+        nodesTable.innerHTML = (data.nodes || []).map(node => {
+          const rerank = node.rerank || {};
+          const asr = node.asr || {};
+          const rerankText = rerank.endpoints
+            ? `<span class="${rerank.healthy ? 'ok' : 'warn'}">${rerank.healthy ? 'online' : 'down'}</span> (${(rerank.endpoints || []).join(', ')})`
+            : '-';
+          const asrText = asr.engine
+            ? `<span class="${asr.healthy ? 'ok' : 'warn'}">${asr.healthy ? 'online' : 'down'}</span><br>${escapeHtml(asr.engine)}<br>${escapeHtml(asr.model || '')}`
+            : '-';
+          return `
           <tr>
             <td class="mono">${node.node_id}</td>
             <td class="mono">${node.ip}</td>
             <td>${(node.gpus || []).map(gpu => gpu.name).join('<br>') || '-'}</td>
             <td>${(node.workers || []).join(', ') || '-'}</td>
+            <td>${rerankText}</td>
+            <td>${asrText}</td>
             <td class="${statusClass(node.status)}">${node.status}</td>
           </tr>
-        `).join('') || '<tr><td colspan="5">No nodes registered yet.</td></tr>';
+        `;
+        }).join('') || '<tr><td colspan="7">No nodes registered yet.</td></tr>';
+
+        rerankTable.innerHTML = (data.rerank_pool || []).map(entry => {
+          const cooldown = Number(entry.cooldown_s || 0);
+          const failures = Number(entry.failures || 0);
+          const lastUsed = entry.last_used ? timeAgo(entry.last_used) : '-';
+          const health = entry.ok
+            ? (entry.in_cooldown ? '<span class="warn">cooldown</span>' : '<span class="ok">online</span>')
+            : '<span class="warn">down</span>';
+          return `
+          <tr>
+            <td>${Number.isFinite(Number(entry.priority)) ? Number(entry.priority) + 1 : '-'}</td>
+            <td class="mono">${escapeHtml(entry.base_url || '')}</td>
+            <td class="mono">${escapeHtml(entry.node_id || 'local')}</td>
+            <td>${escapeHtml(entry.gpu_name || '-')}</td>
+            <td>${health}</td>
+            <td>${failures}</td>
+            <td>${cooldown > 0 ? `${cooldown}s` : '-'}</td>
+            <td>${lastUsed}</td>
+          </tr>
+        `;
+        }).join('') || '<tr><td colspan="8">No rerank endpoints configured. Set AIIH_RERANK_POOL or register a rerank worker.</td></tr>';
 
         gpusTable.innerHTML = (data.gpus || []).map(gpu => {
           const utilization = Number(gpu.utilization || 0);

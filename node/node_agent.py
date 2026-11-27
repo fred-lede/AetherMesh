@@ -23,7 +23,7 @@ def _probe_asr_worker() -> dict[str, Any]:
         response = requests.get(f"http://127.0.0.1:{port}/health", timeout=2)
         if response.ok:
             data = response.json()
-            return {"port": port, "healthy": True, "engine": data.get("engine"), "model": data.get("model")}
+            return {"port": port, "healthy": True, "engine": data.get("engine"), "model": data.get("model"), "loaded": bool(data.get("model_loaded", False))}
     except (requests.RequestException, ValueError):
         pass
     return {"port": port, "healthy": False, "engine": None, "model": None}

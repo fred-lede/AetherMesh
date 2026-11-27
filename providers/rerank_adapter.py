@@ -13,6 +13,7 @@ from providers.http_client import get_session
 logger = logging.getLogger("providers.rerank")
 
 _POOL_STATUS: dict[str, dict[str, float]] = {}
+_LAST_USED: dict[str, float] = {}
 COOLDOWN_S = 30.0
 MAX_COOLDOWN_S = 120.0
 CONNECT_TIMEOUT_S = 3.0
@@ -136,6 +137,38 @@ class RerankAdapter(ProviderAdapter):
     def _mark_healthy(self, endpoint: str) -> None:
         _POOL_STATUS.pop(endpoint, None)
 
+    def _cooldown_remaining(self, endpoint: str) -> float:
+        dead_until = float(_POOL_STATUS.get(endpoint, {}).get("dead_until", 0.0))
+        return max(0.0, dead_until - time.monotonic())
+
+    def pool_status(self) -> list[dict[str, Any]]:
+        """Per-endpoint health plus cooldown state, in pool priority order."""
+        entries: list[dict[str, Any]] = []
+        for endpoint in self.endpoints:
+            try:
+                response = get_session().get(f"{endpoint}/health", timeout=5)
+                ok = bool(response.ok)
+                status_code = response.status_code
+                error = ""
+            except Exception as exc:  # noqa: BLE001
+                ok = False
+                status_code = 0
+                error = str(exc)
+            cooldown = self._cooldown_remaining(endpoint)
+            entries.append(
+                {
+                    "base_url": endpoint,
+                    "ok": ok,
+                    "status_code": status_code,
+                    "error": error,
+                    "failures": int(_POOL_STATUS.get(endpoint, {}).get("failures", 0)),
+                    "cooldown_s": round(cooldown, 1),
+                    "in_cooldown": cooldown > 0,
+                    "last_used": _LAST_USED.get(endpoint),
+                }
+            )
+        return entries
+
     def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise ProviderError(
             "Rerank provider does not support chat.",
@@ -208,6 +241,7 @@ class RerankAdapter(ProviderAdapter):
                 continue
 
             self._mark_healthy(endpoint)
+            _LAST_USED[endpoint] = time.time()
             data = response.json()
             rows: list[dict[str, Any]] = []
             for item in data.get("results", []):
@@ -244,19 +278,12 @@ class RerankAdapter(ProviderAdapter):
     def health_check(self) -> dict[str, Any]:
         entries: list[dict[str, Any]] = []
         active: str | None = None
-        for endpoint in self.endpoints:
-            try:
-                response = get_session().get(f"{endpoint}/health", timeout=5)
-            except Exception as exc:  # noqa: BLE001
-                entries.append({"base_url": endpoint, "ok": False, "error": str(exc)})
-                continue
-            if response.ok:
-                self._mark_healthy(endpoint)
-                entries.append({"base_url": endpoint, "ok": True, "status_code": response.status_code})
+        for entry in self.pool_status():
+            if entry["ok"]:
+                self._mark_healthy(entry["base_url"])
                 if active is None:
-                    active = endpoint
-            else:
-                entries.append({"base_url": endpoint, "ok": False, "status_code": response.status_code})
+                    active = entry["base_url"]
+            entries.append(entry)
 
         return {
             "ok": active is not None,

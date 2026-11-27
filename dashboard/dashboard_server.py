@@ -8,7 +8,7 @@ import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote as url_quote
+from urllib.parse import parse_qs, quote as url_quote, urlparse
 
 from dotenv import load_dotenv
 import requests
@@ -23,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 
 from config.settings import settings
 from providers.http_client import get_session
+from providers.rerank_adapter import RerankAdapter
 from metrics.request_metrics import request_metrics
 from runtime.orchestration.provider_router import credential_pool_status, reload_credential_pools, custom_provider_status, reload_custom_providers
 from runtime.orchestration import model_references, model_registry_store
@@ -613,11 +614,133 @@ def _get_gpu_tier(gpu_name: str) -> str:
     if "p40" in name: return "B"
     return "C"
 
+def _rerank_worker_records(workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        worker
+        for worker in workers
+        if str(worker.get("provider", "")).lower() == "llama-server"
+        or str((worker.get("metadata") or {}).get("kind", "")).lower() == "rerank"
+    ]
+
+
+def _rerank_pool_status(workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Live health + cooldown state of every rerank endpoint, in pool priority order."""
+    local_node = settings.local_node_id()
+
+    worker_index: dict[tuple[str, int], dict[str, Any]] = {}
+    registry_endpoints: list[str] = []
+    for worker in sorted(
+        _rerank_worker_records(workers),
+        key=lambda item: (str(item.get("node_id", "")) != local_node, -int(item.get("gpu_memory") or 0)),
+    ):
+        parsed = urlparse(str(worker.get("base_url", "")))
+        port = parsed.port
+        if not port:
+            continue
+        endpoint = (
+            f"http://127.0.0.1:{int(port)}"
+            if str(worker.get("node_id", "")) == local_node
+            else str(worker.get("base_url", "")).strip().rstrip("/")
+        )
+        if endpoint and endpoint not in registry_endpoints:
+            registry_endpoints.append(endpoint)
+        host = (parsed.hostname or "").strip().lower()
+        if host:
+            worker_index[(host, int(port))] = worker
+            if str(worker.get("node_id", "")) == local_node:
+                worker_index[("127.0.0.1", int(port))] = worker
+
+    endpoints: list[str] = []
+    for endpoint in settings.rerank_pool_from_env() + registry_endpoints + settings.rerank_pool():
+        if endpoint and endpoint not in endpoints:
+            endpoints.append(endpoint)
+
+    try:
+        entries = RerankAdapter(endpoints=endpoints or None).pool_status()
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("rerank pool status unavailable: %s", exc)
+        return []
+
+    enriched: list[dict[str, Any]] = []
+    for priority, entry in enumerate(entries):
+        parsed = urlparse(str(entry.get("base_url", "")))
+        port = parsed.port
+        worker = worker_index.get((str(parsed.hostname or "").lower(), int(port))) if port else None
+        metadata = (worker or {}).get("metadata") or {}
+        enriched.append(
+            {
+                **entry,
+                "priority": priority,
+                "node_id": str((worker or {}).get("node_id", "") or ""),
+                "gpu_name": str((worker or {}).get("gpu_name", "") or ""),
+                "engine": str(metadata.get("engine") or "llama-server"),
+            }
+        )
+    return enriched
+
+
+def _endpoint_port(base_url: str) -> str:
+    port = urlparse(str(base_url or "")).port
+    return str(port) if port else ""
+
+
+def _enrich_cluster_nodes(
+    nodes: list[dict[str, Any]],
+    rerank_pool: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pool_by_node: dict[str, list[dict[str, Any]]] = {}
+    for entry in rerank_pool:
+        node_id = str(entry.get("node_id", "") or "")
+        if node_id:
+            pool_by_node.setdefault(node_id, []).append(entry)
+
+    enriched: list[dict[str, Any]] = []
+    for node in nodes:
+        row = dict(node)
+        node_id = str(node.get("node_id", "") or "")
+        entries = pool_by_node.get(node_id, [])
+        discovered = [item for item in (node.get("metadata") or {}).get("rerank_workers", []) if isinstance(item, dict)]
+        engines = {str(entry.get("engine") or "") for entry in entries if entry.get("engine")}
+        engines |= {str(item.get("engine") or "") for item in discovered if item.get("engine")}
+        ports = [_endpoint_port(entry.get("base_url", "")) for entry in entries]
+        ports += [str(item.get("port", "")) for item in discovered if item.get("port")]
+        seen: list[str] = []
+        for port in ports:
+            if port and port not in seen:
+                seen.append(port)
+        if entries:
+            rerank = {
+                "healthy": any(entry.get("ok") for entry in entries),
+                "endpoints": seen,
+                "engines": sorted(engines),
+            }
+        else:
+            rerank = {
+                "healthy": any(bool(item.get("healthy")) for item in discovered),
+                "endpoints": seen,
+                "engines": sorted(engines),
+            }
+        asr = (node.get("metadata") or {}).get("asr_worker") or {}
+        enriched.append(
+            {
+                **row,
+                "rerank": rerank,
+                "asr": {
+                    "healthy": bool(asr.get("healthy")),
+                    "engine": str(asr.get("engine") or "") or None,
+                    "model": str(asr.get("model") or "") or None,
+                },
+            }
+        )
+    return enriched
+
+
 def _build_alerts(
     *,
     nodes: list[dict[str, Any]],
     workers: list[dict[str, Any]],
     metrics: dict[str, Any],
+    rerank_pool: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     alerts: list[dict[str, str]] = []
     queue_length = int(metrics.get("queue_length", 0))
@@ -678,6 +801,36 @@ def _build_alerts(
                 ),
             }
         )
+
+    if rerank_pool:
+        healthy_endpoints = [entry for entry in rerank_pool if entry.get("ok")]
+        if not healthy_endpoints:
+            alerts.append(
+                {
+                    "level": "critical",
+                    "message": f"All {len(rerank_pool)} rerank endpoint(s) are down.",
+                }
+            )
+        else:
+            down_endpoints = [entry for entry in rerank_pool if not entry.get("ok")]
+            if down_endpoints:
+                alerts.append(
+                    {
+                        "level": "warning",
+                        "message": (
+                            f"{len(down_endpoints)} rerank endpoint(s) unavailable "
+                            f"({', '.join(str(entry.get('base_url', '')) for entry in down_endpoints)})."
+                        ),
+                    }
+                )
+            cooling = [entry for entry in rerank_pool if entry.get("in_cooldown")]
+            if cooling:
+                alerts.append(
+                    {
+                        "level": "warning",
+                        "message": f"{len(cooling)} rerank endpoint(s) cooling down after failures.",
+                    }
+                )
 
     if not alerts:
         alerts.append({"level": "ok", "message": "No active alerts."})
@@ -1125,7 +1278,22 @@ def _build_overview() -> dict[str, Any]:
     overview_metrics = dict(metrics)
     overview_metrics["max_worker_queue_size"] = settings.max_worker_queue_size
     models_enriched = _enrich_models(model_items, worker_items)
-    alerts = _build_alerts(nodes=node_items, workers=worker_items, metrics=metrics)
+    rerank_pool = _rerank_pool_status(worker_items)
+    node_items = _enrich_cluster_nodes(node_items, rerank_pool)
+    rerank_summary = {
+        "endpoints": len(rerank_pool),
+        "healthy": sum(1 for entry in rerank_pool if entry.get("ok")),
+        "active": next(
+            (entry["base_url"] for entry in rerank_pool if entry.get("ok") and not entry.get("in_cooldown")),
+            None,
+        ),
+    }
+    alerts = _build_alerts(
+        nodes=node_items,
+        workers=worker_items,
+        metrics=metrics,
+        rerank_pool=rerank_pool,
+    )
     if overview_errors:
         alerts = [alert for alert in alerts if alert.get("level") != "ok"]
     for error in overview_errors:
@@ -1158,6 +1326,8 @@ def _build_overview() -> dict[str, Any]:
         "nodes": node_items,
         "workers": workers_enriched,
         "gpus": gpus_enriched,
+        "rerank_pool": rerank_pool,
+        "rerank_summary": rerank_summary,
         "tasks": tasks.get("tasks", []),
         "metrics": overview_metrics,
         "models": model_items,
