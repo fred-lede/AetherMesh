@@ -217,6 +217,12 @@ AIIH_RERANK_HOST=0.0.0.0 AIIH_RERANK_DEVICE=<gpu index> \
    - BGE：`sha256-a43c7c9b11a4c1517e5bf95151960e1621d1b72f7a493364b01e386cf1aaa1d3`
    - Qwen3：`sha256-22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48`
    - 上面是**pinned fallback**：`ollama pull` 會改變 blob sha，重新 pull 後 pinned 值就會過期。啟動腳本會先從 Ollama manifest（`manifests/*/…/<model>/latest`）解析目前真正的 GGUF digest（`.sh` 用 python3、`.bat` 用 `scripts/resolve-rerank-blob.ps1`），解析不到才退回 pinned 值；因此重新 pull 後不需要手動改腳本。
+   - **`rerank/bge-reranker-v2-m3` 不是 registry 模型**（`ollama pull rerank/...` 會報 `pull model manifest: file does not exist`）。它是在本機用 `ollama create` 從 GGUF 建立的名字。新機器上取得模型的方式：
+     ```bash
+     ollama pull qllama/bge-reranker-v2-m3:f16      # 1.2 GB, bert F16
+     # 或直接把 GGUF 路徑當作第一個參數 / AIIH_RERANK_MODEL_PATH
+     ./scripts/start-rerank-server.sh /path/to/bge-reranker-v2-m3.gguf 11436 0
+     ```
 
 ## 手動啟動（所有平台）
 

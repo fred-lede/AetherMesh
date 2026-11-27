@@ -6,12 +6,13 @@
 # `llama-server --rerank` process. This script launches it.
 #
 # Usage:
-#   ./scripts/start-rerank-server.sh [model_name] [port] [gpu]
+#   ./scripts/start-rerank-server.sh [model_name|gguf_path] [port] [gpu]
 #
 # Examples:
 #   ./scripts/start-rerank-server.sh                        # bge-reranker-v2-m3, port 11436
 #   ./scripts/start-rerank-server.sh bge-reranker-v2-m3 11436
 #   ./scripts/start-rerank-server.sh qwen3-reranker-0.6b 11437
+#   ./scripts/start-rerank-server.sh /path/to/bge-reranker-v2-m3.gguf 11436
 #
 # The model name selects a GGUF blob from the Ollama model store.
 # [gpu] is the physical CUDA ordinal (default 1); it is exported as
@@ -135,6 +136,7 @@ GPU="${AIIH_RERANK_CUDA_DEVICES:-${AIIH_RERANK_DEVICE:-${3:-1}}}"
 # therefore be 0: with a single visible device that is the only valid index.
 export CUDA_VISIBLE_DEVICES="$GPU"
 
+echo "Using GGUF model: $BLOB_PATH"
 echo "Starting reranker on $HOST:$PORT (ctx=$CTX_SIZE, gpu=$GPU, CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES)..."
 exec "$LLAMA_SERVER" \
   --model "$BLOB_PATH" \
