@@ -22,6 +22,10 @@
       <string>0.0.0.0</string>
       <key>AIIH_RERANK_DEVICE</key>
       <string>0</string>
+      <!-- Set this if Ollama uses a custom model store, e.g. /Users/Shared/ollama_models.
+           Without it launchd cannot find the GGUF blob. -->
+      <key>OLLAMA_MODELS</key>
+      <string>/Users/Shared/ollama_models</string>
       <key>PATH</key>
       <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>

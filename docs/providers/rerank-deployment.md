@@ -121,6 +121,18 @@ brew install llama.cpp          # Metal 版 llama-server
 
 官方 Ollama macOS app 則附帶 `llama-server`，腳本會自動找到。
 
+開機自動啟動用 launchd（**plist 不讀 `.env`**，環境變數只能寫在 plist 的 `EnvironmentVariables`）：
+
+```bash
+REPO=/path/to/AetherMesh
+sed "s|__ROOT_DIR__|$REPO|g" launchd/com.aiih.rerank.plist.example \
+  > ~/Library/LaunchAgents/com.aiih.rerank.plist
+plutil -lint ~/Library/LaunchAgents/com.aiih.rerank.plist
+launchctl load ~/Library/LaunchAgents/com.aiih.rerank.plist
+```
+
+若 Ollama 的模型目錄不是預設位置，必須在 plist 中設定 `OLLAMA_MODELS`（例如 `/Users/Shared/ollama_models`），否則 launchd 環境裡找不到 GGUF blob。也可以改用 `scripts/start-mac-node.sh`：它偵測到 `llama-server` 時會把 `rerank` 加入 launcher 服務清單（此路徑會讀 `.env`）。
+
 ## 模型註冊
 
 `config/models.yaml` 已內建一個 rerank 模型（指向獨立 server）：
