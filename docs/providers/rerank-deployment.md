@@ -212,6 +212,10 @@ AIIH_RERANK_HOST=0.0.0.0 AIIH_RERANK_DEVICE=<gpu index> \
   ```bat
   netsh advfirewall firewall add rule name="AetherMesh rerank 11436" dir=in action=allow protocol=TCP localport=11436
   ```
+  開機排定任务（`scripts/register-worker-task.bat`）用 `/RU SYSTEM` 执行，此时 `%USERPROFILE%` 是 `C:\WINDOWS\system32\config\systemprofile`，沒有 Ollama 模型库。`scripts/start-rerank-server.bat` 会自动扫描 `C:\Users\*\ .ollama\models`；若仍找不到 GGUF，在 `.env` 明确指定：
+  ```bat
+  OLLAMA_MODELS=C:\Users\<user>\.ollama\models
+  ```
 - 每台 rerank 端点需要 ~1.2 GB VRAM 空闲；如果某台 GPU 已被其他模型占满，就把它从池里移除（或不要绑它）。
 
 > `workers` 字段仍是 `list[int]`（Ollama 端口），rerank worker 走 `metadata.rerank_workers`，所以舊的 node agent 不受影響。控制平面 dashboard 可以看到 rerank worker 的 GPU/狀態；`/cluster/workers` 中它的 provider 是 `llama-server`。

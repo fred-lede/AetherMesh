@@ -29,6 +29,13 @@ if not exist "%LLAMA_SERVER%" (
   exit /b 1
 )
 
+REM A task registered with /RU SYSTEM has USERPROFILE =
+REM C:\WINDOWS\system32\config\systemprofile, which has no Ollama store. In that
+REM case point the search at the first real user profile that has one.
+if not defined OLLAMA_MODELS (
+  for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "foreach ($p in Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue) { $m = Join-Path $p.FullName '.ollama\models'; if (Test-Path $m) { Write-Output $m; break } }"`) do set "OLLAMA_MODELS=%%S"
+)
+
 set "BLOB_DIR=%USERPROFILE%\.ollama\models\blobs"
 if defined OLLAMA_MODELS set "BLOB_DIR=%OLLAMA_MODELS%\blobs"
 
@@ -51,6 +58,14 @@ REM is launched by a /RU SYSTEM scheduled task (USERPROFILE = systemprofile).
 set "BLOB_PATH="
 for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-rerank-blob.ps1" "%MODEL%"`) do set "BLOB_PATH=%%D"
 if "%BLOB_PATH%"=="" set "BLOB_PATH=%BLOB_DIR%\%BLOB%"
+
+REM Last resort: a /RU SYSTEM scheduled task sees USERPROFILE as
+REM C:\WINDOWS\system32\config\systemprofile, which has no Ollama store at all.
+REM Search the real user profiles for the pinned blob (works for stores that
+REM have blobs but no manifests).
+if not exist "%BLOB_PATH%" (
+  for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path 'C:\Users\*\.ollama\models\blobs\%BLOB%' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName"`) do set "BLOB_PATH=%%D"
+)
 
 if not exist "%BLOB_PATH%" (
   echo ERROR: GGUF blob not found at "%BLOB_PATH%". 1>&2

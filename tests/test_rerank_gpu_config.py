@@ -238,6 +238,20 @@ class TestEnvExample:
         )
 
 
+class TestSystemProfileBlobSearch:
+    def test_batch_locates_store_when_userprofile_is_systemprofile(self) -> None:
+        text = BAT.read_text(encoding="utf-8")
+        assert "systemprofile" in text.lower(), (
+            "the .bat must handle a /RU SYSTEM task whose USERPROFILE is systemprofile"
+        )
+        assert "C:\\Users" in text, "the .bat must scan real user profiles for the store"
+
+    def test_ps1_scans_real_user_profiles(self) -> None:
+        text = (REPO_ROOT / "scripts" / "resolve-rerank-blob.ps1").read_text(encoding="utf-8")
+        assert "systemprofile" in text.lower()
+        assert "C:\\Users" in text
+
+
 class TestDeploymentDoc:
     def test_documents_resolution_order(self) -> None:
         text = DOC.read_text(encoding="utf-8")
