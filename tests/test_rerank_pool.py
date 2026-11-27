@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable
 
 from unittest.mock import MagicMock
@@ -171,3 +172,53 @@ def test_rerank_health_check_reports_every_endpoint(monkeypatch: MonkeyPatch) ->
     assert result["ok"] is True
     assert [entry["ok"] for entry in result["endpoints"]] == [False, True]
     assert result["base_url"] == "http://live:11436"
+
+
+def test_pool_summary_reports_totals_and_active_endpoint(monkeypatch: MonkeyPatch) -> None:
+    _reset_pool(monkeypatch)
+    session = _StubSession(
+        lambda url: _fake_response({}, ok=False, status_code=503) if "dead" in url else _fake_response({}, ok=True)
+    )
+    monkeypatch.setattr(rerank_adapter, "get_session", lambda: session)
+
+    summary = RerankAdapter(endpoints=["http://dead:11436", "http://live:11436"]).pool_summary()
+
+    assert summary["total"] == 2
+    assert summary["healthy"] == 1
+    assert summary["active"] == "http://live:11436"
+    assert [entry["priority"] if "priority" in entry else None for entry in summary["endpoints"]] == [None, None]
+
+
+def test_pool_summary_excludes_endpoint_in_cooldown_from_active(monkeypatch: MonkeyPatch) -> None:
+    _reset_pool(monkeypatch)
+    session = _StubSession(lambda url: _fake_response({}, ok=True))
+    monkeypatch.setattr(rerank_adapter, "get_session", lambda: session)
+
+    adapter = RerankAdapter(endpoints=["http://a:11436", "http://b:11436"])
+    rerank_adapter._POOL_STATUS["http://a:11436"] = {"failures": 1, "dead_until": time.monotonic() + 20}
+
+    summary = adapter.pool_summary()
+
+    assert summary["healthy"] == 2
+    assert summary["active"] == "http://b:11436"
+    first = summary["endpoints"][0]
+    assert first["in_cooldown"] is True
+    assert first["failures"] == 1
+    assert first["cooldown_s"] > 0
+
+
+def test_rerank_pool_route_exposes_summary(monkeypatch: MonkeyPatch) -> None:
+    from router.openai.rerank_adapter import create_rerank_pool_route
+
+    _reset_pool(monkeypatch)
+    monkeypatch.setenv("AIIH_RERANK_POOL", "http://a:11436,http://b:11436")
+    session = _StubSession(
+        lambda url: _fake_response({}, ok=False, status_code=503) if "a:11436" in url else _fake_response({}, ok=True)
+    )
+    monkeypatch.setattr(rerank_adapter, "get_session", lambda: session)
+
+    summary = create_rerank_pool_route()()
+
+    assert summary["total"] == 2
+    assert summary["healthy"] == 1
+    assert summary["active"] == "http://b:11436"

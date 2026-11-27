@@ -169,6 +169,17 @@ class RerankAdapter(ProviderAdapter):
             )
         return entries
 
+    def pool_summary(self) -> dict[str, Any]:
+        """Pool order, per-endpoint health, and which endpoint would serve next."""
+        entries = self.pool_status()
+        live = [entry["base_url"] for entry in entries if entry["ok"] and not entry["in_cooldown"]]
+        return {
+            "endpoints": entries,
+            "total": len(entries),
+            "healthy": sum(1 for entry in entries if entry["ok"]),
+            "active": live[0] if live else None,
+        }
+
     def chat(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise ProviderError(
             "Rerank provider does not support chat.",

@@ -26,7 +26,7 @@ from router.openai.chat_adapter import create_chat_completions_route
 from router.openai.responses_adapter import create_responses_router
 from router.openai.models_adapter import create_models_route
 from router.openai.embeddings_adapter import create_embeddings_route
-from router.openai.rerank_adapter import create_rerank_route
+from router.openai.rerank_adapter import create_rerank_pool_route, create_rerank_route
 from router.openai.batches_adapter import create_batches_router
 from router.files_router import router as files_router
 from router.providers_admin_router import router as providers_admin_router
@@ -223,6 +223,11 @@ async def chat_completions(request: Request, payload: dict[str, Any] = Body(...)
 @app.post("/v1/rerank")
 def rerank(payload: dict[str, Any] = Body(...)):
     return create_rerank_route(service)(payload)
+
+
+@app.get("/api/rerank/pool")
+def rerank_pool_status() -> dict[str, Any]:
+    return create_rerank_pool_route()()
 
 
 @app.post("/v1/embeddings")

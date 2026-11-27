@@ -643,7 +643,7 @@
             ? `<span class="${rerank.healthy ? 'ok' : 'warn'}">${rerank.healthy ? 'online' : 'down'}</span> (${(rerank.endpoints || []).join(', ')})`
             : '-';
           const asrText = asr.engine
-            ? `<span class="${asr.healthy ? 'ok' : 'warn'}">${asr.healthy ? 'online' : 'down'}</span><br>${escapeHtml(asr.engine)}<br>${escapeHtml(asr.model || '')}`
+            ? `<span class="${asr.healthy ? 'ok' : 'warn'}">${asr.healthy ? 'online' : 'down'}</span><br>${escapeHtml(asr.engine)}<br>${escapeHtml(asr.model || '')}${asr.loaded === true ? '<br>model loaded' : asr.loaded === false ? '<br>model not loaded' : ''}`
             : '-';
           return `
           <tr>

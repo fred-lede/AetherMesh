@@ -655,12 +655,43 @@ def _rerank_pool_status(workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if endpoint and endpoint not in endpoints:
             endpoints.append(endpoint)
 
+    router_entries = _router_rerank_pool()
+    if router_entries:
+        return _enrich_pool_entries(router_entries, worker_index)
+
     try:
         entries = RerankAdapter(endpoints=endpoints or None).pool_status()
     except Exception as exc:  # noqa: BLE001
         LOGGER.warning("rerank pool status unavailable: %s", exc)
         return []
 
+    return _enrich_pool_entries(entries, worker_index)
+
+
+def _endpoint_port(base_url: str) -> str:
+    port = urlparse(str(base_url or "")).port
+    return str(port) if port else ""
+
+
+def _router_rerank_pool() -> list[dict[str, Any]]:
+    """Router-process pool state: cooldowns and last-used are only real there."""
+    try:
+        response = get_session().get(
+            f"{ROUTER_BASE_URL}/api/rerank/pool",
+            headers={"x-api-key": _router_api_key()},
+            timeout=5,
+        )
+        if response.ok:
+            payload = response.json() or {}
+            entries = payload.get("endpoints")
+            if isinstance(entries, list):
+                return [entry for entry in entries if isinstance(entry, dict)]
+    except (requests.RequestException, ValueError):
+        LOGGER.debug("router rerank pool unavailable", exc_info=True)
+    return []
+
+
+def _enrich_pool_entries(entries: list[dict[str, Any]], worker_index: dict[tuple[str, int], dict[str, Any]]) -> list[dict[str, Any]]:
     enriched: list[dict[str, Any]] = []
     for priority, entry in enumerate(entries):
         parsed = urlparse(str(entry.get("base_url", "")))
@@ -677,11 +708,6 @@ def _rerank_pool_status(workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return enriched
-
-
-def _endpoint_port(base_url: str) -> str:
-    port = urlparse(str(base_url or "")).port
-    return str(port) if port else ""
 
 
 def _enrich_cluster_nodes(
@@ -729,6 +755,7 @@ def _enrich_cluster_nodes(
                     "healthy": bool(asr.get("healthy")),
                     "engine": str(asr.get("engine") or "") or None,
                     "model": str(asr.get("model") or "") or None,
+                    "loaded": asr.get("loaded") if isinstance(asr.get("loaded"), bool) else None,
                 },
             }
         )

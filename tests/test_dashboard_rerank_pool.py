@@ -136,6 +136,8 @@ def _workers() -> list[dict[str, Any]]:
 
 def test_rerank_pool_status_attributes_endpoints_to_nodes(monkeypatch: MonkeyPatch) -> None:
     _reset_pool(monkeypatch)
+    # Force the in-process fallback probe: the router process holds the real pool.
+    monkeypatch.setattr(dashboard_server, "_router_rerank_pool", lambda: [])
     monkeypatch.setenv("AIIH_RERANK_POOL", "http://127.0.0.1:11436,http://192.168.1.100:11436")
     session = _StubSession(
         {
@@ -170,7 +172,7 @@ def test_cluster_nodes_get_rerank_and_asr_columns() -> None:
             "workers": [11434, 11436],
             "metadata": {
                 "rerank_workers": [{"port": 11436, "healthy": True, "engine": "llama-server", "gpu_id": 1}],
-                "asr_worker": {"port": 9450, "healthy": True, "engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B"},
+                "asr_worker": {"port": 9450, "healthy": True, "engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B", "loaded": True},
             },
         },
         {
@@ -190,9 +192,9 @@ def test_cluster_nodes_get_rerank_and_asr_columns() -> None:
     enriched = dashboard_server._enrich_cluster_nodes(nodes, pool)
 
     assert enriched[0]["rerank"] == {"healthy": True, "endpoints": ["11436"], "engines": ["llama-server"]}
-    assert enriched[0]["asr"] == {"healthy": True, "engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B"}
+    assert enriched[0]["asr"] == {"healthy": True, "engine": "qwen_asr", "model": "Qwen/Qwen3-ASR-1.7B", "loaded": True}
     assert enriched[1]["rerank"] == {"healthy": False, "endpoints": ["11436"], "engines": []}
-    assert enriched[1]["asr"] == {"healthy": False, "engine": None, "model": None}
+    assert enriched[1]["asr"] == {"healthy": False, "engine": None, "model": None, "loaded": None}
 
 
 def test_alerts_report_rerank_pool_failures() -> None:
@@ -224,6 +226,7 @@ def test_alerts_report_rerank_pool_failures() -> None:
 
 def test_overview_exposes_rerank_pool_and_enriched_nodes(monkeypatch: MonkeyPatch) -> None:
     _reset_pool(monkeypatch)
+    monkeypatch.setattr(dashboard_server, "_router_rerank_pool", lambda: [])
     # Settings instances are read-only, so patch the class to keep the configured
     # pool deterministic in this test.
     monkeypatch.setattr(type(dashboard_server.settings), "rerank_pool", lambda self: [])
@@ -267,6 +270,64 @@ def test_overview_exposes_rerank_pool_and_enriched_nodes(monkeypatch: MonkeyPatc
     assert overview["rerank_summary"] == {"endpoints": 2, "healthy": 1, "active": "http://127.0.0.1:11436"}
     assert overview["nodes"][0]["rerank"]["healthy"] is True
     assert overview["nodes"][0]["asr"]["engine"] is None
+
+
+def test_dashboard_prefers_router_pool_state(monkeypatch: MonkeyPatch) -> None:
+    _reset_pool(monkeypatch)
+    monkeypatch.setattr(
+        dashboard_server,
+        "_router_rerank_pool",
+        lambda: [
+            {
+                "base_url": "http://127.0.0.1:11436",
+                "ok": True,
+                "status_code": 200,
+                "error": "",
+                "failures": 1,
+                "cooldown_s": 12.5,
+                "in_cooldown": True,
+                "last_used": 1000.0,
+            },
+            {
+                "base_url": "http://192.168.1.100:11436",
+                "ok": False,
+                "status_code": 0,
+                "error": "refused",
+                "failures": 0,
+                "cooldown_s": 0.0,
+                "in_cooldown": False,
+                "last_used": None,
+            },
+        ],
+    )
+
+    pool = dashboard_server._rerank_pool_status(_workers())
+
+    assert [entry["base_url"] for entry in pool] == ["http://127.0.0.1:11436", "http://192.168.1.100:11436"]
+    assert pool[0]["failures"] == 1
+    assert pool[0]["cooldown_s"] == 12.5
+    assert pool[0]["last_used"] == 1000.0
+    assert pool[0]["node_id"] == "node-01"
+    assert pool[0]["gpu_name"] == "Tesla P40"
+    assert pool[1]["node_id"] == "node-mac-01"
+
+
+def test_dashboard_falls_back_to_local_probe_without_router_state(monkeypatch: MonkeyPatch) -> None:
+    _reset_pool(monkeypatch)
+    monkeypatch.setattr(dashboard_server, "_router_rerank_pool", lambda: [])
+    session = _StubSession(
+        {
+            "http://127.0.0.1:11436": _fake_response(ok=True, data={"status": "ok"}),
+            "http://192.168.1.100:11436": requests.ConnectionError("refused"),
+        }
+    )
+    monkeypatch.setattr(rerank_adapter, "get_session", lambda: session)
+    monkeypatch.setattr(type(dashboard_server.settings), "rerank_pool", lambda self: [])
+
+    pool = dashboard_server._rerank_pool_status(_workers())
+
+    assert [entry["ok"] for entry in pool] == [True, False]
+    assert pool[0]["priority"] == 0
 
 
 def test_dashboard_templates_and_js_render_rerank_pool() -> None:
