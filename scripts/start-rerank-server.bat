@@ -46,12 +46,15 @@ if /i "%MODEL%"=="bge-reranker-v2-m3" (
 
 REM Prefer the digest recorded in the Ollama manifest: re-pulling a model
 REM changes its sha256, which would silently break the pinned blob above.
-set "RESOLVED_BLOB="
-for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-rerank-blob.ps1" "%MODEL%"`) do set "RESOLVED_BLOB=%%D"
-if defined RESOLVED_BLOB set "BLOB=%RESOLVED_BLOB%"
+REM The probe returns a full path and also locates the store when this script
+REM is launched by a /RU SYSTEM scheduled task (USERPROFILE = systemprofile).
+set "BLOB_PATH="
+for /f "usebackq delims=" %%D in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-rerank-blob.ps1" "%MODEL%"`) do set "BLOB_PATH=%%D"
+if "%BLOB_PATH%"=="" set "BLOB_PATH=%BLOB_DIR%\%BLOB%"
 
-if not exist "%BLOB_DIR%\%BLOB%" (
-  echo ERROR: GGUF blob not found at "%BLOB_DIR%\%BLOB%". 1>&2
+if not exist "%BLOB_PATH%" (
+  echo ERROR: GGUF blob not found at "%BLOB_PATH%". 1>&2
+  echo REM Set OLLAMA_MODELS to the Ollama model root ^(the folder containing "blobs"^) if this is wrong. 1>&2
   exit /b 1
 )
 
