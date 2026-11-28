@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import requests
 
+from config.settings import settings
 from providers.asr_base import ASRProviderAdapter, ASRProviderError
 
 logger = logging.getLogger("providers.remote_asr_adapter")
@@ -100,9 +101,11 @@ class _RemoteTranscriber:
 class RemoteASRAdapter(ASRProviderAdapter):
     provider_name = "remote_asr"
 
-    def __init__(self, node_id: str, base_url: str, timeout_s: float = 10.0, token: str | None = None) -> None:
+    def __init__(self, node_id: str, base_url: str, timeout_s: float | None = None, token: str | None = None) -> None:
         self._node_id = node_id
         self._base_url = base_url.rstrip("/")
+        if timeout_s is None:
+            timeout_s = float(settings.request_timeout_s)
         if token is None:
             token = os.getenv("AIIH_ASR_WORKER_TOKEN") or None
         self._model = _RemoteTranscriber(node_id, base_url, token=token, timeout_s=timeout_s)

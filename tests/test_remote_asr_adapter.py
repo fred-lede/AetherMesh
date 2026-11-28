@@ -142,6 +142,18 @@ def test_http_500_from_worker_maps_to_503(monkeypatch):
     assert excinfo.value.status_code == 503
 
 
+def test_default_timeout_follows_request_timeout(monkeypatch):
+    monkeypatch.setattr(remote_module.settings, "request_timeout_s", 120)
+    adapter = RemoteASRAdapter(node_id="n1", base_url="http://10.0.0.9:9450")
+    assert adapter._model._timeout_s == 120
+
+
+def test_explicit_timeout_still_wins(monkeypatch):
+    monkeypatch.setattr(remote_module.settings, "request_timeout_s", 120)
+    adapter = RemoteASRAdapter(node_id="n1", base_url="http://10.0.0.9:9450", timeout_s=15.0)
+    assert adapter._model._timeout_s == 15.0
+
+
 def test_health_check_reachable(monkeypatch):
     monkeypatch.setattr(
         remote_module.requests, "get",
