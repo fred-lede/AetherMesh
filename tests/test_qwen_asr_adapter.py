@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+import json
 import sys
 import types
 import wave
+from typing import Any
 from types import SimpleNamespace
 
 import numpy as np
@@ -61,6 +63,51 @@ def fake_qwen(monkeypatch):
 
 def _samples() -> np.ndarray:
     return np.full(16000, 0.01, dtype=np.float32)
+
+
+@pytest.fixture(autouse=True)
+def _no_external_worker(monkeypatch):
+    monkeypatch.delenv("AIIH_QWEN_ASR_PYTHON", raising=False)
+
+
+class _FakeProc:
+    def __init__(self, response: dict[str, Any]) -> None:
+        self.terminated = False
+        self.killed = False
+        self.stdin = io.BytesIO()
+        self.stdout = io.BytesIO((json.dumps(response) + "\n").encode("utf-8"))
+
+    def poll(self) -> int | None:
+        return None
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def wait(self, timeout: int | None = None) -> int:
+        return 0
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def test_close_terminates_external_worker(monkeypatch):
+    proc = _FakeProc({"ok": True})
+    monkeypatch.setattr(qwen_module.subprocess, "Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setenv("AIIH_QWEN_ASR_PYTHON", "/usr/bin/python3")
+    adapter = QwenASRAdapter(model_name="m", device="cuda", device_index=1)
+    assert proc.terminated is False
+    adapter.close()
+    assert proc.terminated is True
+
+
+def test_failed_worker_start_terminates_process(monkeypatch):
+    proc = _FakeProc({"ok": False, "error": "model missing"})
+    monkeypatch.setattr(qwen_module.subprocess, "Popen", lambda *args, **kwargs: proc)
+    monkeypatch.setenv("AIIH_QWEN_ASR_PYTHON", "/usr/bin/python3")
+    with pytest.raises(ASRProviderError) as excinfo:
+        QwenASRAdapter(model_name="m", device="cpu")
+    assert excinfo.value.status_code == 503
+    assert proc.terminated is True
 
 
 def test_stream_contract_shape(fake_qwen):

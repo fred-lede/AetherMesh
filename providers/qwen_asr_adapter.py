@@ -75,6 +75,7 @@ class _QwenTranscriber:
                 }
             )
             if not response.get("ok"):
+                self.close()
                 raise ASRProviderError(
                     str(response.get("error") or "qwen-asr worker failed to start"),
                     status_code=503,
@@ -88,6 +89,7 @@ class _QwenTranscriber:
         except ImportError as exc:
             raise ASRProviderError(
                 "qwen-asr dependencies failed to import: %s. "
+                "Run: pip install -U qwen-asr. "
                 "If torch is the failing import, check for conflicting NCCL/CUDA "
                 "wheel versions (e.g. both nvidia-nccl-cu12 and -cu13 installed)."
                 % exc,
@@ -142,10 +144,26 @@ class _QwenTranscriber:
         detected = str(getattr(first, "language", "") or "")
         return [_QwenSegment(text, detected)], _QwenInfo(detected)
 
-    def __del__(self) -> None:
+    def close(self) -> None:
         proc = getattr(self, "_proc", None)
-        if proc is not None and proc.poll() is None:
+        if proc is None:
+            return
+        self._proc = None
+        for stream in (proc.stdin, proc.stdout):
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+        if proc.poll() is None:
             proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+    def __del__(self) -> None:
+        self.close()
 
 
 class QwenASRAdapter(ASRProviderAdapter):
@@ -166,6 +184,12 @@ class QwenASRAdapter(ASRProviderAdapter):
 
     def _load_model(self) -> _QwenTranscriber:
         return _QwenTranscriber(self._model_name, self._device, self._device_index, self._download_dir)
+
+    def close(self) -> None:
+        close = getattr(getattr(self, "_model", None), "close", None)
+        if callable(close):
+            close()
+        self._model = None
 
     @staticmethod
     def _decode_wav(audio: bytes) -> np.ndarray:

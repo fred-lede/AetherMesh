@@ -102,6 +102,12 @@ DEFAULT_BUILDERS: dict[str, Callable[[ASRTarget, str, str], Any]] = {
 
 
 def default_dispose_adapter(adapter: Any) -> None:
+    close = getattr(adapter, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            logger.exception("ASR adapter close failed")
     del adapter
     gc.collect()
     try:

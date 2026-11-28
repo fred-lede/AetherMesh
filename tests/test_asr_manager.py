@@ -474,3 +474,14 @@ def test_qwen_asr_models_listed_in_model_registry():
     registry_names = {str(m.get("name", "")) for m in store.get_models()}
     missing = [m for m in LOCAL_ENGINES["qwen_asr"] if m not in registry_names]
     assert missing == []
+
+
+def test_default_dispose_closes_adapter():
+    closed: list[str] = []
+
+    class ClosableAdapter:
+        def close(self) -> None:
+            closed.append("closed")
+
+    asr_manager_module.default_dispose_adapter(ClosableAdapter())
+    assert closed == ["closed"]
